@@ -5,6 +5,7 @@ use clap::builder::PossibleValuesParser;
 use clap::error::ErrorKind;
 use clap::{ArgAction, Parser, Subcommand};
 
+use crate::APP_VERSION;
 use crate::app::{
     AppError, create_from_template, diagnostics_for_validate, diagnostics_have_errors,
     ensure_parseable, load_document, select_document,
@@ -24,7 +25,7 @@ use crate::templates::TemplateKind;
     version,
     about = "Inspect and validate local markdown-like thought maps.",
     long_about = "mdm is the CLI for local-first structured maps. It reads plain-text tree files, renders them for humans, and exports machine-friendly output when you ask for --json or --plain.",
-    after_help = "Examples:\n  mdm init ideas.md --template product\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm open ideas.md#product/api-design"
+    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm open ideas.md#product/api-design"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -110,6 +111,8 @@ enum Commands {
         #[arg(long)]
         max_depth: Option<usize>,
     },
+    #[command(about = "Print the mdm version.")]
+    Version,
 }
 
 #[derive(Debug, Parser)]
@@ -309,6 +312,10 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             } else {
                 run_interactive(&target, autosave).map_err(CliError::from_app)
             }
+        }
+        Commands::Version => {
+            println!("mdm {APP_VERSION}");
+            Ok(())
         }
     }
 }

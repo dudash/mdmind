@@ -2,6 +2,8 @@
 
 A terminal-native thinking tool for fast idea exploration, structured planning, and lightweight project design.
 
+License: Apache-2.0
+
 `mdm` is the CLI.
 `mdmind` is the interactive navigator and editing flow on the path to the full TUI.
 
@@ -44,6 +46,7 @@ Current capabilities:
 From the repo root, run:
 
 ```bash
+cargo run --bin mdm -- version
 cargo run --bin mdm -- --help
 cargo run --bin mdm -- view examples/demo.md
 cargo run --bin mdm -- init my-map.md --template product
@@ -63,3 +66,8 @@ To install binaries instead of using `cargo run`:
 ```bash
 cargo install --path .
 ```
+
+## Release and distribution
+
+The repo includes GitHub Actions for CI and tagged release builds.
+Release process details live in [docs/RELEASING.md](docs/RELEASING.md).

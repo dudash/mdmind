@@ -3,6 +3,11 @@ name = "mdmind"
 version = "0.1.0"
 edition = "2024"
 description = "A terminal-native thinking tool for structured markdown-like maps."
+license = "Apache-2.0"
+repository = "https://github.com/dudash/mdmind"
+homepage = "https://github.com/dudash/mdmind"
+readme = "README.md"
+rust-version = "1.85"
 default-run = "mdm"
 
 [lib]

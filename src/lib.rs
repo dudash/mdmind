@@ -1,3 +1,5 @@
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub mod app;
 pub mod cli;
 pub mod editor;

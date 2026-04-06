@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  verify-version:
+    name: Verify tag matches Cargo.toml
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check version
+        shell: bash
+        run: |
+          manifest_version="$(grep '^version = "' Cargo.toml | head -1 | sed -E 's/version = "([^"]+)"/\1/')"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [[ "${manifest_version}" != "${tag_version}" ]]; then
+            echo "Cargo.toml version ${manifest_version} does not match tag ${tag_version}"
+            exit 1
+          fi
+
+  build-release:
+    name: Build ${{ matrix.target }}
+    needs: verify-version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive_ext: tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive_ext: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive_ext: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive_ext: zip
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binaries
+        run: cargo build --locked --release --target ${{ matrix.target }} --bin mdm --bin mdmind
+
+      - name: Package unix archive
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          artifact="mdmind-${GITHUB_REF_NAME}-${{ matrix.target }}.${{ matrix.archive_ext }}"
+          staging="mdmind-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir -p "${staging}"
+          cp "target/${{ matrix.target }}/release/mdm" "${staging}/"
+          cp "target/${{ matrix.target }}/release/mdmind" "${staging}/"
+          cp README.md "${staging}/"
+          tar -czf "${artifact}" "${staging}"
+          echo "ASSET=${artifact}" >> "${GITHUB_ENV}"
+
+      - name: Package windows archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $artifact = "mdmind-$env:GITHUB_REF_NAME-${{ matrix.target }}.${{ matrix.archive_ext }}"
+          $staging = "mdmind-$env:GITHUB_REF_NAME-${{ matrix.target }}"
+          New-Item -ItemType Directory -Path $staging | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/mdm.exe" "$staging/"
+          Copy-Item "target/${{ matrix.target }}/release/mdmind.exe" "$staging/"
+          Copy-Item "README.md" "$staging/"
+          Compress-Archive -Path "$staging/*" -DestinationPath $artifact
+          "ASSET=$artifact" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload release artifact
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ASSET }}

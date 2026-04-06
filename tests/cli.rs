@@ -92,3 +92,13 @@ fn mdmind_binary_falls_back_to_preview() {
     assert!(output.status.success());
     assert!(stdout(&output).contains("MVP Scope"));
 }
+
+#[test]
+fn version_command_prints_the_cli_version() {
+    let output = run_mdm(&["version"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(
+        stdout(&output),
+        format!("mdm {}\n", env!("CARGO_PKG_VERSION"))
+    );
+}

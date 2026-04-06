@@ -18,6 +18,7 @@ use ratatui::widgets::{
 };
 use ratatui::{Frame, Terminal};
 
+use crate::APP_VERSION;
 use crate::app::{AppError, TargetRef, ensure_parseable, load_document};
 use crate::editor::{Editor, default_focus_path, find_path_by_id, get_node};
 use crate::model::{Document, Node};
@@ -1411,7 +1412,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
         .map(|filter| format!(" FILTER {} ", filter.matches.len()));
     let mut header_spans = vec![
         Span::styled(
-            " mdmind ",
+            format!(" mdmind v{APP_VERSION} "),
             Style::default()
                 .fg(PALETTE.background)
                 .bg(PALETTE.accent)
@@ -1878,6 +1879,11 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
                 ),
                 Span::raw("  "),
                 Span::styled(
+                    format!("v{APP_VERSION}"),
+                    Style::default().fg(PALETTE.accent).add_modifier(Modifier::BOLD),
+                ),
+                Span::raw("  "),
+                Span::styled(
                     "Outline on the left, context on the right. Shape the tree without leaving the map.",
                     Style::default().fg(PALETTE.muted),
                 ),
@@ -1993,7 +1999,9 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
             Line::from("@status:todo @owner:jason"),
             Line::from("[id:product/api-design]"),
             Line::from(""),
-            Line::from("Esc or ? closes this overlay."),
+            Line::from(format!(
+                "Esc or ? closes this overlay. Running mdmind v{APP_VERSION}."
+            )),
         ],
     );
 
