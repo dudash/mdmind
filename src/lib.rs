@@ -10,3 +10,4 @@ pub mod serializer;
 pub mod session;
 pub mod templates;
 pub mod validate;
+pub mod views;

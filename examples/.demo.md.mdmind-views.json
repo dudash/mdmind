@@ -1,0 +1,12 @@
+{
+  "views": [
+    {
+      "name": "active status",
+      "query": "@status:active"
+    },
+    {
+      "name": "TODO",
+      "query": "TODO"
+    }
+  ]
+}

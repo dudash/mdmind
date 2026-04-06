@@ -47,6 +47,12 @@ Store views in a sidecar session-like file first, not inline in the document.
 
 That keeps the map plain-text format stable while the feature matures.
 
+Current implementation:
+
+- one JSON sidecar per map
+- file name pattern: `.<map-file-name>.mdmind-views.json`
+- stored next to the source map
+
 ## Delivery
 
 Phase 1:
