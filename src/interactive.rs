@@ -166,6 +166,7 @@ struct TuiApp {
     prompt: Option<PromptState>,
     help_open: bool,
     quit_armed: bool,
+    delete_armed: bool,
     autosave: bool,
 }
 
@@ -202,6 +203,7 @@ impl TuiApp {
             prompt: None,
             help_open: false,
             quit_armed: false,
+            delete_armed: false,
             autosave,
         }
     }
@@ -213,6 +215,7 @@ impl TuiApp {
 
         if self.prompt.is_some() {
             self.quit_armed = false;
+            self.delete_armed = false;
             return self.handle_prompt_key(key);
         }
 
@@ -229,6 +232,7 @@ impl TuiApp {
 
         if key.modifiers.contains(KeyModifiers::ALT) {
             self.quit_armed = false;
+            self.delete_armed = false;
             match key.code {
                 KeyCode::Up => {
                     self.apply_edit(|editor| editor.move_node_up(), "Moved the node up.")?
@@ -252,38 +256,48 @@ impl TuiApp {
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
                 self.quit_armed = false;
+                self.delete_armed = false;
                 self.move_selection(-1)?;
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 self.quit_armed = false;
+                self.delete_armed = false;
                 self.move_selection(1)?;
             }
             KeyCode::Left | KeyCode::Char('h') => {
                 self.quit_armed = false;
+                self.delete_armed = false;
                 self.collapse_or_parent()?;
             }
             KeyCode::Right | KeyCode::Char('l') => {
                 self.quit_armed = false;
+                self.delete_armed = false;
                 self.expand_or_child()?;
             }
             KeyCode::Enter | KeyCode::Char(' ') => {
                 self.quit_armed = false;
+                self.delete_armed = false;
                 self.toggle_branch()?;
             }
             KeyCode::Char('?') => {
                 self.help_open = true;
                 self.quit_armed = false;
+                self.delete_armed = false;
             }
             KeyCode::Char('a') => {
+                self.delete_armed = false;
                 self.begin_prompt(PromptMode::AddChild, String::new());
             }
             KeyCode::Char('A') => {
+                self.delete_armed = false;
                 self.begin_prompt(PromptMode::AddSibling, String::new());
             }
             KeyCode::Char('R') => {
+                self.delete_armed = false;
                 self.begin_prompt(PromptMode::AddRoot, String::new());
             }
             KeyCode::Char('e') => {
+                self.delete_armed = false;
                 let initial = self
                     .editor
                     .current()
@@ -292,19 +306,23 @@ impl TuiApp {
                 self.begin_prompt(PromptMode::Edit, initial);
             }
             KeyCode::Char('/') => {
+                self.delete_armed = false;
                 self.begin_prompt(PromptMode::OpenId, String::new());
             }
             KeyCode::Char('g') => {
                 self.editor.move_root()?;
                 self.expand_focus_chain();
                 self.persist_session()?;
+                self.delete_armed = false;
                 self.set_status(StatusTone::Info, "Jumped to the root.");
             }
             KeyCode::Char('s') => {
                 self.save_to_disk()?;
                 self.quit_armed = false;
+                self.delete_armed = false;
             }
             KeyCode::Char('S') => {
+                self.delete_armed = false;
                 self.autosave = !self.autosave;
                 let message = if self.autosave {
                     "Autosave enabled. Changes now write to disk immediately."
@@ -316,15 +334,34 @@ impl TuiApp {
             KeyCode::Char('r') => {
                 self.revert_from_disk()?;
                 self.quit_armed = false;
+                self.delete_armed = false;
+            }
+            KeyCode::Char('x') => {
+                self.quit_armed = false;
+                if self.delete_armed {
+                    self.apply_edit(
+                        |editor| editor.delete_current(),
+                        "Deleted the selected node.",
+                    )?;
+                    self.delete_armed = false;
+                } else {
+                    self.delete_armed = true;
+                    self.set_status(
+                        StatusTone::Warning,
+                        "Press x again to delete the selected node. Any other key will cancel.",
+                    );
+                }
             }
             KeyCode::Esc => {
                 self.quit_armed = false;
+                self.delete_armed = false;
                 self.set_status(
                     StatusTone::Info,
                     "Use q to quit. If there are unsaved changes, press q twice to discard them.",
                 );
             }
             KeyCode::Char('q') => {
+                self.delete_armed = false;
                 if self.editor.dirty() && !self.quit_armed {
                     self.quit_armed = true;
                     self.set_status(
@@ -335,7 +372,9 @@ impl TuiApp {
                     return Ok(false);
                 }
             }
-            _ => {}
+            _ => {
+                self.delete_armed = false;
+            }
         }
 
         Ok(true)
@@ -506,6 +545,7 @@ impl TuiApp {
 
     fn begin_prompt(&mut self, mode: PromptMode, value: String) {
         self.quit_armed = false;
+        self.delete_armed = false;
         self.prompt = Some(PromptState::new(mode, value));
     }
 
@@ -1056,6 +1096,24 @@ fn render_simple_lane(
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
+fn render_help_card(
+    frame: &mut Frame,
+    area: Rect,
+    title: &'static str,
+    color: Color,
+    lines: Vec<Line<'static>>,
+) {
+    let block = Block::default()
+        .title(styled_title(title, color))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(color))
+        .style(Style::default().bg(PALETTE.surface))
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
 fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let (label, color) = match app.status.tone {
         StatusTone::Info => ("INFO", PALETTE.sky),
@@ -1098,6 +1156,8 @@ fn render_keybar(frame: &mut Frame, area: Rect) {
         Span::raw(" · "),
         key_hint("e", "edit"),
         Span::raw(" · "),
+        key_hint("x", "delete"),
+        Span::raw(" · "),
         key_hint("s", "save"),
         Span::raw(" · "),
         key_hint("r", "revert"),
@@ -1115,7 +1175,7 @@ fn render_keybar(frame: &mut Frame, area: Rect) {
 fn render_help_overlay(frame: &mut Frame, area: Rect) {
     frame.render_widget(Clear, area);
     let block = Block::default()
-        .title(styled_title("Keymap", PALETTE.accent))
+        .title(styled_title("Mindmap Guide", PALETTE.accent))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(PALETTE.accent))
         .style(Style::default().bg(PALETTE.surface_alt))
@@ -1123,107 +1183,148 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let help_lines = vec![
-        Line::from(vec![
-            Span::styled(
-                "Navigation",
-                Style::default()
-                    .fg(PALETTE.sky)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(
-                "  ↑/↓ move through visible nodes, ← collapses or moves to parent, → expands or moves to the first child.",
-            ),
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(10),
+            Constraint::Length(2),
+        ])
+        .split(inner);
+
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(vec![
+                Span::styled(
+                    "Visual Mindmap Mode",
+                    Style::default()
+                        .fg(PALETTE.text)
+                        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+                ),
+                Span::raw("  "),
+                Span::styled(
+                    "Outline on the left, context on the right. Shape the tree without leaving the map.",
+                    Style::default().fg(PALETTE.muted),
+                ),
+            ]),
+            Line::from(Span::styled(
+                "The selected node is the center of gravity for the whole screen.",
+                Style::default().fg(PALETTE.sky),
+            )),
         ]),
-        Line::from(vec![
+        sections[0],
+    );
+
+    let columns = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(sections[1]);
+
+    let left = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(36),
+            Constraint::Percentage(28),
+            Constraint::Percentage(36),
+        ])
+        .split(columns[0]);
+    let right = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(34),
+            Constraint::Percentage(30),
+            Constraint::Percentage(36),
+        ])
+        .split(columns[1]);
+
+    render_help_card(
+        frame,
+        left[0],
+        "Navigate",
+        PALETTE.sky,
+        vec![
+            Line::from("↑ / ↓   move through visible nodes"),
+            Line::from("←       collapse branch or go to parent"),
+            Line::from("→       expand branch or enter first child"),
+            Line::from("Enter   toggle expanded/collapsed"),
+            Line::from("/       jump to a node id"),
+        ],
+    );
+    render_help_card(
+        frame,
+        left[1],
+        "Create / Edit",
+        PALETTE.warn,
+        vec![
+            Line::from("a       add child"),
+            Line::from("A       add sibling"),
+            Line::from("Shift+R add root"),
+            Line::from("e       edit selected node"),
+            Line::from("x       press twice to delete"),
+        ],
+    );
+    render_help_card(
+        frame,
+        left[2],
+        "Reshape Tree",
+        PALETTE.accent,
+        vec![
+            Line::from("Alt+↑   move node up"),
+            Line::from("Alt+↓   move node down"),
+            Line::from("Alt+←   move node out one level"),
+            Line::from("Alt+→   indent into previous sibling"),
+            Line::from("g       jump back to root"),
+        ],
+    );
+    render_help_card(
+        frame,
+        right[0],
+        "Save / Recover",
+        PALETTE.accent,
+        vec![
+            Line::from("s       save to disk now"),
+            Line::from("S       toggle autosave"),
+            Line::from("r       reload from disk"),
+            Line::from("q       quit, warns if dirty"),
+            Line::from("Session focus restores automatically"),
+        ],
+    );
+    render_help_card(
+        frame,
+        right[1],
+        "Inline Syntax",
+        PALETTE.sky,
+        vec![
+            Line::from("#tag              topic or workflow marker"),
+            Line::from("@key:value        structured metadata"),
+            Line::from("[id:path/to/node] deep link target"),
+            Line::from("Combine them on the same line."),
+        ],
+    );
+    render_help_card(
+        frame,
+        right[2],
+        "Example Node",
+        PALETTE.warn,
+        vec![
+            Line::from("API Design #backend"),
+            Line::from("@status:todo @owner:jason"),
+            Line::from("[id:product/api-design]"),
+            Line::from(""),
+            Line::from("Esc or ? closes this overlay."),
+        ],
+    );
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("Tip ", Style::default().fg(PALETTE.warn).add_modifier(Modifier::BOLD)),
             Span::styled(
-                "Mind map flow",
-                Style::default()
-                    .fg(PALETTE.accent)
-                    .add_modifier(Modifier::BOLD),
+                "Use the right-side parent, peer, and child panels as your mental compass while editing.",
+                Style::default().fg(PALETTE.muted),
             ),
-            Span::raw(
-                "  The left pane shows the whole outline while the right panes keep the selected node connected to its parent, peers, and children.",
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "Create",
-                Style::default()
-                    .fg(PALETTE.warn)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  a adds a child, A adds a sibling, Shift+R adds a new root node."),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "Edit",
-                Style::default()
-                    .fg(PALETTE.warn)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(
-                "  e edits the selected node using full inline syntax. Existing children are preserved.",
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "Reshape",
-                Style::default()
-                    .fg(PALETTE.accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(
-                "  Alt+Up/Down reorders among siblings. Alt+Left outdents. Alt+Right indents into the previous sibling.",
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "Jump",
-                Style::default()
-                    .fg(PALETTE.sky)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  / opens a quick jump prompt for node ids."),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "Save",
-                Style::default()
-                    .fg(PALETTE.accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(
-                "  s writes a normalized file. S toggles autosave. r reloads from disk and discards unsaved edits.",
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "Syntax",
-                Style::default()
-                    .fg(PALETTE.sky)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(
-                "  #tag adds a tag, @key:value adds metadata, and [id:path/to/node] creates a deep-linkable id.",
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "Example",
-                Style::default()
-                    .fg(PALETTE.accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  API Design #backend @status:todo [id:product/api-design]"),
-        ]),
-        Line::from(""),
-        Line::from(Span::styled(
-            "Press Esc or ? to close this overlay.",
-            Style::default().fg(PALETTE.muted),
-        )),
-    ];
-    frame.render_widget(Paragraph::new(help_lines).wrap(Wrap { trim: false }), inner);
+        ])),
+        sections[2],
+    );
 }
 
 fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState) {
@@ -1678,5 +1779,31 @@ mod tests {
             std::fs::remove_file(session_path).ok();
         }
         std::fs::remove_file(map_path).ok();
+    }
+
+    #[test]
+    fn delete_requires_confirmation_and_removes_the_node() {
+        let map_path = temp_map_path("delete.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(map_path.clone(), document, vec![0, 1], None, false);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE))
+            .expect("first x should arm delete");
+        assert!(app.delete_armed, "delete should be armed after first x");
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE))
+            .expect("second x should delete");
+        assert!(!app.delete_armed, "delete should disarm after deletion");
+        assert_eq!(app.editor.focus_path(), &[0, 0]);
+        assert_eq!(
+            app.editor.current().expect("focus should exist").text,
+            "Direction"
+        );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
     }
 }

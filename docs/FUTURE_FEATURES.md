@@ -5,6 +5,7 @@ Ideas worth preserving after the CLI MVP:
 - Path fallback for deep links so `file.md#parent/child` can resolve by labels when no explicit id exists.
 - Folded and focused TUI views with subtle motion so navigation feels alive instead of rigid.
 - A true spatial mind-map canvas mode with sibling clusters that can fan outward instead of always reading as a file tree.
+- A mindmap overlay tied to the current expanded/collapsed state, with panning and PNG export. See `docs/MINDMAP_VIEW.md`.
 - A command palette and fuzzy branch search so large maps still feel fast to explore.
 - Relation edges and backlinks so maps can express connections that are not strict parent/child branches.
 - Template variables for owner, project name, and status defaults during `mdm init`.

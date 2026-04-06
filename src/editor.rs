@@ -328,6 +328,36 @@ impl Editor {
         })
     }
 
+    pub fn delete_current(&mut self) -> Result<(), AppError> {
+        if self.focus_path.is_empty() {
+            return Err(AppError::new("The document has no focused node."));
+        }
+
+        let focus_path = self.focus_path.clone();
+        self.apply_change(move |document| {
+            let parent_path = &focus_path[..focus_path.len() - 1];
+            let current_index = *focus_path.last().expect("checked");
+            let sibling_count = sibling_count_at(&document.nodes, parent_path);
+
+            let _removed = take_node_at(&mut document.nodes, &focus_path)
+                .expect("focus path should be valid before mutation");
+
+            if sibling_count > current_index + 1 {
+                let mut next_focus = parent_path.to_vec();
+                next_focus.push(current_index);
+                next_focus
+            } else if current_index > 0 {
+                let mut next_focus = parent_path.to_vec();
+                next_focus.push(current_index - 1);
+                next_focus
+            } else if !parent_path.is_empty() {
+                parent_path.to_vec()
+            } else {
+                default_focus_path(document)
+            }
+        })
+    }
+
     pub fn save(&mut self) -> Result<(), AppError> {
         let (document, _) = reparse_and_validate(self.document.clone(), self.focus_path.clone())?;
         self.document = document;
@@ -428,6 +458,16 @@ fn take_node_at(nodes: &mut Vec<Node>, path: &[usize]) -> Option<Node> {
     } else {
         let parent = nodes.get_mut(*first)?;
         take_node_at(&mut parent.children, rest)
+    }
+}
+
+fn sibling_count_at(nodes: &[Node], parent_path: &[usize]) -> usize {
+    if parent_path.is_empty() {
+        nodes.len()
+    } else {
+        get_node(nodes, parent_path)
+            .map(|node| node.children.len())
+            .unwrap_or(0)
     }
 }
 

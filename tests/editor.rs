@@ -90,6 +90,26 @@ fn editor_can_reorder_and_reparent_nodes() {
 }
 
 #[test]
+fn editor_can_delete_current_node_and_retarget_focus() {
+    let parsed = parse_document(&fixture("sample.md"));
+    let mut editor = Editor::new(parsed.document, vec![0, 0]);
+
+    editor.delete_current().expect("delete should work");
+    assert_eq!(editor.focus_path(), &[0, 0]);
+    assert_eq!(
+        editor.current().expect("focus should exist").text,
+        "Prompt Library"
+    );
+
+    editor.delete_current().expect("second delete should work");
+    assert_eq!(editor.focus_path(), &[0]);
+    assert_eq!(
+        editor.current().expect("focus should exist").text,
+        "Product Idea"
+    );
+}
+
+#[test]
 fn session_restore_prefers_id_and_falls_back_to_path() {
     let parsed = parse_document(&fixture("sample.md"));
     let by_id = resolve_session_focus(
