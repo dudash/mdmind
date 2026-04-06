@@ -1,0 +1,107 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver version to release, without the leading v"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    name: Prepare release commit and tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release branch
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME}" != "main" ]]; then
+            echo "Prepare Release must run from the main branch. Current ref: ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+
+      - name: Validate version input
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+            echo "Version must look like semver, for example 0.2.0 or 0.2.0-rc.1"
+            exit 1
+          fi
+
+      - name: Ensure tag does not already exist
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if git show-ref --verify --quiet "refs/tags/v${VERSION}"; then
+            echo "Tag v${VERSION} already exists"
+            exit 1
+          fi
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Update crate version
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          perl -0pi -e 's/^version = "[^"]+"/version = "'"${VERSION}"'"/m' Cargo.toml
+          perl -0pi -e 's/name = "mdmind"\nversion = "[^"]+"/name = "mdmind"\nversion = "'"${VERSION}"'"/s' Cargo.lock
+
+      - name: Verify version update
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          cargo run --bin mdm -- version | tee /tmp/mdm-version.txt
+          grep -qx "mdm ${VERSION}" /tmp/mdm-version.txt
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Commit release prep
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore(release): prepare v${VERSION}"
+
+      - name: Create tag
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: git tag "v${VERSION}"
+
+      - name: Push commit and tag
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git push origin HEAD:main
+          git push origin "v${VERSION}"

@@ -151,8 +151,8 @@ fn parse_node_content(content: &str, line: usize, diagnostics: &mut Vec<Diagnost
             continue;
         }
 
-        if token.starts_with('@') {
-            if let Some((key, value)) = token[1..].split_once(':') {
+        if let Some(stripped) = token.strip_prefix('@') {
+            if let Some((key, value)) = stripped.split_once(':') {
                 if key.is_empty() || value.is_empty() {
                     diagnostics.push(Diagnostic {
                         severity: Severity::Error,

@@ -1,73 +1,206 @@
 # mdmind
 
-A terminal-native thinking tool for fast idea exploration, structured planning, and lightweight project design.
+`mdmind` is a local-first mind mapping tool for structured thinking in plain text.
+
+It gives you two interfaces over the same map format:
+
+- `mdm`: a CLI for viewing, searching, validating, and exporting maps
+- `mdmind`: a full-screen TUI for navigating, filtering, editing, and reshaping maps
+
+The goal is not to mimic a whiteboard app. The goal is to make large idea trees feel fast, searchable, and safe to edit with a keyboard.
 
 License: Apache-2.0
 
-`mdm` is the CLI.
-`mdmind` is the interactive navigator and editing flow on the path to the full TUI.
+## What A Map Looks Like
 
-## Purpose
+Maps are plain-text tree files with lightweight inline structure:
 
-`mdmind` is for:
+- `#tag` for grouping and workflow markers
+- `@key:value` for structured metadata
+- `[id:path/to/node]` for stable deep links
+
+Example:
+
+```text
+- Product Idea #idea [id:product]
+  - Direction #strategy [id:product/direction]
+    - CLI-first MVP
+  - Tasks #todo @status:active [id:product/tasks]
+    - Build parser
+    - Ship tests
+```
+
+That gives you:
+
+- human-readable files
+- deep links like `ideas.md#product/tasks`
+- filterable tags and metadata
+- editable maps that still work well in git
+
+## What mdmind Is Good For
+
+- product and feature planning
+- project breakdowns
+- prompt libraries
+- backlog shaping
 - idea exploration
-- TODO and requirement breakdowns
-- prompt refinement
-- project templates
-- keyboard-first thinking
+- keyboard-first personal planning
 
-It is not trying to replace a full document editor, whiteboard, or team collaboration platform.
+It is intentionally not a rich document editor, team wiki, or freeform diagramming canvas.
 
-## Core product shape
+## Install
 
-- Plain-text markdown-like format
-- Human-readable tree structure
-- Inline structure with:
-  - `#tags`
-  - `@key:value`
-  - `[id:path/to/node]`
-- Deep links like `ideas.md#product/api-design`
-- Local-first workflow
-- Composable CLI output
-
-## Repo docs
-TBD
-
-## Status
-
-Current capabilities:
-- Parse, validate, search, and export maps from the CLI
-- Create starter maps from templates
-- Open a deep link in a full-screen interactive TUI
-- Restore the last focused node with a local hidden session file
-- Navigate with arrow keys through a colorized map outline and focus panes
-- Add or edit nodes from in-app modal prompts without leaving the map
-
-From the repo root, run:
+For local development from this repo:
 
 ```bash
 cargo run --bin mdm -- version
 cargo run --bin mdm -- --help
-cargo run --bin mdm -- view examples/demo.md
-cargo run --bin mdm -- init my-map.md --template product
-cargo run --bin mdm -- open my-map.md
-cargo run --bin mdmind -- examples/demo.md#demo/direction
+cargo run --bin mdmind -- examples/demo.md
 ```
 
-Inside `mdmind`, use commands like:
-- Arrow keys to move and expand branches
-- `a` to add a child, `A` to add a sibling, `Shift+R` to add a root
-- `e` to edit the selected node
-- `/` to jump to a node id
-- `s` to save, `?` for the keymap, `q` to quit
-
-To install binaries instead of using `cargo run`:
+To install the binaries locally:
 
 ```bash
 cargo install --path .
 ```
 
-## Release and distribution
+That installs:
 
-The repo includes GitHub Actions for CI and tagged release builds.
-Release process details live in [docs/RELEASING.md](docs/RELEASING.md).
+- `mdm`
+- `mdmind`
+
+## CLI Quick Start
+
+Create a new map from a starter template:
+
+```bash
+mdm init roadmap.md --template product
+```
+
+View a map:
+
+```bash
+mdm view roadmap.md
+mdm view roadmap.md#product/tasks
+```
+
+Search by text, tag, or metadata:
+
+```bash
+mdm find roadmap.md "rate limit"
+mdm find roadmap.md "#todo"
+mdm find roadmap.md "@status:blocked"
+mdm find roadmap.md "#todo @owner:jason"
+```
+
+Inspect structure:
+
+```bash
+mdm tags roadmap.md
+mdm kv roadmap.md --keys status,owner
+mdm links roadmap.md
+mdm validate roadmap.md
+mdm export roadmap.md --format json
+```
+
+Open the interactive TUI:
+
+```bash
+mdm open roadmap.md
+mdm open roadmap.md#product/tasks --autosave
+```
+
+## TUI Quick Start
+
+Run:
+
+```bash
+mdmind roadmap.md
+```
+
+Core navigation:
+
+- `↑` / `↓`: move through visible nodes
+- `←` / `→`: collapse/expand or move between parent and child
+- `Enter`: toggle branch expansion
+- `g`: jump to root
+
+Editing:
+
+- `a`: add child
+- `A`: add sibling
+- `Shift+R`: add root
+- `e`: edit selected node
+- `x`: delete selected node, confirmed on second press
+
+Reshaping:
+
+- `Alt+↑` / `Alt+↓`: move node among siblings
+- `Alt+←`: move node out one level
+- `Alt+→`: indent node into previous sibling
+
+Search and large-map workflows:
+
+- `/`: open unified search
+- `f`: open unified search on facets
+- `F`: open unified search on saved views
+- `Tab`: switch between `Query`, `Facets`, and `Saved Views`
+- `←` / `→` inside facets: switch `Tags`, `Keys`, `Values`
+- `n` / `N`: move to next or previous match
+- `c`: clear active filter
+
+Saving:
+
+- `s`: save now
+- `S`: toggle autosave
+- `r`: reload from disk and discard unsaved in-memory changes
+- `q`: quit
+- `?`: help
+
+## Local-First Behavior
+
+`mdmind` writes your map back to the original file. It also keeps small hidden sidecar files next to the map:
+
+- session restore: `.<map-file>.mdmind-session.json`
+- saved views: `.<map-file>.mdmind-views.json`
+
+These keep editor state local without changing the map format itself.
+
+## Project Templates
+
+Starter templates live in `templates/` and include:
+
+- `product`
+- `feature`
+- `prompts`
+- `backlog`
+
+Example:
+
+```bash
+mdm init prompts.md --template prompts
+```
+
+## Repo Docs
+
+User-facing and product docs:
+
+- [docs/FUTURE_FEATURES.md](docs/FUTURE_FEATURES.md)
+- [docs/SPATIAL_CANVAS.md](docs/SPATIAL_CANVAS.md)
+- [docs/COMMAND_PALETTE.md](docs/COMMAND_PALETTE.md)
+
+Developer workflow, testing, CI, and release notes:
+
+- [DEVELOPER.md](DEVELOPER.md)
+
+## Current Status
+
+The app is already useful for:
+
+- authoring and editing structured map files
+- deep-linking into a map by node id
+- filtering large maps by text, tags, and metadata
+- saving and reopening named filtered views
+- keyboard-first restructuring of nodes in the tree
+
+The next major UX leap is a more visual rendered mindmap overlay that reflects the current expanded and filtered state.

@@ -2484,7 +2484,7 @@ fn query_preview_matches(app: &TuiApp, raw: &str) -> Vec<(String, String)> {
     find_matches(app.editor.document(), raw)
         .into_iter()
         .map(|entry| {
-            let detail = entry.id.unwrap_or_else(|| entry.breadcrumb);
+            let detail = entry.id.unwrap_or(entry.breadcrumb);
             (entry.text, detail)
         })
         .collect()
@@ -2601,8 +2601,7 @@ fn collect_visible_rows(
     for (index, node) in nodes.iter().enumerate() {
         let mut path = prefix.clone();
         path.push(index);
-        let matched =
-            filter.is_some_and(|filter| filter.matches.iter().any(|candidate| *candidate == path));
+        let matched = filter.is_some_and(|filter| filter.matches.contains(&path));
         let include_children_by_expansion = expanded.contains(&path);
         let mut child_rows = Vec::new();
         let child_has_match = collect_visible_rows(
@@ -2640,9 +2639,7 @@ fn collect_visible_rows(
             matched,
         });
 
-        if filter.is_some() {
-            rows.extend(child_rows);
-        } else if include_children_by_expansion {
+        if filter.is_some() || include_children_by_expansion {
             rows.extend(child_rows);
         }
         subtree_has_visible_match = true;
