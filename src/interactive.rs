@@ -21,6 +21,7 @@ use ratatui::{Frame, Terminal};
 use crate::app::{AppError, TargetRef, ensure_parseable, load_document};
 use crate::editor::{Editor, default_focus_path, find_path_by_id, get_node};
 use crate::model::{Document, Node};
+use crate::query::FilterQuery;
 use crate::serializer::serialize_document;
 use crate::session::{load_session_for, resolve_session_focus, save_session_for};
 
@@ -73,6 +74,7 @@ enum PromptMode {
     AddSibling,
     AddRoot,
     Edit,
+    Filter,
     OpenId,
 }
 
@@ -83,16 +85,26 @@ impl PromptMode {
             Self::AddSibling => "Add Sibling",
             Self::AddRoot => "Add Root",
             Self::Edit => "Edit Node",
+            Self::Filter => "Filter Map",
             Self::OpenId => "Jump To Id",
         }
     }
 
     fn hint(self) -> &'static str {
         match self {
+            Self::Filter => {
+                "Search text, #tags, @key:value, or combine terms like #todo @owner:jason"
+            }
             Self::OpenId => "Type a node id, then press Enter.",
             _ => "Use full node syntax: Label #tag @key:value [id:path/to/node]",
         }
     }
+}
+
+#[derive(Debug, Clone)]
+struct ActiveFilter {
+    query: FilterQuery,
+    matches: Vec<Vec<usize>>,
 }
 
 #[derive(Debug, Clone)]
@@ -155,6 +167,7 @@ struct VisibleRow {
     has_children: bool,
     expanded: bool,
     child_count: usize,
+    matched: bool,
 }
 
 #[derive(Debug)]
@@ -164,6 +177,7 @@ struct TuiApp {
     expanded: HashSet<Vec<usize>>,
     status: StatusMessage,
     prompt: Option<PromptState>,
+    filter: Option<ActiveFilter>,
     help_open: bool,
     quit_armed: bool,
     delete_armed: bool,
@@ -201,6 +215,7 @@ impl TuiApp {
             expanded,
             status,
             prompt: None,
+            filter: None,
             help_open: false,
             quit_armed: false,
             delete_armed: false,
@@ -307,6 +322,15 @@ impl TuiApp {
             }
             KeyCode::Char('/') => {
                 self.delete_armed = false;
+                let initial = self
+                    .filter
+                    .as_ref()
+                    .map(|filter| filter.query.raw().to_string())
+                    .unwrap_or_default();
+                self.begin_prompt(PromptMode::Filter, initial);
+            }
+            KeyCode::Char('o') => {
+                self.delete_armed = false;
                 self.begin_prompt(PromptMode::OpenId, String::new());
             }
             KeyCode::Char('g') => {
@@ -336,6 +360,22 @@ impl TuiApp {
                 self.quit_armed = false;
                 self.delete_armed = false;
             }
+            KeyCode::Char('c') => {
+                self.delete_armed = false;
+                if self.clear_filter() {
+                    self.set_status(StatusTone::Info, "Cleared the active filter.");
+                } else {
+                    self.set_status(StatusTone::Info, "No active filter to clear.");
+                }
+            }
+            KeyCode::Char('n') => {
+                self.delete_armed = false;
+                self.move_match(1)?;
+            }
+            KeyCode::Char('N') => {
+                self.delete_armed = false;
+                self.move_match(-1)?;
+            }
             KeyCode::Char('x') => {
                 self.quit_armed = false;
                 if self.delete_armed {
@@ -355,10 +395,14 @@ impl TuiApp {
             KeyCode::Esc => {
                 self.quit_armed = false;
                 self.delete_armed = false;
-                self.set_status(
-                    StatusTone::Info,
-                    "Use q to quit. If there are unsaved changes, press q twice to discard them.",
-                );
+                if self.clear_filter() {
+                    self.set_status(StatusTone::Info, "Cleared the active filter.");
+                } else {
+                    self.set_status(
+                        StatusTone::Info,
+                        "Use q to quit. If there are unsaved changes, press q twice to discard them.",
+                    );
+                }
             }
             KeyCode::Char('q') => {
                 self.delete_armed = false;
@@ -418,6 +462,12 @@ impl TuiApp {
     }
 
     fn submit_prompt(&mut self, mode: PromptMode, value: &str) -> Result<(), AppError> {
+        if mode == PromptMode::Filter && value.is_empty() {
+            self.filter = None;
+            self.set_status(StatusTone::Info, "Cleared the active filter.");
+            return Ok(());
+        }
+
         if value.is_empty() {
             self.set_status(StatusTone::Warning, "Input was empty; nothing changed.");
             return Ok(());
@@ -428,6 +478,10 @@ impl TuiApp {
             PromptMode::AddSibling => self.editor.add_sibling(value)?,
             PromptMode::AddRoot => self.editor.add_root(value)?,
             PromptMode::Edit => self.editor.edit_current(value)?,
+            PromptMode::Filter => {
+                self.apply_filter(value)?;
+                return Ok(());
+            }
             PromptMode::OpenId => {
                 self.editor.open_id(value)?;
                 self.expand_focus_chain();
@@ -442,6 +496,7 @@ impl TuiApp {
             PromptMode::AddSibling => "Added a sibling node.",
             PromptMode::AddRoot => "Added a new root node.",
             PromptMode::Edit => "Updated the selected node.",
+            PromptMode::Filter => unreachable!("filter returns early"),
             PromptMode::OpenId => unreachable!("open id returns early"),
         };
         self.after_edit(message)
@@ -452,6 +507,7 @@ impl TuiApp {
         collect_visible_rows(
             &self.editor.document().nodes,
             &self.expanded,
+            self.filter.as_ref(),
             &mut rows,
             Vec::new(),
             0,
@@ -462,6 +518,14 @@ impl TuiApp {
     fn selected_index(&self, rows: &[VisibleRow]) -> usize {
         rows.iter()
             .position(|row| row.path == self.editor.focus_path())
+            .or_else(|| {
+                self.filter.as_ref().and_then(|filter| {
+                    filter
+                        .matches
+                        .first()
+                        .and_then(|path| rows.iter().position(|row| row.path == *path))
+                })
+            })
             .unwrap_or(0)
     }
 
@@ -547,6 +611,76 @@ impl TuiApp {
         self.quit_armed = false;
         self.delete_armed = false;
         self.prompt = Some(PromptState::new(mode, value));
+    }
+
+    fn apply_filter(&mut self, raw: &str) -> Result<(), AppError> {
+        let Some(query) = FilterQuery::parse(raw) else {
+            self.filter = None;
+            self.set_status(StatusTone::Info, "Cleared the active filter.");
+            return Ok(());
+        };
+
+        let matches = collect_match_paths(self.editor.document(), &query);
+        let count = matches.len();
+        self.filter = Some(ActiveFilter { query, matches });
+        if count == 0 {
+            self.set_status(StatusTone::Warning, "Filter applied, but no nodes matched.");
+        } else {
+            self.move_focus_to_first_match()?;
+            self.set_status(
+                StatusTone::Success,
+                format!("Filter applied with {count} matches."),
+            );
+        }
+        Ok(())
+    }
+
+    fn clear_filter(&mut self) -> bool {
+        let had_filter = self.filter.is_some();
+        self.filter = None;
+        had_filter
+    }
+
+    fn move_match(&mut self, delta: isize) -> Result<(), AppError> {
+        let Some((matches, total_matches)) = self
+            .filter
+            .as_ref()
+            .map(|filter| (filter.matches.clone(), filter.matches.len()))
+        else {
+            return Err(AppError::new(
+                "No active filter. Press / to search the map.",
+            ));
+        };
+        if matches.is_empty() {
+            return Err(AppError::new("The active filter has no matches."));
+        }
+
+        let current_index = matches
+            .iter()
+            .position(|path| *path == self.editor.focus_path())
+            .unwrap_or(0) as isize;
+        let len = matches.len() as isize;
+        let next_index = (current_index + delta).rem_euclid(len) as usize;
+        self.editor.set_focus_path(matches[next_index].clone())?;
+        self.expand_focus_chain();
+        self.persist_session()?;
+        self.set_status(
+            StatusTone::Info,
+            format!("Match {}/{}.", next_index + 1, total_matches),
+        );
+        Ok(())
+    }
+
+    fn move_focus_to_first_match(&mut self) -> Result<(), AppError> {
+        let Some(filter) = &self.filter else {
+            return Ok(());
+        };
+        if let Some(path) = filter.matches.first() {
+            self.editor.set_focus_path(path.clone())?;
+            self.expand_focus_chain();
+            self.persist_session()?;
+        }
+        Ok(())
     }
 
     fn save_to_disk(&mut self) -> Result<(), AppError> {
@@ -759,7 +893,7 @@ fn render(frame: &mut Frame, app: &TuiApp) {
     }
 
     if let Some(prompt) = &app.prompt {
-        render_prompt_overlay(frame, centered_rect(68, 30, area), prompt);
+        render_prompt_overlay(frame, centered_rect(68, 30, area), prompt, app);
     }
 }
 
@@ -792,40 +926,55 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
     } else {
         (" MANUAL ", PALETTE.border)
     };
+    let filter_badge = app
+        .filter
+        .as_ref()
+        .map(|filter| format!(" FILTER {} ", filter.matches.len()));
+    let mut header_spans = vec![
+        Span::styled(
+            " mdmind ",
+            Style::default()
+                .fg(PALETTE.background)
+                .bg(PALETTE.accent)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            app.map_path.display().to_string(),
+            Style::default()
+                .fg(PALETTE.text)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            format!(" {badge} "),
+            Style::default()
+                .fg(PALETTE.background)
+                .bg(badge_color)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            autosave_badge.0,
+            Style::default()
+                .fg(PALETTE.background)
+                .bg(autosave_badge.1)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ];
+    if let Some(filter_badge) = filter_badge {
+        header_spans.push(Span::raw("  "));
+        header_spans.push(Span::styled(
+            filter_badge,
+            Style::default()
+                .fg(PALETTE.background)
+                .bg(PALETTE.warn)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
 
     let lines = vec![
-        Line::from(vec![
-            Span::styled(
-                " mdmind ",
-                Style::default()
-                    .fg(PALETTE.background)
-                    .bg(PALETTE.accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  "),
-            Span::styled(
-                app.map_path.display().to_string(),
-                Style::default()
-                    .fg(PALETTE.text)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  "),
-            Span::styled(
-                format!(" {badge} "),
-                Style::default()
-                    .fg(PALETTE.background)
-                    .bg(badge_color)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  "),
-            Span::styled(
-                autosave_badge.0,
-                Style::default()
-                    .fg(PALETTE.background)
-                    .bg(autosave_badge.1)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
+        Line::from(header_spans),
         Line::from(vec![
             Span::styled("focus ", Style::default().fg(PALETTE.muted)),
             Span::styled(breadcrumb, Style::default().fg(PALETTE.sky)),
@@ -868,7 +1017,11 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
             spans.push(Span::styled(
                 row.text.clone(),
                 Style::default()
-                    .fg(PALETTE.text)
+                    .fg(if row.matched {
+                        PALETTE.sky
+                    } else {
+                        PALETTE.text
+                    })
                     .add_modifier(Modifier::BOLD),
             ));
             if !row.tags.is_empty() {
@@ -899,6 +1052,10 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     Style::default().fg(PALETTE.sky),
                 ));
             }
+            if row.matched {
+                spans.push(Span::raw(" "));
+                spans.push(Span::styled("●", Style::default().fg(PALETTE.warn)));
+            }
             ListItem::new(Line::from(spans))
         })
         .collect();
@@ -906,7 +1063,14 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let list = List::new(items)
         .block(
             Block::default()
-                .title(styled_title("Map", PALETTE.accent))
+                .title(styled_title(
+                    if app.filter.is_some() {
+                        "Map · Filtered"
+                    } else {
+                        "Map"
+                    },
+                    PALETTE.accent,
+                ))
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(PALETTE.accent))
                 .style(Style::default().bg(PALETTE.surface)),
@@ -926,9 +1090,10 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
 }
 
 fn render_focus_cluster(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let focus_height = if app.filter.is_some() { 9 } else { 8 };
     let sections = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(8), Constraint::Min(8)])
+        .constraints([Constraint::Length(focus_height), Constraint::Min(8)])
         .split(area);
 
     render_focus_card(frame, sections[0], app);
@@ -1034,6 +1199,29 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     Style::default().fg(PALETTE.text),
                 ),
             ]));
+            if let Some(filter) = &app.filter {
+                let is_direct_match = current_node_matches_filter(app);
+                lines.push(Line::from(vec![
+                    Span::styled("filter ", Style::default().fg(PALETTE.muted)),
+                    Span::styled(
+                        format!("{} ({})", filter.query.raw(), filter.matches.len()),
+                        Style::default().fg(PALETTE.warn),
+                    ),
+                    Span::raw("  "),
+                    Span::styled(
+                        if is_direct_match {
+                            "direct match"
+                        } else {
+                            "context ancestor"
+                        },
+                        Style::default().fg(if is_direct_match {
+                            PALETTE.accent
+                        } else {
+                            PALETTE.muted
+                        }),
+                    ),
+                ]));
+            }
             lines
         }
         None => vec![Line::from(Span::styled(
@@ -1158,6 +1346,10 @@ fn render_keybar(frame: &mut Frame, area: Rect) {
         Span::raw(" · "),
         key_hint("x", "delete"),
         Span::raw(" · "),
+        key_hint("/", "filter"),
+        Span::raw(" · "),
+        key_hint("n", "next"),
+        Span::raw(" · "),
         key_hint("s", "save"),
         Span::raw(" · "),
         key_hint("r", "revert"),
@@ -1247,7 +1439,8 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
             Line::from("←       collapse branch or go to parent"),
             Line::from("→       expand branch or enter first child"),
             Line::from("Enter   toggle expanded/collapsed"),
-            Line::from("/       jump to a node id"),
+            Line::from("/       open filter palette"),
+            Line::from("o       jump directly to a node id"),
         ],
     );
     render_help_card(
@@ -1279,14 +1472,16 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
     render_help_card(
         frame,
         right[0],
-        "Save / Recover",
+        "Find / Recover",
         PALETTE.accent,
         vec![
+            Line::from("/       filter by text, #tag, or @key:value"),
+            Line::from("n / N   next or previous match"),
+            Line::from("c       clear active filter"),
             Line::from("s       save to disk now"),
             Line::from("S       toggle autosave"),
             Line::from("r       reload from disk"),
             Line::from("q       quit, warns if dirty"),
-            Line::from("Session focus restores automatically"),
         ],
     );
     render_help_card(
@@ -1327,7 +1522,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
     );
 }
 
-fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState) {
+fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState, app: &TuiApp) {
     frame.render_widget(Clear, area);
     let block = Block::default()
         .title(styled_title(prompt.mode.title(), PALETTE.warn))
@@ -1343,6 +1538,7 @@ fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState) {
         .constraints([
             Constraint::Length(2),
             Constraint::Length(3),
+            Constraint::Length(2),
             Constraint::Min(1),
         ])
         .split(inner);
@@ -1368,9 +1564,20 @@ fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState) {
     );
     frame.set_cursor_position((input_inner.x + prompt.cursor as u16, input_inner.y));
 
+    let filter_preview = if prompt.mode == PromptMode::Filter {
+        match FilterQuery::parse(&prompt.value) {
+            Some(query) => {
+                let count = collect_match_paths(app.editor.document(), &query).len();
+                format!("{count} live match(es). Enter applies, Esc cancels, empty input clears.")
+            }
+            None => "No filter yet. Enter on an empty query clears the active filter.".to_string(),
+        }
+    } else {
+        "Enter saves the action. Esc cancels.".to_string()
+    };
+
     frame.render_widget(
-        Paragraph::new("Enter saves the action. Esc cancels.")
-            .style(Style::default().fg(PALETTE.sky)),
+        Paragraph::new(filter_preview).style(Style::default().fg(PALETTE.sky)),
         chunks[2],
     );
 }
@@ -1428,13 +1635,36 @@ fn ancestor_paths(path: &[usize]) -> Vec<Vec<usize>> {
 fn collect_visible_rows(
     nodes: &[Node],
     expanded: &HashSet<Vec<usize>>,
+    filter: Option<&ActiveFilter>,
     rows: &mut Vec<VisibleRow>,
     prefix: Vec<usize>,
     depth: usize,
-) {
+) -> bool {
+    let mut subtree_has_visible_match = false;
     for (index, node) in nodes.iter().enumerate() {
         let mut path = prefix.clone();
         path.push(index);
+        let matched =
+            filter.is_some_and(|filter| filter.matches.iter().any(|candidate| *candidate == path));
+        let include_children_by_expansion = expanded.contains(&path);
+        let mut child_rows = Vec::new();
+        let child_has_match = collect_visible_rows(
+            &node.children,
+            expanded,
+            filter,
+            &mut child_rows,
+            path.clone(),
+            depth + 1,
+        );
+        let include_row = match filter {
+            Some(_) => matched || child_has_match,
+            None => true,
+        };
+
+        if !include_row {
+            continue;
+        }
+
         rows.push(VisibleRow {
             path: path.clone(),
             depth,
@@ -1450,11 +1680,38 @@ fn collect_visible_rows(
             has_children: !node.children.is_empty(),
             expanded: expanded.contains(&path),
             child_count: node.children.len(),
+            matched,
         });
 
-        if expanded.contains(&path) {
-            collect_visible_rows(&node.children, expanded, rows, path, depth + 1);
+        if filter.is_some() {
+            rows.extend(child_rows);
+        } else if include_children_by_expansion {
+            rows.extend(child_rows);
         }
+        subtree_has_visible_match = true;
+    }
+    subtree_has_visible_match
+}
+
+fn collect_match_paths(document: &Document, query: &FilterQuery) -> Vec<Vec<usize>> {
+    let mut paths = Vec::new();
+    collect_match_paths_from_nodes(&document.nodes, query, &mut paths, Vec::new());
+    paths
+}
+
+fn collect_match_paths_from_nodes(
+    nodes: &[Node],
+    query: &FilterQuery,
+    paths: &mut Vec<Vec<usize>>,
+    prefix: Vec<usize>,
+) {
+    for (index, node) in nodes.iter().enumerate() {
+        let mut path = prefix.clone();
+        path.push(index);
+        if query.matches(node) {
+            paths.push(path.clone());
+        }
+        collect_match_paths_from_nodes(&node.children, query, paths, path);
     }
 }
 
@@ -1491,6 +1748,15 @@ fn summarize_relationships(app: &TuiApp) -> String {
         "{parent_label} -> {} peers -> {children} children",
         peers.len()
     )
+}
+
+fn current_node_matches_filter(app: &TuiApp) -> bool {
+    app.filter.as_ref().is_some_and(|filter| {
+        filter
+            .matches
+            .iter()
+            .any(|path| *path == app.editor.focus_path())
+    })
 }
 
 fn parent_node(app: &TuiApp) -> Option<&Node> {
@@ -1779,6 +2045,93 @@ mod tests {
             std::fs::remove_file(session_path).ok();
         }
         std::fs::remove_file(map_path).ok();
+    }
+
+    #[test]
+    fn filter_highlights_matches_and_cycles_between_them() {
+        let map_path = temp_map_path("filter.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(map_path.clone(), document, vec![0], None, false);
+
+        app.begin_prompt(PromptMode::Filter, "#todo".to_string());
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should apply the filter");
+
+        assert_eq!(
+            app.filter.as_ref().map(|filter| filter.matches.len()),
+            Some(1)
+        );
+        assert_eq!(app.editor.focus_path(), &[0, 1]);
+
+        let rows = app.visible_rows();
+        assert!(rows.iter().any(|row| row.matched && row.text == "Tasks"));
+        assert!(rows.iter().any(|row| row.text == "Product Idea"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE))
+            .expect("cycling a single match should still work");
+        assert_eq!(app.editor.focus_path(), &[0, 1]);
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn esc_clears_the_active_filter_before_showing_generic_status() {
+        let map_path = temp_map_path("filter-esc.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(map_path.clone(), document, vec![0], None, false);
+
+        app.begin_prompt(PromptMode::Filter, "#todo".to_string());
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should apply the filter");
+        assert!(app.filter.is_some(), "filter should be active");
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .expect("escape should be handled");
+
+        assert!(
+            app.filter.is_none(),
+            "escape should clear the active filter"
+        );
+        assert_eq!(app.status.text, "Cleared the active filter.");
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn filter_state_distinguishes_direct_matches_from_context_ancestors() {
+        let map_path = temp_map_path("filter-context.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(map_path.clone(), document, vec![0], None, false);
+
+        app.begin_prompt(PromptMode::Filter, "#todo".to_string());
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should apply the filter");
+        assert!(
+            current_node_matches_filter(&app),
+            "the initial focused match should be marked as a direct match"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE))
+            .expect("up should move to the ancestor kept as filter context");
+        assert_eq!(app.editor.focus_path(), &[0]);
+        assert!(
+            !current_node_matches_filter(&app),
+            "ancestor context should not be treated as a direct match"
+        );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
     }
 
     #[test]

@@ -3,10 +3,12 @@ use std::collections::BTreeMap;
 use crate::model::{Document, LinkEntry, MetadataEntry, MetadataRow, Node, SearchMatch, TagCount};
 
 pub fn find_matches(document: &Document, query: &str) -> Vec<SearchMatch> {
-    let query = query.trim();
+    let Some(query) = FilterQuery::parse(query) else {
+        return Vec::new();
+    };
     let mut matches = Vec::new();
     walk_nodes(&document.nodes, &mut Vec::new(), &mut |node, breadcrumb| {
-        if node_matches(node, breadcrumb, query) {
+        if query.matches(node) {
             matches.push(SearchMatch {
                 line: node.line,
                 breadcrumb: breadcrumb.join(" / "),
@@ -18,6 +20,40 @@ pub fn find_matches(document: &Document, query: &str) -> Vec<SearchMatch> {
         }
     });
     matches
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FilterQuery {
+    raw: String,
+    terms: Vec<QueryTerm>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum QueryTerm {
+    Text(String),
+    Tag(String),
+    Metadata { key: String, value: Option<String> },
+}
+
+impl FilterQuery {
+    pub fn parse(input: &str) -> Option<Self> {
+        let raw = input.trim().to_string();
+        if raw.is_empty() {
+            return None;
+        }
+
+        let terms = raw.split_whitespace().map(parse_term).collect::<Vec<_>>();
+
+        Some(Self { raw, terms })
+    }
+
+    pub fn raw(&self) -> &str {
+        &self.raw
+    }
+
+    pub fn matches(&self, node: &Node) -> bool {
+        self.terms.iter().all(|term| term_matches(term, node))
+    }
 }
 
 pub fn tag_counts(document: &Document) -> Vec<TagCount> {
@@ -89,53 +125,68 @@ pub fn find_by_id<'a>(nodes: &'a [Node], id: &str) -> Option<&'a Node> {
     None
 }
 
-fn node_matches(node: &Node, _breadcrumb: &[String], query: &str) -> bool {
-    if let Some(tag) = query.strip_prefix('#') {
-        return node.tags.iter().any(|candidate| {
-            candidate
-                .trim_start_matches('#')
-                .eq_ignore_ascii_case(tag.trim_start_matches('#'))
-        });
-    }
-
-    if let Some(metadata_query) = query.strip_prefix('@') {
-        if let Some((key, value)) = metadata_query.split_once(':') {
-            return node.metadata.iter().any(|entry| {
-                entry.key.eq_ignore_ascii_case(key) && entry.value.eq_ignore_ascii_case(value)
-            });
-        }
-    }
-
-    let lowered = query.to_lowercase();
-    if node.text.to_lowercase().contains(&lowered) {
-        return true;
-    }
-    if node
-        .id
-        .as_ref()
-        .is_some_and(|id| id.to_lowercase().contains(&lowered))
-    {
-        return true;
-    }
-    if node
-        .tags
-        .iter()
-        .any(|tag| tag.to_lowercase().contains(&lowered))
-    {
-        return true;
-    }
-
-    node.metadata
-        .iter()
-        .any(|entry| metadata_matches(entry, &lowered))
-}
-
 fn metadata_matches(entry: &MetadataEntry, lowered: &str) -> bool {
     entry.key.to_lowercase().contains(lowered)
         || entry.value.to_lowercase().contains(lowered)
         || format!("@{}:{}", entry.key, entry.value)
             .to_lowercase()
             .contains(lowered)
+}
+
+fn parse_term(token: &str) -> QueryTerm {
+    if let Some(tag) = token.strip_prefix('#') {
+        return QueryTerm::Tag(tag.trim_start_matches('#').to_lowercase());
+    }
+
+    if let Some(metadata_query) = token.strip_prefix('@') {
+        if let Some((key, value)) = metadata_query.split_once(':') {
+            return QueryTerm::Metadata {
+                key: key.to_lowercase(),
+                value: Some(value.to_lowercase()),
+            };
+        }
+
+        return QueryTerm::Metadata {
+            key: metadata_query.to_lowercase(),
+            value: None,
+        };
+    }
+
+    QueryTerm::Text(token.to_lowercase())
+}
+
+fn term_matches(term: &QueryTerm, node: &Node) -> bool {
+    match term {
+        QueryTerm::Tag(tag) => node.tags.iter().any(|candidate| {
+            candidate
+                .trim_start_matches('#')
+                .eq_ignore_ascii_case(tag.trim_start_matches('#'))
+        }),
+        QueryTerm::Metadata { key, value } => node.metadata.iter().any(|entry| {
+            if !entry.key.eq_ignore_ascii_case(key) {
+                return false;
+            }
+            match value {
+                Some(value) => entry.value.eq_ignore_ascii_case(value),
+                None => true,
+            }
+        }),
+        QueryTerm::Text(lowered) => {
+            node.text.to_lowercase().contains(lowered)
+                || node
+                    .id
+                    .as_ref()
+                    .is_some_and(|id| id.to_lowercase().contains(lowered))
+                || node
+                    .tags
+                    .iter()
+                    .any(|tag| tag.to_lowercase().contains(lowered))
+                || node
+                    .metadata
+                    .iter()
+                    .any(|entry| metadata_matches(entry, lowered))
+        }
+    }
 }
 
 fn walk_nodes<F>(nodes: &[Node], breadcrumb: &mut Vec<String>, visitor: &mut F)

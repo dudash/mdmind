@@ -1,8 +1,6 @@
 {
   "focus_path": [
-    0,
-    3,
-    1
+    0
   ],
-  "focus_id": null
+  "focus_id": "demo"
 }
