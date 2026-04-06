@@ -1,5 +1,8 @@
 use mdmind::parser::parse_document;
-use mdmind::query::{FilterQuery, find_matches};
+use mdmind::query::{
+    FilterQuery, find_matches, metadata_key_counts_for_filter, metadata_value_counts_for_filter,
+    tag_counts_for_filter,
+};
 
 fn fixture(name: &str) -> String {
     std::fs::read_to_string(format!("tests/fixtures/{name}")).expect("fixture should be readable")
@@ -23,4 +26,23 @@ fn find_matches_uses_the_shared_query_language() {
     let matches = find_matches(&parsed.document, "#todo @status:active");
     assert_eq!(matches.len(), 1);
     assert_eq!(matches[0].text, "MVP Scope");
+}
+
+#[test]
+fn facet_counts_can_be_scoped_by_the_active_filter() {
+    let parsed = parse_document(&fixture("sample.md"));
+    let filter = FilterQuery::parse("#prompt").expect("query should parse");
+
+    let tags = tag_counts_for_filter(&parsed.document, Some(&filter));
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags[0].tag, "#prompt");
+
+    let keys = metadata_key_counts_for_filter(&parsed.document, Some(&filter));
+    assert_eq!(keys.len(), 1);
+    assert_eq!(keys[0].key, "owner");
+
+    let values = metadata_value_counts_for_filter(&parsed.document, Some(&filter));
+    assert_eq!(values.len(), 1);
+    assert_eq!(values[0].key, "owner");
+    assert_eq!(values[0].value, "jason");
 }

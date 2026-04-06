@@ -21,7 +21,10 @@ use ratatui::{Frame, Terminal};
 use crate::app::{AppError, TargetRef, ensure_parseable, load_document};
 use crate::editor::{Editor, default_focus_path, find_path_by_id, get_node};
 use crate::model::{Document, Node};
-use crate::query::FilterQuery;
+use crate::query::{
+    FilterQuery, metadata_key_counts_for_filter, metadata_value_counts_for_filter,
+    tag_counts_for_filter,
+};
 use crate::serializer::serialize_document;
 use crate::session::{load_session_for, resolve_session_focus, save_session_for};
 
@@ -107,6 +110,70 @@ struct ActiveFilter {
     matches: Vec<Vec<usize>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FacetTab {
+    Tags,
+    Keys,
+    Values,
+}
+
+impl FacetTab {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Tags => "Tags",
+            Self::Keys => "Keys",
+            Self::Values => "Values",
+        }
+    }
+
+    fn next(self) -> Self {
+        match self {
+            Self::Tags => Self::Keys,
+            Self::Keys => Self::Values,
+            Self::Values => Self::Tags,
+        }
+    }
+
+    fn previous(self) -> Self {
+        match self {
+            Self::Tags => Self::Values,
+            Self::Keys => Self::Tags,
+            Self::Values => Self::Keys,
+        }
+    }
+
+    fn empty_message(self) -> &'static str {
+        match self {
+            Self::Tags => "No tags exist in the current scope.",
+            Self::Keys => "No metadata keys exist in the current scope.",
+            Self::Values => "No metadata values exist in the current scope.",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FacetItem {
+    label: String,
+    token: String,
+    count: usize,
+    detail: String,
+}
+
+#[derive(Debug, Clone)]
+struct FacetState {
+    tab: FacetTab,
+    selected: usize,
+}
+
+impl FacetState {
+    fn new() -> Self {
+        Self {
+            tab: FacetTab::Tags,
+            selected: 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct PromptState {
     mode: PromptMode,
@@ -178,6 +245,7 @@ struct TuiApp {
     status: StatusMessage,
     prompt: Option<PromptState>,
     filter: Option<ActiveFilter>,
+    facet: Option<FacetState>,
     help_open: bool,
     quit_armed: bool,
     delete_armed: bool,
@@ -204,8 +272,9 @@ impl TuiApp {
             },
             None => StatusMessage {
                 tone: StatusTone::Info,
-                text: "Arrows move. Alt+arrows reshape. a adds. e edits. s saves. r reverts."
-                    .to_string(),
+                text:
+                    "Arrows move. / filters. f opens facets. Alt+arrows reshape. a adds. s saves."
+                        .to_string(),
             },
         };
 
@@ -216,6 +285,7 @@ impl TuiApp {
             status,
             prompt: None,
             filter: None,
+            facet: None,
             help_open: false,
             quit_armed: false,
             delete_armed: false,
@@ -232,6 +302,12 @@ impl TuiApp {
             self.quit_armed = false;
             self.delete_armed = false;
             return self.handle_prompt_key(key);
+        }
+
+        if self.facet.is_some() {
+            self.quit_armed = false;
+            self.delete_armed = false;
+            return self.handle_facet_key(key);
         }
 
         if self.help_open {
@@ -298,6 +374,10 @@ impl TuiApp {
                 self.help_open = true;
                 self.quit_armed = false;
                 self.delete_armed = false;
+            }
+            KeyCode::Char('f') => {
+                self.delete_armed = false;
+                self.open_facet_browser();
             }
             KeyCode::Char('a') => {
                 self.delete_armed = false;
@@ -421,6 +501,69 @@ impl TuiApp {
             }
         }
 
+        Ok(true)
+    }
+
+    fn handle_facet_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
+        let Some(mut facet) = self.facet.take() else {
+            return Ok(true);
+        };
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('f') => {
+                self.set_status(StatusTone::Info, "Closed the facet browser.");
+                return Ok(true);
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                facet.selected = facet.selected.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let items_len = self.facet_items(facet.tab).len();
+                if items_len > 0 {
+                    facet.selected = (facet.selected + 1).min(items_len - 1);
+                }
+            }
+            KeyCode::Left | KeyCode::Char('h') | KeyCode::BackTab => {
+                facet.tab = facet.tab.previous();
+                facet.selected = 0;
+            }
+            KeyCode::Right | KeyCode::Char('l') | KeyCode::Tab => {
+                facet.tab = facet.tab.next();
+                facet.selected = 0;
+            }
+            KeyCode::Char('c') => {
+                if self.clear_filter() {
+                    self.set_status(StatusTone::Info, "Cleared the active filter.");
+                } else {
+                    self.set_status(StatusTone::Info, "No active filter to clear.");
+                }
+                facet.selected = 0;
+            }
+            KeyCode::Enter => {
+                let items = self.facet_items(facet.tab);
+                if let Some(item) = items.get(facet.selected) {
+                    let next_query = self.compose_filter_with_token(&item.token);
+                    self.apply_filter(&next_query)?;
+                    self.set_status(
+                        StatusTone::Success,
+                        format!("Applied facet {}.", item.label),
+                    );
+                } else {
+                    self.set_status(StatusTone::Warning, facet.tab.empty_message());
+                    self.facet = Some(facet);
+                }
+                return Ok(true);
+            }
+            _ => {}
+        }
+
+        let items_len = self.facet_items(facet.tab).len();
+        if items_len == 0 {
+            facet.selected = 0;
+        } else {
+            facet.selected = facet.selected.min(items_len - 1);
+        }
+        self.facet = Some(facet);
         Ok(true)
     }
 
@@ -611,6 +754,68 @@ impl TuiApp {
         self.quit_armed = false;
         self.delete_armed = false;
         self.prompt = Some(PromptState::new(mode, value));
+    }
+
+    fn open_facet_browser(&mut self) {
+        self.quit_armed = false;
+        self.delete_armed = false;
+        self.facet = Some(FacetState::new());
+        self.set_status(
+            StatusTone::Info,
+            "Facet browser open. Enter narrows the current working set.",
+        );
+    }
+
+    fn facet_items(&self, tab: FacetTab) -> Vec<FacetItem> {
+        let scope = self.filter.as_ref().map(|filter| &filter.query);
+        match tab {
+            FacetTab::Tags => tag_counts_for_filter(self.editor.document(), scope)
+                .into_iter()
+                .map(|entry| FacetItem {
+                    label: entry.tag.clone(),
+                    token: entry.tag,
+                    count: entry.count,
+                    detail: "tag".to_string(),
+                })
+                .collect(),
+            FacetTab::Keys => metadata_key_counts_for_filter(self.editor.document(), scope)
+                .into_iter()
+                .map(|entry| FacetItem {
+                    label: format!("@{}", entry.key),
+                    token: format!("@{}", entry.key),
+                    count: entry.count,
+                    detail: "metadata key".to_string(),
+                })
+                .collect(),
+            FacetTab::Values => metadata_value_counts_for_filter(self.editor.document(), scope)
+                .into_iter()
+                .map(|entry| FacetItem {
+                    label: format!("@{}:{}", entry.key, entry.value),
+                    token: format!("@{}:{}", entry.key, entry.value),
+                    count: entry.count,
+                    detail: format!("{} value", entry.key),
+                })
+                .collect(),
+        }
+    }
+
+    fn compose_filter_with_token(&self, token: &str) -> String {
+        let mut terms = self
+            .filter
+            .as_ref()
+            .map(|filter| {
+                filter
+                    .query
+                    .raw()
+                    .split_whitespace()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if !terms.iter().any(|term| term.eq_ignore_ascii_case(token)) {
+            terms.push(token.to_string());
+        }
+        terms.join(" ")
     }
 
     fn apply_filter(&mut self, raw: &str) -> Result<(), AppError> {
@@ -890,6 +1095,10 @@ fn render(frame: &mut Frame, app: &TuiApp) {
 
     if app.help_open {
         render_help_overlay(frame, centered_rect(70, 70, area));
+    }
+
+    if let Some(facet) = &app.facet {
+        render_facet_overlay(frame, centered_rect(76, 78, area), app, facet);
     }
 
     if let Some(prompt) = &app.prompt {
@@ -1348,6 +1557,8 @@ fn render_keybar(frame: &mut Frame, area: Rect) {
         Span::raw(" · "),
         key_hint("/", "filter"),
         Span::raw(" · "),
+        key_hint("f", "facets"),
+        Span::raw(" · "),
         key_hint("n", "next"),
         Span::raw(" · "),
         key_hint("s", "save"),
@@ -1440,6 +1651,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
             Line::from("→       expand branch or enter first child"),
             Line::from("Enter   toggle expanded/collapsed"),
             Line::from("/       open filter palette"),
+            Line::from("f       open facet browser"),
             Line::from("o       jump directly to a node id"),
         ],
     );
@@ -1476,6 +1688,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
         PALETTE.accent,
         vec![
             Line::from("/       filter by text, #tag, or @key:value"),
+            Line::from("f       browse counts for tags and metadata"),
             Line::from("n / N   next or previous match"),
             Line::from("c       clear active filter"),
             Line::from("s       save to disk now"),
@@ -1519,6 +1732,221 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
             ),
         ])),
         sections[2],
+    );
+}
+
+fn render_facet_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, facet: &FacetState) {
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .title(styled_title("Facet Browser", PALETTE.accent))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.accent))
+        .style(Style::default().bg(PALETTE.surface_alt))
+        .padding(Padding::uniform(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Length(2),
+            Constraint::Min(10),
+            Constraint::Length(2),
+        ])
+        .split(inner);
+
+    let scope_label = if let Some(filter) = &app.filter {
+        format!(
+            "Scope: current filter '{}' ({} matching nodes)",
+            filter.query.raw(),
+            filter.matches.len()
+        )
+    } else {
+        format!(
+            "Scope: whole map ({} nodes)",
+            count_nodes(&app.editor.document().nodes)
+        )
+    };
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(vec![
+                Span::styled(
+                    "Narrow The Map",
+                    Style::default()
+                        .fg(PALETTE.text)
+                        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+                ),
+                Span::raw("  "),
+                Span::styled(
+                    "Browse tags, metadata keys, and values from the current working set.",
+                    Style::default().fg(PALETTE.muted),
+                ),
+            ]),
+            Line::from(Span::styled(scope_label, Style::default().fg(PALETTE.sky))),
+        ]),
+        sections[0],
+    );
+
+    let tabs = [FacetTab::Tags, FacetTab::Keys, FacetTab::Values]
+        .into_iter()
+        .flat_map(|tab| {
+            let is_active = tab == facet.tab;
+            let mut spans = vec![Span::styled(
+                format!(" {} ", tab.title()),
+                Style::default()
+                    .fg(if is_active {
+                        PALETTE.background
+                    } else {
+                        PALETTE.text
+                    })
+                    .bg(if is_active {
+                        PALETTE.accent
+                    } else {
+                        PALETTE.surface
+                    })
+                    .add_modifier(Modifier::BOLD),
+            )];
+            if tab != FacetTab::Values {
+                spans.push(Span::raw(" "));
+            }
+            spans
+        })
+        .collect::<Vec<_>>();
+    frame.render_widget(Paragraph::new(Line::from(tabs)), sections[1]);
+
+    let body = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(62), Constraint::Percentage(38)])
+        .split(sections[2]);
+
+    let items = app.facet_items(facet.tab);
+    if items.is_empty() {
+        let empty = Paragraph::new(facet.tab.empty_message())
+            .block(
+                Block::default()
+                    .title(styled_title(facet.tab.title(), PALETTE.sky))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(PALETTE.border))
+                    .style(Style::default().bg(PALETTE.surface))
+                    .padding(Padding::horizontal(1)),
+            )
+            .style(Style::default().fg(PALETTE.muted))
+            .wrap(Wrap { trim: false });
+        frame.render_widget(empty, body[0]);
+    } else {
+        let list_items = items
+            .iter()
+            .map(|item| {
+                ListItem::new(Line::from(vec![
+                    Span::styled(
+                        item.label.clone(),
+                        Style::default()
+                            .fg(PALETTE.text)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw("  "),
+                    Span::styled(
+                        format!("{} nodes", item.count),
+                        Style::default().fg(PALETTE.warn),
+                    ),
+                ]))
+            })
+            .collect::<Vec<_>>();
+        let list = List::new(list_items)
+            .block(
+                Block::default()
+                    .title(styled_title(facet.tab.title(), PALETTE.sky))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(PALETTE.sky))
+                    .style(Style::default().bg(PALETTE.surface)),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(PALETTE.surface_alt)
+                    .fg(PALETTE.text)
+                    .add_modifier(Modifier::BOLD),
+            );
+        let mut state = ListState::default();
+        state.select(Some(facet.selected.min(items.len() - 1)));
+        frame.render_stateful_widget(list, body[0], &mut state);
+    }
+
+    let selection = items.get(facet.selected);
+    let next_query = selection.map(|item| app.compose_filter_with_token(&item.token));
+    let already_active = selection.is_some_and(|item| {
+        app.filter.as_ref().is_some_and(|filter| {
+            filter
+                .query
+                .raw()
+                .split_whitespace()
+                .any(|term| term.eq_ignore_ascii_case(&item.token))
+        })
+    });
+    let preview_lines = match selection {
+        Some(item) => vec![
+            Line::from(vec![
+                Span::styled("selected ", Style::default().fg(PALETTE.muted)),
+                Span::styled(item.label.clone(), Style::default().fg(PALETTE.text)),
+            ]),
+            Line::from(vec![
+                Span::styled("type ", Style::default().fg(PALETTE.muted)),
+                Span::styled(item.detail.clone(), Style::default().fg(PALETTE.sky)),
+            ]),
+            Line::from(vec![
+                Span::styled("count ", Style::default().fg(PALETTE.muted)),
+                Span::styled(item.count.to_string(), Style::default().fg(PALETTE.warn)),
+            ]),
+            Line::from(vec![
+                Span::styled("apply ", Style::default().fg(PALETTE.muted)),
+                Span::styled(
+                    next_query.unwrap_or_default(),
+                    Style::default().fg(PALETTE.accent),
+                ),
+            ]),
+            Line::from(Span::styled(
+                if already_active {
+                    "This facet is already present in the filter."
+                } else {
+                    "Press Enter to narrow the current working set."
+                },
+                Style::default().fg(PALETTE.muted),
+            )),
+        ],
+        None => vec![Line::from(Span::styled(
+            facet.tab.empty_message(),
+            Style::default().fg(PALETTE.muted),
+        ))],
+    };
+    frame.render_widget(
+        Paragraph::new(preview_lines)
+            .block(
+                Block::default()
+                    .title(styled_title("Preview", PALETTE.warn))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(PALETTE.warn))
+                    .style(Style::default().bg(PALETTE.surface))
+                    .padding(Padding::horizontal(1)),
+            )
+            .wrap(Wrap { trim: false }),
+        body[1],
+    );
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            key_hint("↑↓", "select"),
+            Span::raw(" · "),
+            key_hint("←→", "tabs"),
+            Span::raw(" · "),
+            key_hint("Enter", "apply"),
+            Span::raw(" · "),
+            key_hint("c", "clear filter"),
+            Span::raw(" · "),
+            key_hint("Esc", "close"),
+        ]))
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(PALETTE.muted)),
+        sections[3],
     );
 }
 
@@ -1759,6 +2187,13 @@ fn current_node_matches_filter(app: &TuiApp) -> bool {
     })
 }
 
+fn count_nodes(nodes: &[Node]) -> usize {
+    nodes
+        .iter()
+        .map(|node| 1 + count_nodes(&node.children))
+        .sum()
+}
+
 fn parent_node(app: &TuiApp) -> Option<&Node> {
     let path = app.editor.focus_path();
     if path.len() <= 1 {
@@ -1929,7 +2364,7 @@ mod tests {
 
     fn sample_document() -> Document {
         parse_document(
-            "- Product Idea [id:product]\n  - Direction #idea [id:product/direction]\n    - CLI-first MVP\n  - Tasks #todo [id:product/tasks]\n    - Build parser\n    - Ship tests\n",
+            "- Product Idea [id:product]\n  - Direction #idea [id:product/direction]\n    - CLI-first MVP\n  - Tasks #todo @status:active [id:product/tasks]\n    - Build parser\n    - Ship tests\n",
         )
         .document
     }
@@ -2125,6 +2560,67 @@ mod tests {
         assert!(
             !current_node_matches_filter(&app),
             "ancestor context should not be treated as a direct match"
+        );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn facet_browser_applies_the_selected_tag_filter() {
+        let map_path = temp_map_path("facet-tag.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(map_path.clone(), document, vec![0], None, false);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE))
+            .expect("f should open the facet browser");
+        assert!(app.facet.is_some(), "facet browser should open");
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should apply the selected facet");
+
+        assert_eq!(
+            app.filter.as_ref().map(|filter| filter.query.raw()),
+            Some("#idea")
+        );
+        assert_eq!(app.editor.focus_path(), &[0, 0]);
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn facet_browser_compounds_the_active_filter_scope() {
+        let map_path = temp_map_path("facet-scope.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(map_path.clone(), document, vec![0], None, false);
+
+        app.begin_prompt(PromptMode::Filter, "#todo".to_string());
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should apply the filter");
+        assert_eq!(
+            app.filter.as_ref().map(|filter| filter.matches.len()),
+            Some(1)
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE))
+            .expect("f should open the facet browser");
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .expect("right should move to keys");
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .expect("right should move to values");
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should apply the selected metadata value facet");
+
+        assert_eq!(
+            app.filter.as_ref().map(|filter| filter.query.raw()),
+            Some("#todo @status:active")
         );
 
         let session_path =

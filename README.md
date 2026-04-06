@@ -29,14 +29,7 @@ It is not trying to replace a full document editor, whiteboard, or team collabor
 - Composable CLI output
 
 ## Repo docs
-
-- `VISION.md`
-- `DESIGN.md`
-- `MVP.md`
-- `FORMAT.md`
-- `DECISIONS.md`
-- `ROADMAP.md`
-- `CODEX_KICKOFF.md`
+TBD
 
 ## Status
 

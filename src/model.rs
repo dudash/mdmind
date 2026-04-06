@@ -63,6 +63,19 @@ pub struct MetadataRow {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MetadataKeyCount {
+    pub key: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MetadataValueCount {
+    pub key: String,
+    pub value: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LinkEntry {
     pub line: usize,
     pub id: String,

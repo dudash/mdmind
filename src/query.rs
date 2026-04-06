@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 
-use crate::model::{Document, LinkEntry, MetadataEntry, MetadataRow, Node, SearchMatch, TagCount};
+use crate::model::{
+    Document, LinkEntry, MetadataEntry, MetadataKeyCount, MetadataRow, MetadataValueCount, Node,
+    SearchMatch, TagCount,
+};
 
 pub fn find_matches(document: &Document, query: &str) -> Vec<SearchMatch> {
     let Some(query) = FilterQuery::parse(query) else {
@@ -57,8 +60,15 @@ impl FilterQuery {
 }
 
 pub fn tag_counts(document: &Document) -> Vec<TagCount> {
+    tag_counts_for_filter(document, None)
+}
+
+pub fn tag_counts_for_filter(document: &Document, filter: Option<&FilterQuery>) -> Vec<TagCount> {
     let mut counts = BTreeMap::<String, usize>::new();
     walk_nodes(&document.nodes, &mut Vec::new(), &mut |node, _| {
+        if !node_is_in_scope(node, filter) {
+            return;
+        }
         for tag in &node.tags {
             *counts.entry(tag.to_lowercase()).or_default() += 1;
         }
@@ -73,6 +83,63 @@ pub fn tag_counts(document: &Document) -> Vec<TagCount> {
             .count
             .cmp(&left.count)
             .then_with(|| left.tag.cmp(&right.tag))
+    });
+    entries
+}
+
+pub fn metadata_key_counts_for_filter(
+    document: &Document,
+    filter: Option<&FilterQuery>,
+) -> Vec<MetadataKeyCount> {
+    let mut counts = BTreeMap::<String, usize>::new();
+    walk_nodes(&document.nodes, &mut Vec::new(), &mut |node, _| {
+        if !node_is_in_scope(node, filter) {
+            return;
+        }
+        for entry in &node.metadata {
+            *counts.entry(entry.key.to_lowercase()).or_default() += 1;
+        }
+    });
+
+    let mut entries: Vec<_> = counts
+        .into_iter()
+        .map(|(key, count)| MetadataKeyCount { key, count })
+        .collect();
+    entries.sort_by(|left, right| {
+        right
+            .count
+            .cmp(&left.count)
+            .then_with(|| left.key.cmp(&right.key))
+    });
+    entries
+}
+
+pub fn metadata_value_counts_for_filter(
+    document: &Document,
+    filter: Option<&FilterQuery>,
+) -> Vec<MetadataValueCount> {
+    let mut counts = BTreeMap::<(String, String), usize>::new();
+    walk_nodes(&document.nodes, &mut Vec::new(), &mut |node, _| {
+        if !node_is_in_scope(node, filter) {
+            return;
+        }
+        for entry in &node.metadata {
+            *counts
+                .entry((entry.key.to_lowercase(), entry.value.to_lowercase()))
+                .or_default() += 1;
+        }
+    });
+
+    let mut entries: Vec<_> = counts
+        .into_iter()
+        .map(|((key, value), count)| MetadataValueCount { key, value, count })
+        .collect();
+    entries.sort_by(|left, right| {
+        right
+            .count
+            .cmp(&left.count)
+            .then_with(|| left.key.cmp(&right.key))
+            .then_with(|| left.value.cmp(&right.value))
     });
     entries
 }
@@ -131,6 +198,10 @@ fn metadata_matches(entry: &MetadataEntry, lowered: &str) -> bool {
         || format!("@{}:{}", entry.key, entry.value)
             .to_lowercase()
             .contains(lowered)
+}
+
+fn node_is_in_scope(node: &Node, filter: Option<&FilterQuery>) -> bool {
+    filter.is_none_or(|filter| filter.matches(node))
 }
 
 fn parse_term(token: &str) -> QueryTerm {
