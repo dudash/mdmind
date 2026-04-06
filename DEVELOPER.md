@@ -87,6 +87,9 @@ GitHub Actions live in `.github/workflows/`.
 - commits the release prep
 - creates tag `vX.Y.Z`
 - pushes the commit and tag to `main`
+- creates the GitHub Release entry
+- builds platform archives
+- uploads binary assets to that release
 
 ## Versioning
 
@@ -112,8 +115,8 @@ Recommended path:
 1. Land any docs or product changes before the release.
 2. Run the `Prepare Release` GitHub Action on `main` with a version like `0.2.0`.
 3. The workflow updates the crate version, verifies the repo, commits, tags, and pushes.
-4. The pushed tag triggers `release.yml`.
-5. GitHub Actions builds binaries and uploads the release artifacts for that tag.
+4. The same workflow creates the GitHub Release and uploads binary archives for each supported platform.
+5. GitHub will also show its default source `.zip` and `.tar.gz` archives for the tag.
 
 Manual fallback:
 
@@ -161,6 +164,8 @@ Current release targets:
 - `x86_64-apple-darwin`
 - `aarch64-apple-darwin`
 - `x86_64-pc-windows-msvc`
+
+GitHub’s source archives are always present too, but those are separate from the built binary assets.
 
 ## Publishing Notes
 
