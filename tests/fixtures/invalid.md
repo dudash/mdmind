@@ -1,0 +1,4 @@
+- Root [id:dup]
+  - Child [id:dup]
+   - Odd Indent
+- Invalid Metadata @status

@@ -1,0 +1,14 @@
+- Feature Requirements [id:feature]
+  - Goal #idea @status:active
+    - What user outcome should change?
+  - User Flow #todo [id:feature/flow]
+    - Trigger
+    - Main path
+    - Failure path
+  - Constraints @owner:team
+    - Performance
+    - Reliability
+    - Accessibility
+  - Acceptance Criteria #todo @priority:high
+    - Happy path is testable
+    - Edge cases are explicit

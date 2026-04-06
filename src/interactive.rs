@@ -1,0 +1,1682 @@
+use std::collections::HashSet;
+use std::fs;
+use std::io::{self, IsTerminal, Stdout};
+use std::path::PathBuf;
+use std::time::Duration;
+
+use crossterm::cursor::{Hide, Show};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::execute;
+use crossterm::terminal::{
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+};
+use ratatui::backend::CrosstermBackend;
+use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
+use ratatui::prelude::{Color, Line, Modifier, Span, Style};
+use ratatui::widgets::{
+    Block, Borders, Clear, List, ListItem, ListState, Padding, Paragraph, Wrap,
+};
+use ratatui::{Frame, Terminal};
+
+use crate::app::{AppError, TargetRef, ensure_parseable, load_document};
+use crate::editor::{Editor, default_focus_path, find_path_by_id, get_node};
+use crate::model::{Document, Node};
+use crate::serializer::serialize_document;
+use crate::session::{load_session_for, resolve_session_focus, save_session_for};
+
+const TICK_RATE: Duration = Duration::from_millis(150);
+
+#[derive(Debug, Clone, Copy)]
+struct Palette {
+    background: Color,
+    surface: Color,
+    surface_alt: Color,
+    border: Color,
+    accent: Color,
+    sky: Color,
+    warn: Color,
+    danger: Color,
+    text: Color,
+    muted: Color,
+}
+
+const PALETTE: Palette = Palette {
+    background: Color::Rgb(8, 15, 24),
+    surface: Color::Rgb(15, 25, 38),
+    surface_alt: Color::Rgb(24, 39, 58),
+    border: Color::Rgb(41, 65, 91),
+    accent: Color::Rgb(67, 201, 176),
+    sky: Color::Rgb(94, 191, 255),
+    warn: Color::Rgb(248, 189, 94),
+    danger: Color::Rgb(244, 114, 93),
+    text: Color::Rgb(233, 241, 248),
+    muted: Color::Rgb(129, 153, 178),
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StatusTone {
+    Info,
+    Success,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone)]
+struct StatusMessage {
+    tone: StatusTone,
+    text: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PromptMode {
+    AddChild,
+    AddSibling,
+    AddRoot,
+    Edit,
+    OpenId,
+}
+
+impl PromptMode {
+    fn title(self) -> &'static str {
+        match self {
+            Self::AddChild => "Add Child",
+            Self::AddSibling => "Add Sibling",
+            Self::AddRoot => "Add Root",
+            Self::Edit => "Edit Node",
+            Self::OpenId => "Jump To Id",
+        }
+    }
+
+    fn hint(self) -> &'static str {
+        match self {
+            Self::OpenId => "Type a node id, then press Enter.",
+            _ => "Use full node syntax: Label #tag @key:value [id:path/to/node]",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct PromptState {
+    mode: PromptMode,
+    value: String,
+    cursor: usize,
+}
+
+impl PromptState {
+    fn new(mode: PromptMode, value: String) -> Self {
+        let cursor = value.len();
+        Self {
+            mode,
+            value,
+            cursor,
+        }
+    }
+
+    fn move_left(&mut self) {
+        self.cursor = previous_boundary(&self.value, self.cursor);
+    }
+
+    fn move_right(&mut self) {
+        self.cursor = next_boundary(&self.value, self.cursor);
+    }
+
+    fn insert(&mut self, character: char) {
+        self.value.insert(self.cursor, character);
+        self.cursor += character.len_utf8();
+    }
+
+    fn backspace(&mut self) {
+        if self.cursor == 0 {
+            return;
+        }
+        let previous = previous_boundary(&self.value, self.cursor);
+        self.value.replace_range(previous..self.cursor, "");
+        self.cursor = previous;
+    }
+
+    fn delete(&mut self) {
+        if self.cursor >= self.value.len() {
+            return;
+        }
+        let next = next_boundary(&self.value, self.cursor);
+        self.value.replace_range(self.cursor..next, "");
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct VisibleRow {
+    path: Vec<usize>,
+    depth: usize,
+    text: String,
+    tags: Vec<String>,
+    metadata: Vec<String>,
+    id: Option<String>,
+    line: usize,
+    has_children: bool,
+    expanded: bool,
+    child_count: usize,
+}
+
+#[derive(Debug)]
+struct TuiApp {
+    map_path: PathBuf,
+    editor: Editor,
+    expanded: HashSet<Vec<usize>>,
+    status: StatusMessage,
+    prompt: Option<PromptState>,
+    help_open: bool,
+    quit_armed: bool,
+    autosave: bool,
+}
+
+impl TuiApp {
+    fn new(
+        map_path: PathBuf,
+        document: Document,
+        focus_path: Vec<usize>,
+        warning: Option<String>,
+        autosave: bool,
+    ) -> Self {
+        let mut expanded = initial_expanded_paths(&document);
+        for ancestor in ancestor_paths(&focus_path) {
+            expanded.insert(ancestor);
+        }
+
+        let status = match warning {
+            Some(text) => StatusMessage {
+                tone: StatusTone::Warning,
+                text,
+            },
+            None => StatusMessage {
+                tone: StatusTone::Info,
+                text: "Arrows move. Alt+arrows reshape. a adds. e edits. s saves. r reverts."
+                    .to_string(),
+            },
+        };
+
+        Self {
+            map_path,
+            editor: Editor::new(document, focus_path),
+            expanded,
+            status,
+            prompt: None,
+            help_open: false,
+            quit_armed: false,
+            autosave,
+        }
+    }
+
+    fn handle_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
+        if key.kind != KeyEventKind::Press {
+            return Ok(true);
+        }
+
+        if self.prompt.is_some() {
+            self.quit_armed = false;
+            return self.handle_prompt_key(key);
+        }
+
+        if self.help_open {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('?') => {
+                    self.help_open = false;
+                    self.set_status(StatusTone::Info, "Closed the keymap overlay.");
+                }
+                _ => {}
+            }
+            return Ok(true);
+        }
+
+        if key.modifiers.contains(KeyModifiers::ALT) {
+            self.quit_armed = false;
+            match key.code {
+                KeyCode::Up => {
+                    self.apply_edit(|editor| editor.move_node_up(), "Moved the node up.")?
+                }
+                KeyCode::Down => {
+                    self.apply_edit(|editor| editor.move_node_down(), "Moved the node down.")?
+                }
+                KeyCode::Left => self.apply_edit(
+                    |editor| editor.outdent_node(),
+                    "Moved the node out one level.",
+                )?,
+                KeyCode::Right => self.apply_edit(
+                    |editor| editor.indent_node(),
+                    "Moved the node into the previous sibling.",
+                )?,
+                _ => {}
+            }
+            return Ok(true);
+        }
+
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.quit_armed = false;
+                self.move_selection(-1)?;
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.quit_armed = false;
+                self.move_selection(1)?;
+            }
+            KeyCode::Left | KeyCode::Char('h') => {
+                self.quit_armed = false;
+                self.collapse_or_parent()?;
+            }
+            KeyCode::Right | KeyCode::Char('l') => {
+                self.quit_armed = false;
+                self.expand_or_child()?;
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => {
+                self.quit_armed = false;
+                self.toggle_branch()?;
+            }
+            KeyCode::Char('?') => {
+                self.help_open = true;
+                self.quit_armed = false;
+            }
+            KeyCode::Char('a') => {
+                self.begin_prompt(PromptMode::AddChild, String::new());
+            }
+            KeyCode::Char('A') => {
+                self.begin_prompt(PromptMode::AddSibling, String::new());
+            }
+            KeyCode::Char('R') => {
+                self.begin_prompt(PromptMode::AddRoot, String::new());
+            }
+            KeyCode::Char('e') => {
+                let initial = self
+                    .editor
+                    .current()
+                    .map(Node::display_line)
+                    .unwrap_or_default();
+                self.begin_prompt(PromptMode::Edit, initial);
+            }
+            KeyCode::Char('/') => {
+                self.begin_prompt(PromptMode::OpenId, String::new());
+            }
+            KeyCode::Char('g') => {
+                self.editor.move_root()?;
+                self.expand_focus_chain();
+                self.persist_session()?;
+                self.set_status(StatusTone::Info, "Jumped to the root.");
+            }
+            KeyCode::Char('s') => {
+                self.save_to_disk()?;
+                self.quit_armed = false;
+            }
+            KeyCode::Char('S') => {
+                self.autosave = !self.autosave;
+                let message = if self.autosave {
+                    "Autosave enabled. Changes now write to disk immediately."
+                } else {
+                    "Autosave disabled. Press s to save changes manually."
+                };
+                self.set_status(StatusTone::Info, message);
+            }
+            KeyCode::Char('r') => {
+                self.revert_from_disk()?;
+                self.quit_armed = false;
+            }
+            KeyCode::Esc => {
+                self.quit_armed = false;
+                self.set_status(
+                    StatusTone::Info,
+                    "Use q to quit. If there are unsaved changes, press q twice to discard them.",
+                );
+            }
+            KeyCode::Char('q') => {
+                if self.editor.dirty() && !self.quit_armed {
+                    self.quit_armed = true;
+                    self.set_status(
+                        StatusTone::Warning,
+                        "Unsaved changes. Press q again to discard, or press s to save first.",
+                    );
+                } else {
+                    return Ok(false);
+                }
+            }
+            _ => {}
+        }
+
+        Ok(true)
+    }
+
+    fn handle_prompt_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
+        let Some(mut prompt) = self.prompt.take() else {
+            return Ok(true);
+        };
+
+        let mut submit = None;
+        match key.code {
+            KeyCode::Esc => {
+                self.set_status(StatusTone::Info, "Cancelled input.");
+            }
+            KeyCode::Enter => {
+                submit = Some((prompt.mode, prompt.value.trim().to_string()));
+            }
+            KeyCode::Backspace => prompt.backspace(),
+            KeyCode::Delete => prompt.delete(),
+            KeyCode::Left => prompt.move_left(),
+            KeyCode::Right => prompt.move_right(),
+            KeyCode::Home => prompt.cursor = 0,
+            KeyCode::End => prompt.cursor = prompt.value.len(),
+            KeyCode::Char(character)
+                if !key.modifiers.contains(KeyModifiers::CONTROL)
+                    && !key.modifiers.contains(KeyModifiers::ALT) =>
+            {
+                prompt.insert(character);
+            }
+            _ => {}
+        }
+
+        if let Some((mode, value)) = submit {
+            self.submit_prompt(mode, &value)?;
+        } else if !matches!(key.code, KeyCode::Esc) {
+            self.prompt = Some(prompt);
+        }
+
+        Ok(true)
+    }
+
+    fn submit_prompt(&mut self, mode: PromptMode, value: &str) -> Result<(), AppError> {
+        if value.is_empty() {
+            self.set_status(StatusTone::Warning, "Input was empty; nothing changed.");
+            return Ok(());
+        }
+
+        match mode {
+            PromptMode::AddChild => self.editor.add_child(value)?,
+            PromptMode::AddSibling => self.editor.add_sibling(value)?,
+            PromptMode::AddRoot => self.editor.add_root(value)?,
+            PromptMode::Edit => self.editor.edit_current(value)?,
+            PromptMode::OpenId => {
+                self.editor.open_id(value)?;
+                self.expand_focus_chain();
+                self.persist_session()?;
+                self.quit_armed = false;
+                self.set_status(StatusTone::Success, "Jumped to the requested id.");
+                return Ok(());
+            }
+        }
+        let message = match mode {
+            PromptMode::AddChild => "Added a child node.",
+            PromptMode::AddSibling => "Added a sibling node.",
+            PromptMode::AddRoot => "Added a new root node.",
+            PromptMode::Edit => "Updated the selected node.",
+            PromptMode::OpenId => unreachable!("open id returns early"),
+        };
+        self.after_edit(message)
+    }
+
+    fn visible_rows(&self) -> Vec<VisibleRow> {
+        let mut rows = Vec::new();
+        collect_visible_rows(
+            &self.editor.document().nodes,
+            &self.expanded,
+            &mut rows,
+            Vec::new(),
+            0,
+        );
+        rows
+    }
+
+    fn selected_index(&self, rows: &[VisibleRow]) -> usize {
+        rows.iter()
+            .position(|row| row.path == self.editor.focus_path())
+            .unwrap_or(0)
+    }
+
+    fn move_selection(&mut self, delta: isize) -> Result<(), AppError> {
+        let rows = self.visible_rows();
+        if rows.is_empty() {
+            return Ok(());
+        }
+
+        let current_index = self.selected_index(&rows) as isize;
+        let next_index = (current_index + delta).clamp(0, rows.len() as isize - 1) as usize;
+        self.editor.set_focus_path(rows[next_index].path.clone())?;
+        self.persist_session()?;
+        if let Some(node) = self.editor.current() {
+            self.set_status(StatusTone::Info, format!("Focused '{}'.", node.text));
+        }
+        Ok(())
+    }
+
+    fn collapse_or_parent(&mut self) -> Result<(), AppError> {
+        let path = self.editor.focus_path().to_vec();
+        if let Some(node) = self.editor.current()
+            && !node.children.is_empty()
+            && self.expanded.contains(&path)
+        {
+            self.expanded.remove(&path);
+            self.set_status(StatusTone::Info, "Collapsed the branch.");
+            return Ok(());
+        }
+
+        self.editor.move_parent()?;
+        self.persist_session()?;
+        self.set_status(StatusTone::Info, "Moved to the parent node.");
+        Ok(())
+    }
+
+    fn expand_or_child(&mut self) -> Result<(), AppError> {
+        let path = self.editor.focus_path().to_vec();
+        let Some(node) = self.editor.current() else {
+            return Ok(());
+        };
+
+        if node.children.is_empty() {
+            self.set_status(StatusTone::Warning, "This node has no children to explore.");
+            return Ok(());
+        }
+
+        if !self.expanded.contains(&path) {
+            self.expanded.insert(path);
+            self.set_status(StatusTone::Info, "Expanded the branch.");
+            return Ok(());
+        }
+
+        self.editor.move_child(1)?;
+        self.expand_focus_chain();
+        self.persist_session()?;
+        self.set_status(StatusTone::Info, "Moved into the first child.");
+        Ok(())
+    }
+
+    fn toggle_branch(&mut self) -> Result<(), AppError> {
+        let path = self.editor.focus_path().to_vec();
+        let Some(node) = self.editor.current() else {
+            return Ok(());
+        };
+
+        if node.children.is_empty() {
+            self.set_status(StatusTone::Warning, "This node has no children.");
+            return Ok(());
+        }
+
+        if self.expanded.contains(&path) {
+            self.expanded.remove(&path);
+            self.set_status(StatusTone::Info, "Collapsed the branch.");
+        } else {
+            self.expanded.insert(path);
+            self.set_status(StatusTone::Info, "Expanded the branch.");
+        }
+        Ok(())
+    }
+
+    fn begin_prompt(&mut self, mode: PromptMode, value: String) {
+        self.quit_armed = false;
+        self.prompt = Some(PromptState::new(mode, value));
+    }
+
+    fn save_to_disk(&mut self) -> Result<(), AppError> {
+        self.editor.save()?;
+        fs::write(&self.map_path, serialize_document(self.editor.document())).map_err(|error| {
+            AppError::new(format!(
+                "Could not write '{}': {error}",
+                self.map_path.display()
+            ))
+        })?;
+        self.editor.mark_clean();
+        self.persist_session()?;
+        self.set_status(
+            StatusTone::Success,
+            format!("Saved '{}'.", self.map_path.display()),
+        );
+        Ok(())
+    }
+
+    fn revert_from_disk(&mut self) -> Result<(), AppError> {
+        let focus_id = self.editor.current().and_then(|node| node.id.clone());
+        let focus_path = self.editor.focus_path().to_vec();
+        let map_arg = self.map_path.display().to_string();
+        let loaded = load_document(&map_arg)?;
+        ensure_parseable(&loaded)?;
+
+        let next_focus = if let Some(id) = &focus_id {
+            find_path_by_id(&loaded.document.nodes, id)
+        } else {
+            None
+        }
+        .or_else(|| {
+            if get_node(&loaded.document.nodes, &focus_path).is_some() {
+                Some(focus_path.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| default_focus_path(&loaded.document));
+
+        let mut expanded = initial_expanded_paths(&loaded.document);
+        for ancestor in ancestor_paths(&next_focus) {
+            expanded.insert(ancestor);
+        }
+
+        self.editor = Editor::new(loaded.document, next_focus);
+        self.expanded = expanded;
+        self.persist_session()?;
+        self.set_status(
+            StatusTone::Warning,
+            format!(
+                "Reverted '{}' to the last saved version.",
+                self.map_path.display()
+            ),
+        );
+        Ok(())
+    }
+
+    fn persist_session(&self) -> Result<(), AppError> {
+        save_session_for(&self.map_path, &self.editor.session_state())
+    }
+
+    fn expand_focus_chain(&mut self) {
+        for ancestor in ancestor_paths(self.editor.focus_path()) {
+            self.expanded.insert(ancestor);
+        }
+    }
+
+    fn set_status(&mut self, tone: StatusTone, text: impl Into<String>) {
+        self.status = StatusMessage {
+            tone,
+            text: text.into(),
+        };
+    }
+
+    fn after_edit(&mut self, message: impl Into<String>) -> Result<(), AppError> {
+        self.expand_focus_chain();
+        self.persist_session()?;
+        self.quit_armed = false;
+        let message = message.into();
+        if self.autosave {
+            self.save_to_disk()?;
+            self.set_status(StatusTone::Success, format!("{message} Autosaved."));
+        } else {
+            self.set_status(StatusTone::Success, message);
+        }
+        Ok(())
+    }
+
+    fn apply_edit<F>(&mut self, edit: F, message: impl Into<String>) -> Result<(), AppError>
+    where
+        F: FnOnce(&mut Editor) -> Result<(), AppError>,
+    {
+        edit(&mut self.editor)?;
+        self.after_edit(message)
+    }
+}
+
+pub fn run_interactive(target: &str, autosave: bool) -> Result<(), AppError> {
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Err(AppError::new(
+            "mdmind needs an interactive terminal. Use `--preview` for a static view.",
+        ));
+    }
+
+    let loaded = load_document(target)?;
+    ensure_parseable(&loaded)?;
+    let focus_path = resolve_initial_focus(&loaded.target, &loaded.document)?;
+    let warning = if loaded.validation_diagnostics.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "{} validation warning(s) are present. Run `mdm validate {}` for details.",
+            loaded.validation_diagnostics.len(),
+            loaded.target.path.display()
+        ))
+    };
+    let mut app = TuiApp::new(
+        loaded.target.path.clone(),
+        loaded.document,
+        focus_path,
+        warning,
+        autosave,
+    );
+    app.persist_session()?;
+
+    let mut terminal = setup_terminal()?;
+    let result = run_event_loop(&mut terminal, &mut app);
+    restore_terminal(&mut terminal)?;
+    result
+}
+
+fn run_event_loop(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    app: &mut TuiApp,
+) -> Result<(), AppError> {
+    loop {
+        terminal
+            .draw(|frame| render(frame, app))
+            .map_err(|error| AppError::new(format!("Could not draw the TUI: {error}")))?;
+
+        if event::poll(TICK_RATE)
+            .map_err(|error| AppError::new(format!("Could not poll terminal events: {error}")))?
+        {
+            if let Event::Key(key) = event::read()
+                .map_err(|error| AppError::new(format!("Could not read terminal input: {error}")))?
+            {
+                match app.handle_key(key) {
+                    Ok(should_continue) => {
+                        if !should_continue {
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        app.set_status(StatusTone::Error, error.message().to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>, AppError> {
+    enable_raw_mode()
+        .map_err(|error| AppError::new(format!("Could not enable raw mode: {error}")))?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, Hide)
+        .map_err(|error| AppError::new(format!("Could not enter the alternate screen: {error}")))?;
+    let backend = CrosstermBackend::new(stdout);
+    Terminal::new(backend)
+        .map_err(|error| AppError::new(format!("Could not start the TUI: {error}")))
+}
+
+fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<(), AppError> {
+    disable_raw_mode()
+        .map_err(|error| AppError::new(format!("Could not disable raw mode: {error}")))?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, Show)
+        .map_err(|error| AppError::new(format!("Could not restore the terminal: {error}")))?;
+    terminal
+        .show_cursor()
+        .map_err(|error| AppError::new(format!("Could not restore the cursor: {error}")))
+}
+
+fn render(frame: &mut Frame, app: &TuiApp) {
+    let area = frame.area();
+    frame.render_widget(
+        Block::default().style(Style::default().bg(PALETTE.background)),
+        area,
+    );
+
+    let outer = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(4),
+            Constraint::Min(16),
+            Constraint::Length(3),
+            Constraint::Length(1),
+        ])
+        .split(area);
+
+    render_header(frame, outer[0], app);
+    render_body(frame, outer[1], app);
+    render_status(frame, outer[2], app);
+    render_keybar(frame, outer[3]);
+
+    if app.help_open {
+        render_help_overlay(frame, centered_rect(70, 70, area));
+    }
+
+    if let Some(prompt) = &app.prompt {
+        render_prompt_overlay(frame, centered_rect(68, 30, area), prompt);
+    }
+}
+
+fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.border))
+        .style(Style::default().bg(PALETTE.surface))
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let breadcrumb = if app.editor.breadcrumb().is_empty() {
+        "(no focus)".to_string()
+    } else {
+        app.editor.breadcrumb().join("  /  ")
+    };
+    let badge = if app.editor.dirty() {
+        "MODIFIED"
+    } else {
+        "SAVED"
+    };
+    let badge_color = if app.editor.dirty() {
+        PALETTE.warn
+    } else {
+        PALETTE.accent
+    };
+    let autosave_badge = if app.autosave {
+        (" AUTOSAVE ", PALETTE.sky)
+    } else {
+        (" MANUAL ", PALETTE.border)
+    };
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled(
+                " mdmind ",
+                Style::default()
+                    .fg(PALETTE.background)
+                    .bg(PALETTE.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                app.map_path.display().to_string(),
+                Style::default()
+                    .fg(PALETTE.text)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                format!(" {badge} "),
+                Style::default()
+                    .fg(PALETTE.background)
+                    .bg(badge_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                autosave_badge.0,
+                Style::default()
+                    .fg(PALETTE.background)
+                    .bg(autosave_badge.1)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("focus ", Style::default().fg(PALETTE.muted)),
+            Span::styled(breadcrumb, Style::default().fg(PALETTE.sky)),
+        ]),
+    ];
+
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+fn render_body(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let columns = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .split(area);
+
+    render_outline(frame, columns[0], app);
+    render_focus_cluster(frame, columns[1], app);
+}
+
+fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let rows = app.visible_rows();
+    let selected_index = app.selected_index(&rows);
+
+    let items: Vec<ListItem> = rows
+        .iter()
+        .map(|row| {
+            let mut spans = Vec::new();
+            spans.push(Span::raw(" ".repeat(row.depth * 2)));
+            let icon = if row.has_children {
+                if row.expanded { "▾ " } else { "▸ " }
+            } else {
+                "• "
+            };
+            let icon_color = if row.has_children {
+                PALETTE.accent
+            } else {
+                PALETTE.muted
+            };
+            spans.push(Span::styled(icon, Style::default().fg(icon_color)));
+            spans.push(Span::styled(
+                row.text.clone(),
+                Style::default()
+                    .fg(PALETTE.text)
+                    .add_modifier(Modifier::BOLD),
+            ));
+            if !row.tags.is_empty() {
+                spans.push(Span::raw(" "));
+                spans.push(Span::styled(
+                    row.tags.join(" "),
+                    Style::default().fg(PALETTE.accent),
+                ));
+            }
+            if !row.metadata.is_empty() {
+                spans.push(Span::raw(" "));
+                spans.push(Span::styled(
+                    row.metadata.join(" "),
+                    Style::default().fg(PALETTE.warn),
+                ));
+            }
+            if let Some(id) = &row.id {
+                spans.push(Span::raw(" "));
+                spans.push(Span::styled(
+                    format!("[id:{id}]"),
+                    Style::default().fg(PALETTE.muted),
+                ));
+            }
+            if row.has_children {
+                spans.push(Span::raw(" "));
+                spans.push(Span::styled(
+                    format!("({})", row.child_count),
+                    Style::default().fg(PALETTE.sky),
+                ));
+            }
+            ListItem::new(Line::from(spans))
+        })
+        .collect();
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title(styled_title("Map", PALETTE.accent))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(PALETTE.accent))
+                .style(Style::default().bg(PALETTE.surface)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(PALETTE.surface_alt)
+                .fg(PALETTE.text)
+                .add_modifier(Modifier::BOLD),
+        );
+
+    let mut state = ListState::default();
+    if !rows.is_empty() {
+        state.select(Some(selected_index));
+    }
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
+fn render_focus_cluster(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(8), Constraint::Min(8)])
+        .split(area);
+
+    render_focus_card(frame, sections[0], app);
+
+    let lanes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(28),
+            Constraint::Percentage(32),
+            Constraint::Percentage(40),
+        ])
+        .split(sections[1]);
+
+    render_parent_lane(frame, lanes[0], app);
+    render_peer_lane(frame, lanes[1], app);
+    render_children_lane(frame, lanes[2], app);
+}
+
+fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let block = Block::default()
+        .title(styled_title("Focus", PALETTE.sky))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.sky))
+        .style(Style::default().bg(PALETTE.surface))
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let lines = match app.editor.current() {
+        Some(node) => {
+            let mut lines = Vec::new();
+            lines.push(Line::from(vec![Span::styled(
+                node.text.clone(),
+                Style::default()
+                    .fg(PALETTE.text)
+                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+            )]));
+
+            if !node.tags.is_empty() || !node.metadata.is_empty() {
+                let mut meta = Vec::new();
+                if !node.tags.is_empty() {
+                    meta.push(Span::styled(
+                        node.tags.join(" "),
+                        Style::default().fg(PALETTE.accent),
+                    ));
+                }
+                if !node.metadata.is_empty() {
+                    if !meta.is_empty() {
+                        meta.push(Span::raw("   "));
+                    }
+                    meta.push(Span::styled(
+                        node.metadata
+                            .iter()
+                            .map(|entry| format!("@{}:{}", entry.key, entry.value))
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                        Style::default().fg(PALETTE.warn),
+                    ));
+                }
+                lines.push(Line::from(meta));
+            }
+
+            let breadcrumb = if app.editor.breadcrumb().is_empty() {
+                "(no focus)".to_string()
+            } else {
+                app.editor.breadcrumb().join(" / ")
+            };
+            lines.push(Line::from(vec![
+                Span::styled("path ", Style::default().fg(PALETTE.muted)),
+                Span::styled(breadcrumb, Style::default().fg(PALETTE.sky)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("id ", Style::default().fg(PALETTE.muted)),
+                Span::styled(
+                    node.id.clone().unwrap_or_else(|| "none".to_string()),
+                    Style::default().fg(PALETTE.text),
+                ),
+                Span::raw("   "),
+                Span::styled("line ", Style::default().fg(PALETTE.muted)),
+                Span::styled(node.line.to_string(), Style::default().fg(PALETTE.text)),
+                Span::raw("   "),
+                Span::styled("children ", Style::default().fg(PALETTE.muted)),
+                Span::styled(
+                    node.children.len().to_string(),
+                    Style::default().fg(PALETTE.text),
+                ),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("mind map cue ", Style::default().fg(PALETTE.muted)),
+                Span::styled(
+                    summarize_relationships(app),
+                    Style::default().fg(PALETTE.text),
+                ),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("save mode ", Style::default().fg(PALETTE.muted)),
+                Span::styled(
+                    if app.autosave {
+                        "autosave after each structural edit"
+                    } else {
+                        "manual save only"
+                    },
+                    Style::default().fg(PALETTE.text),
+                ),
+            ]));
+            lines
+        }
+        None => vec![Line::from(Span::styled(
+            "This map is empty. Press Shift+R to add a root node.",
+            Style::default().fg(PALETTE.muted),
+        ))],
+    };
+
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+fn render_parent_lane(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let title = styled_title("Parent", PALETTE.warn);
+    render_simple_lane(
+        frame,
+        area,
+        title,
+        parent_lines(app),
+        Style::default().bg(PALETTE.surface),
+    );
+}
+
+fn render_peer_lane(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let title = styled_title("Peers", PALETTE.accent);
+    render_simple_lane(
+        frame,
+        area,
+        title,
+        peer_lines(app),
+        Style::default().bg(PALETTE.surface),
+    );
+}
+
+fn render_children_lane(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let title = styled_title("Children", PALETTE.sky);
+    render_simple_lane(
+        frame,
+        area,
+        title,
+        child_lines(app),
+        Style::default().bg(PALETTE.surface),
+    );
+}
+
+fn render_simple_lane(
+    frame: &mut Frame,
+    area: Rect,
+    title: Line<'static>,
+    lines: Vec<Line<'static>>,
+    style: Style,
+) {
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.border))
+        .style(style)
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let (label, color) = match app.status.tone {
+        StatusTone::Info => ("INFO", PALETTE.sky),
+        StatusTone::Success => ("SAVED", PALETTE.accent),
+        StatusTone::Warning => ("WARN", PALETTE.warn),
+        StatusTone::Error => ("ERROR", PALETTE.danger),
+    };
+    let line = Line::from(vec![
+        Span::styled(
+            format!(" {label} "),
+            Style::default()
+                .fg(PALETTE.background)
+                .bg(color)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" "),
+        Span::styled(app.status.text.clone(), Style::default().fg(PALETTE.text)),
+    ]);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.border))
+        .style(Style::default().bg(PALETTE.surface));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    frame.render_widget(Paragraph::new(line), inner);
+}
+
+fn render_keybar(frame: &mut Frame, area: Rect) {
+    let line = Line::from(vec![
+        key_hint("↑↓", "move"),
+        Span::raw(" · "),
+        key_hint("←→", "tree"),
+        Span::raw(" · "),
+        key_hint("⌥←→", "nest"),
+        Span::raw(" · "),
+        key_hint("⌥↑↓", "swap"),
+        Span::raw(" · "),
+        key_hint("a", "add"),
+        Span::raw(" · "),
+        key_hint("e", "edit"),
+        Span::raw(" · "),
+        key_hint("s", "save"),
+        Span::raw(" · "),
+        key_hint("r", "revert"),
+        Span::raw(" · "),
+        key_hint("?", "help"),
+    ]);
+    frame.render_widget(
+        Paragraph::new(line)
+            .style(Style::default().bg(PALETTE.background))
+            .alignment(Alignment::Center),
+        area,
+    );
+}
+
+fn render_help_overlay(frame: &mut Frame, area: Rect) {
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .title(styled_title("Keymap", PALETTE.accent))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.accent))
+        .style(Style::default().bg(PALETTE.surface_alt))
+        .padding(Padding::uniform(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let help_lines = vec![
+        Line::from(vec![
+            Span::styled(
+                "Navigation",
+                Style::default()
+                    .fg(PALETTE.sky)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(
+                "  ↑/↓ move through visible nodes, ← collapses or moves to parent, → expands or moves to the first child.",
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "Mind map flow",
+                Style::default()
+                    .fg(PALETTE.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(
+                "  The left pane shows the whole outline while the right panes keep the selected node connected to its parent, peers, and children.",
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "Create",
+                Style::default()
+                    .fg(PALETTE.warn)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  a adds a child, A adds a sibling, Shift+R adds a new root node."),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "Edit",
+                Style::default()
+                    .fg(PALETTE.warn)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(
+                "  e edits the selected node using full inline syntax. Existing children are preserved.",
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "Reshape",
+                Style::default()
+                    .fg(PALETTE.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(
+                "  Alt+Up/Down reorders among siblings. Alt+Left outdents. Alt+Right indents into the previous sibling.",
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "Jump",
+                Style::default()
+                    .fg(PALETTE.sky)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  / opens a quick jump prompt for node ids."),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "Save",
+                Style::default()
+                    .fg(PALETTE.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(
+                "  s writes a normalized file. S toggles autosave. r reloads from disk and discards unsaved edits.",
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "Syntax",
+                Style::default()
+                    .fg(PALETTE.sky)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(
+                "  #tag adds a tag, @key:value adds metadata, and [id:path/to/node] creates a deep-linkable id.",
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "Example",
+                Style::default()
+                    .fg(PALETTE.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  API Design #backend @status:todo [id:product/api-design]"),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Press Esc or ? to close this overlay.",
+            Style::default().fg(PALETTE.muted),
+        )),
+    ];
+    frame.render_widget(Paragraph::new(help_lines).wrap(Wrap { trim: false }), inner);
+}
+
+fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState) {
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .title(styled_title(prompt.mode.title(), PALETTE.warn))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.warn))
+        .style(Style::default().bg(PALETTE.surface_alt))
+        .padding(Padding::uniform(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Length(3),
+            Constraint::Min(1),
+        ])
+        .split(inner);
+
+    frame.render_widget(
+        Paragraph::new(prompt.mode.hint())
+            .style(Style::default().fg(PALETTE.muted))
+            .wrap(Wrap { trim: false }),
+        chunks[0],
+    );
+
+    let input_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.accent))
+        .style(Style::default().bg(PALETTE.surface));
+    let input_inner = input_block.inner(chunks[1]);
+    frame.render_widget(input_block, chunks[1]);
+    frame.render_widget(
+        Paragraph::new(prompt.value.clone())
+            .style(Style::default().fg(PALETTE.text))
+            .wrap(Wrap { trim: false }),
+        input_inner,
+    );
+    frame.set_cursor_position((input_inner.x + prompt.cursor as u16, input_inner.y));
+
+    frame.render_widget(
+        Paragraph::new("Enter saves the action. Esc cancels.")
+            .style(Style::default().fg(PALETTE.sky)),
+        chunks[2],
+    );
+}
+
+fn resolve_initial_focus(target: &TargetRef, document: &Document) -> Result<Vec<usize>, AppError> {
+    if let Some(anchor) = &target.anchor {
+        return find_path_by_id(&document.nodes, anchor)
+            .ok_or_else(|| AppError::new(format!("No node id matches anchor '{anchor}'.")));
+    }
+
+    if let Some(session) = load_session_for(&target.path)?
+        && let Some(path) = resolve_session_focus(document, &session)
+    {
+        return Ok(path);
+    }
+
+    Ok(default_focus_path(document))
+}
+
+fn initial_expanded_paths(document: &Document) -> HashSet<Vec<usize>> {
+    let mut expanded = HashSet::new();
+    expand_to_depth(&document.nodes, &mut expanded, Vec::new(), 0, 1);
+    expanded
+}
+
+fn expand_to_depth(
+    nodes: &[Node],
+    expanded: &mut HashSet<Vec<usize>>,
+    prefix: Vec<usize>,
+    depth: usize,
+    limit: usize,
+) {
+    if depth > limit {
+        return;
+    }
+
+    for (index, node) in nodes.iter().enumerate() {
+        let mut path = prefix.clone();
+        path.push(index);
+        if !node.children.is_empty() && depth < limit {
+            expanded.insert(path.clone());
+        }
+        expand_to_depth(&node.children, expanded, path, depth + 1, limit);
+    }
+}
+
+fn ancestor_paths(path: &[usize]) -> Vec<Vec<usize>> {
+    let mut ancestors = Vec::new();
+    for index in 0..path.len() {
+        ancestors.push(path[..=index].to_vec());
+    }
+    ancestors
+}
+
+fn collect_visible_rows(
+    nodes: &[Node],
+    expanded: &HashSet<Vec<usize>>,
+    rows: &mut Vec<VisibleRow>,
+    prefix: Vec<usize>,
+    depth: usize,
+) {
+    for (index, node) in nodes.iter().enumerate() {
+        let mut path = prefix.clone();
+        path.push(index);
+        rows.push(VisibleRow {
+            path: path.clone(),
+            depth,
+            text: node.text.clone(),
+            tags: node.tags.clone(),
+            metadata: node
+                .metadata
+                .iter()
+                .map(|entry| format!("@{}:{}", entry.key, entry.value))
+                .collect(),
+            id: node.id.clone(),
+            line: node.line,
+            has_children: !node.children.is_empty(),
+            expanded: expanded.contains(&path),
+            child_count: node.children.len(),
+        });
+
+        if expanded.contains(&path) {
+            collect_visible_rows(&node.children, expanded, rows, path, depth + 1);
+        }
+    }
+}
+
+fn styled_title(title: &'static str, color: Color) -> Line<'static> {
+    Line::from(Span::styled(
+        format!(" {title} "),
+        Style::default()
+            .fg(PALETTE.background)
+            .bg(color)
+            .add_modifier(Modifier::BOLD),
+    ))
+}
+
+fn key_hint<'a>(key: &'a str, meaning: &'a str) -> Span<'a> {
+    Span::styled(
+        format!("{key}:{meaning}"),
+        Style::default().fg(PALETTE.muted),
+    )
+}
+
+fn summarize_relationships(app: &TuiApp) -> String {
+    let parent = parent_node(app);
+    let peers = peer_nodes(app);
+    let children = app
+        .editor
+        .current()
+        .map(|node| node.children.len())
+        .unwrap_or(0);
+
+    let parent_label = parent
+        .map(|node| node.text.clone())
+        .unwrap_or_else(|| "root".to_string());
+    format!(
+        "{parent_label} -> {} peers -> {children} children",
+        peers.len()
+    )
+}
+
+fn parent_node(app: &TuiApp) -> Option<&Node> {
+    let path = app.editor.focus_path();
+    if path.len() <= 1 {
+        return None;
+    }
+    get_node(
+        app.editor.document().nodes.as_slice(),
+        &path[..path.len() - 1],
+    )
+}
+
+fn peer_nodes(app: &TuiApp) -> Vec<&Node> {
+    let path = app.editor.focus_path();
+    if path.is_empty() {
+        return Vec::new();
+    }
+
+    let siblings = if path.len() == 1 {
+        app.editor.document().nodes.as_slice()
+    } else {
+        match get_node(
+            app.editor.document().nodes.as_slice(),
+            &path[..path.len() - 1],
+        ) {
+            Some(parent) => parent.children.as_slice(),
+            None => &[],
+        }
+    };
+
+    siblings
+        .iter()
+        .enumerate()
+        .filter_map(|(index, node)| {
+            if Some(&index) == path.last() {
+                None
+            } else {
+                Some(node)
+            }
+        })
+        .collect()
+}
+
+fn parent_lines(app: &TuiApp) -> Vec<Line<'static>> {
+    match parent_node(app) {
+        Some(parent) => vec![
+            Line::from(Span::styled(
+                parent.text.clone(),
+                Style::default()
+                    .fg(PALETTE.text)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                parent.id.clone().unwrap_or_else(|| "no id".to_string()),
+                Style::default().fg(PALETTE.muted),
+            )),
+        ],
+        None => vec![Line::from(Span::styled(
+            "This node is at the root level.",
+            Style::default().fg(PALETTE.muted),
+        ))],
+    }
+}
+
+fn peer_lines(app: &TuiApp) -> Vec<Line<'static>> {
+    let peers = peer_nodes(app);
+    if peers.is_empty() {
+        return vec![Line::from(Span::styled(
+            "No peer nodes beside the current selection.",
+            Style::default().fg(PALETTE.muted),
+        ))];
+    }
+
+    peers
+        .into_iter()
+        .map(|node| {
+            Line::from(vec![
+                Span::styled("• ", Style::default().fg(PALETTE.accent)),
+                Span::styled(node.text.clone(), Style::default().fg(PALETTE.text)),
+            ])
+        })
+        .collect()
+}
+
+fn child_lines(app: &TuiApp) -> Vec<Line<'static>> {
+    let Some(node) = app.editor.current() else {
+        return vec![Line::from(Span::styled(
+            "No selected node.",
+            Style::default().fg(PALETTE.muted),
+        ))];
+    };
+
+    if node.children.is_empty() {
+        return vec![Line::from(Span::styled(
+            "No children yet. Press a to grow this branch.",
+            Style::default().fg(PALETTE.muted),
+        ))];
+    }
+
+    node.children
+        .iter()
+        .enumerate()
+        .map(|(index, child)| {
+            let mut spans = vec![
+                Span::styled(format!("{}. ", index + 1), Style::default().fg(PALETTE.sky)),
+                Span::styled(
+                    child.text.clone(),
+                    Style::default()
+                        .fg(PALETTE.text)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ];
+            if !child.tags.is_empty() {
+                spans.push(Span::raw(" "));
+                spans.push(Span::styled(
+                    child.tags.join(" "),
+                    Style::default().fg(PALETTE.accent),
+                ));
+            }
+            Line::from(spans)
+        })
+        .collect()
+}
+
+fn centered_rect(horizontal_percent: u16, vertical_percent: u16, area: Rect) -> Rect {
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - vertical_percent) / 2),
+            Constraint::Percentage(vertical_percent),
+            Constraint::Percentage((100 - vertical_percent) / 2),
+        ])
+        .split(area);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - horizontal_percent) / 2),
+            Constraint::Percentage(horizontal_percent),
+            Constraint::Percentage((100 - horizontal_percent) / 2),
+        ])
+        .split(vertical[1])[1]
+}
+
+fn previous_boundary(value: &str, index: usize) -> usize {
+    value[..index]
+        .char_indices()
+        .last()
+        .map(|(position, _)| position)
+        .unwrap_or(0)
+}
+
+fn next_boundary(value: &str, index: usize) -> usize {
+    if index >= value.len() {
+        return value.len();
+    }
+    value[index..]
+        .char_indices()
+        .nth(1)
+        .map(|(offset, _)| index + offset)
+        .unwrap_or(value.len())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse_document;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn sample_document() -> Document {
+        parse_document(
+            "- Product Idea [id:product]\n  - Direction #idea [id:product/direction]\n    - CLI-first MVP\n  - Tasks #todo [id:product/tasks]\n    - Build parser\n    - Ship tests\n",
+        )
+        .document
+    }
+
+    fn temp_map_path(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("mdmind-tui-{nonce}-{name}"))
+    }
+
+    #[test]
+    fn tree_navigation_moves_with_arrow_keys() {
+        let map_path = temp_map_path("map.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(map_path.clone(), document, vec![0], None, false);
+
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("down should work");
+        assert_eq!(app.editor.focus_path(), &[0, 0]);
+
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .expect("right should work");
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .expect("second right should work");
+        assert_eq!(app.editor.focus_path(), &[0, 0, 0]);
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn prompt_submission_adds_a_child() {
+        let map_path = temp_map_path("map.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(map_path.clone(), document, vec![0], None, false);
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("down should work");
+        app.begin_prompt(
+            PromptMode::AddChild,
+            "New Branch #todo [id:product/direction/new]".to_string(),
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should submit");
+
+        let current = app.editor.current().expect("current node should exist");
+        assert_eq!(current.text, "New Branch");
+        assert_eq!(current.id.as_deref(), Some("product/direction/new"));
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn autosave_writes_after_a_structural_edit() {
+        let map_path = temp_map_path("autosave.md");
+        let source = "- Product Idea [id:product]\n  - Tasks #todo [id:product/tasks]\n";
+        std::fs::write(&map_path, source).expect("fixture map should be writable");
+        let document = parse_document(source).document;
+        let mut app = TuiApp::new(map_path.clone(), document, vec![0], None, true);
+
+        app.begin_prompt(
+            PromptMode::AddChild,
+            "New Branch #todo [id:product/new]".to_string(),
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should submit");
+
+        let saved = std::fs::read_to_string(&map_path).expect("autosaved map should be readable");
+        assert!(saved.contains("New Branch #todo [id:product/new]"));
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+        std::fs::remove_file(map_path).ok();
+    }
+
+    #[test]
+    fn revert_reloads_the_last_saved_map() {
+        let map_path = temp_map_path("revert.md");
+        let source = "- Product Idea [id:product]\n  - Tasks #todo [id:product/tasks]\n";
+        std::fs::write(&map_path, source).expect("fixture map should be writable");
+        let document = parse_document(source).document;
+        let mut app = TuiApp::new(map_path.clone(), document, vec![0], None, false);
+
+        app.begin_prompt(
+            PromptMode::AddChild,
+            "Unsaved Idea #todo [id:product/unsaved]".to_string(),
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should submit");
+        assert!(app.editor.dirty(), "edit should mark the editor dirty");
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE))
+            .expect("revert should succeed");
+
+        assert!(!app.editor.dirty(), "revert should clear the dirty state");
+        let rendered = serialize_document(app.editor.document());
+        assert!(!rendered.contains("Unsaved Idea"));
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+        std::fs::remove_file(map_path).ok();
+    }
+}

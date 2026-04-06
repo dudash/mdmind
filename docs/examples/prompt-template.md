@@ -1,0 +1,7 @@
+- Prompt Library [id:prompts]
+  - System Prompt [id:prompts/system] #prompt
+  - User Prompt [id:prompts/user] #prompt
+  - Few-shot Examples #prompt
+  - Evaluation Notes @status:todo
+  - Rewrites @status:todo
+  - Open Questions #question

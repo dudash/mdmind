@@ -1,0 +1,13 @@
+- Product Idea [id:product]
+  - Problem #idea @status:active
+    - Who feels the pain?
+    - What friction happens today?
+  - Users #research
+    - Developers
+    - Product builders
+  - MVP Scope #todo @priority:high [id:product/mvp]
+    - CLI commands
+    - File format
+    - Templates
+  - Open Questions #blocked
+    - What belongs in the first TUI milestone?

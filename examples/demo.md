@@ -1,0 +1,13 @@
+- mdmind Demo [id:demo]
+  - Product Direction #idea @status:active [id:demo/direction]
+    - CLI-first MVP
+    - TUI later
+  - Tasks #todo
+    - I need to build the parser
+    - Add templates
+    - Ship tests now
+  - Prompts #prompt @owner:jason
+    - Explore command help tone
+- JASON
+  - jaosn
+    - three #cool #and #cooler

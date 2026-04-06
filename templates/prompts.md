@@ -1,0 +1,15 @@
+- Prompt Exploration [id:prompts]
+  - Objective #prompt @status:active
+    - What should the model do?
+  - Constraints #prompt
+    - Tone
+    - Format
+    - Safety
+  - Variants #todo [id:prompts/variants]
+    - System prompt
+    - User prompt
+    - Few-shot examples
+  - Review Loop #todo
+    - Evaluate outputs
+    - Refine wording
+    - Capture failures

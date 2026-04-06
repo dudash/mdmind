@@ -1,0 +1,25 @@
+[package]
+name = "mdmind"
+version = "0.1.0"
+edition = "2024"
+description = "A terminal-native thinking tool for structured markdown-like maps."
+default-run = "mdm"
+
+[lib]
+name = "mdmind"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mdm"
+path = "src/bin/mdm.rs"
+
+[[bin]]
+name = "mdmind"
+path = "src/bin/mdmind.rs"
+
+[dependencies]
+clap = { version = "4.5.38", features = ["derive", "wrap_help"] }
+crossterm = "0.29.0"
+ratatui = "0.29.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
