@@ -8,10 +8,10 @@ use crossterm::cursor::{Hide, Show};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode, size,
 };
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout, Margin, Rect};
 use ratatui::prelude::{Color, Line, Modifier, Span, Style};
 use ratatui::widgets::{
     Block, Borders, Clear, List, ListItem, ListState, Padding, Paragraph, Wrap,
@@ -21,6 +21,9 @@ use ratatui::{Frame, Terminal};
 use crate::APP_VERSION;
 use crate::app::{AppError, TargetRef, ensure_parseable, load_document};
 use crate::editor::{Editor, default_focus_path, find_path_by_id, get_node};
+use crate::mindmap::{
+    MindmapWidget, Scene as MindmapScene, Theme as MindmapTheme, default_export_path, export_png,
+};
 use crate::model::{Document, Node};
 use crate::query::{
     FilterQuery, find_matches, metadata_key_counts_for_filter, metadata_value_counts_for_filter,
@@ -257,6 +260,24 @@ struct PromptState {
     cursor: usize,
 }
 
+#[derive(Debug, Clone, Default)]
+struct MindmapOverlayState {
+    pan_x: i32,
+    pan_y: i32,
+}
+
+impl MindmapOverlayState {
+    fn pan(&mut self, delta_x: i32, delta_y: i32) {
+        self.pan_x += delta_x;
+        self.pan_y += delta_y;
+    }
+
+    fn recenter(&mut self) {
+        self.pan_x = 0;
+        self.pan_y = 0;
+    }
+}
+
 impl PromptState {
     fn new(mode: PromptMode, value: String) -> Self {
         let cursor = value.len();
@@ -323,6 +344,7 @@ struct TuiApp {
     filter: Option<ActiveFilter>,
     search: Option<SearchOverlayState>,
     saved_views: SavedViewsState,
+    mindmap: Option<MindmapOverlayState>,
     help_open: bool,
     quit_armed: bool,
     delete_armed: bool,
@@ -364,6 +386,7 @@ impl TuiApp {
             filter: None,
             search: None,
             saved_views,
+            mindmap: None,
             help_open: false,
             quit_armed: false,
             delete_armed: false,
@@ -386,6 +409,12 @@ impl TuiApp {
             self.quit_armed = false;
             self.delete_armed = false;
             return self.handle_search_key(key);
+        }
+
+        if self.mindmap.is_some() {
+            self.quit_armed = false;
+            self.delete_armed = false;
+            return self.handle_mindmap_key(key);
         }
 
         if self.help_open {
@@ -460,6 +489,18 @@ impl TuiApp {
             KeyCode::Char('F') => {
                 self.delete_armed = false;
                 self.open_search_overlay(SearchSection::Views);
+            }
+            KeyCode::Char('m') => {
+                self.delete_armed = false;
+                self.mindmap = Some(MindmapOverlayState::default());
+                let scene = self.current_mindmap_scene();
+                self.set_status(
+                    StatusTone::Info,
+                    format!(
+                        "Mindmap open. {}. Arrow keys pan, 0 recenters, p exports PNG.",
+                        scene.describe()
+                    ),
+                );
             }
             KeyCode::Char('a') => {
                 self.delete_armed = false;
@@ -578,6 +619,35 @@ impl TuiApp {
             }
         }
 
+        Ok(true)
+    }
+
+    fn handle_mindmap_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
+        let Some(mut overlay) = self.mindmap.take() else {
+            return Ok(true);
+        };
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Enter | KeyCode::Char('m') => {
+                self.set_status(StatusTone::Info, "Closed the visual mindmap.");
+                return Ok(true);
+            }
+            KeyCode::Char('0') => {
+                overlay.recenter();
+                self.set_status(StatusTone::Info, "Recentered the visual mindmap.");
+            }
+            KeyCode::Up | KeyCode::Char('k') => overlay.pan(0, -3),
+            KeyCode::Down | KeyCode::Char('j') => overlay.pan(0, 3),
+            KeyCode::Left | KeyCode::Char('h') => overlay.pan(-6, 0),
+            KeyCode::Right | KeyCode::Char('l') => overlay.pan(6, 0),
+            KeyCode::Char('p') => {
+                self.export_current_mindmap_png(&overlay)?;
+                return Ok(true);
+            }
+            _ => {}
+        }
+
+        self.mindmap = Some(overlay);
         Ok(true)
     }
 
@@ -987,6 +1057,57 @@ impl TuiApp {
         );
     }
 
+    fn current_mindmap_scene(&self) -> MindmapScene {
+        MindmapScene::build(
+            self.editor.document(),
+            self.editor.focus_path(),
+            &self.expanded,
+            self.filter.as_ref().map(|filter| filter.matches.as_slice()),
+        )
+    }
+
+    fn mindmap_theme(&self) -> MindmapTheme {
+        MindmapTheme {
+            background: PALETTE.background,
+            surface: PALETTE.surface,
+            surface_alt: PALETTE.surface_alt,
+            border: PALETTE.border,
+            accent: PALETTE.accent,
+            sky: PALETTE.sky,
+            warn: PALETTE.warn,
+            danger: PALETTE.danger,
+            text: PALETTE.text,
+            muted: PALETTE.muted,
+        }
+    }
+
+    fn export_current_mindmap_png(
+        &mut self,
+        overlay: &MindmapOverlayState,
+    ) -> Result<(), AppError> {
+        let (terminal_width, terminal_height) = size()
+            .map_err(|error| AppError::new(format!("Could not measure the terminal: {error}")))?;
+        let frame_area = Rect::new(0, 0, terminal_width, terminal_height);
+        let overlay_area = centered_rect(92, 88, frame_area);
+        let inner = overlay_area.inner(Margin::new(1, 1));
+        let scene = self.current_mindmap_scene();
+        let camera = scene.camera(
+            inner.width.max(1),
+            inner.height.max(1),
+            overlay.pan_x,
+            overlay.pan_y,
+        );
+        let path = default_export_path(&self.map_path);
+        let exported =
+            export_png(&scene, camera, self.mindmap_theme(), &path).map_err(AppError::new)?;
+        self.set_status(
+            StatusTone::Success,
+            format!("Exported the visual mindmap to '{}'.", exported.display()),
+        );
+        self.mindmap = Some(overlay.clone());
+        Ok(())
+    }
+
     fn facet_items_for_query(&self, tab: FacetTab, scope: Option<FilterQuery>) -> Vec<FacetItem> {
         let scope = scope.as_ref();
         match tab {
@@ -1366,6 +1487,10 @@ fn render(frame: &mut Frame, app: &TuiApp) {
 
     if app.help_open {
         render_help_overlay(frame, centered_rect(70, 70, area));
+    }
+
+    if let Some(overlay) = &app.mindmap {
+        render_mindmap_overlay(frame, centered_rect(92, 88, area), app, overlay);
     }
 
     if let Some(search) = &app.search {
@@ -1826,6 +1951,8 @@ fn render_keybar(frame: &mut Frame, area: Rect) {
         Span::raw(" · "),
         key_hint("x", "delete"),
         Span::raw(" · "),
+        key_hint("m", "mindmap"),
+        Span::raw(" · "),
         key_hint("/", "filter"),
         Span::raw(" · "),
         key_hint("f", "facets"),
@@ -1928,6 +2055,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
             Line::from("←       collapse branch or go to parent"),
             Line::from("→       expand branch or enter first child"),
             Line::from("Enter   toggle expanded/collapsed"),
+            Line::from("m       open the visual mindmap overlay"),
             Line::from("/       open search"),
             Line::from("f       open search on facets"),
             Line::from("F       open search on saved views"),
@@ -1966,6 +2094,8 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
         "Find / Recover",
         PALETTE.accent,
         vec![
+            Line::from("m       visual mindmap overlay"),
+            Line::from("p       export PNG while the overlay is open"),
             Line::from("/       search by text, #tag, or @key:value"),
             Line::from("Tab     switch Query / Facets / Saved Views"),
             Line::from("← / →   switch Tags / Keys / Values in Facets"),
@@ -2013,6 +2143,105 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
                 Style::default().fg(PALETTE.muted),
             ),
         ])),
+        sections[2],
+    );
+}
+
+fn render_mindmap_overlay(
+    frame: &mut Frame,
+    area: Rect,
+    app: &TuiApp,
+    overlay: &MindmapOverlayState,
+) {
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .title(styled_title("Visual Mindmap", PALETTE.accent))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.accent))
+        .style(Style::default().bg(PALETTE.surface_alt))
+        .padding(Padding::uniform(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(12),
+            Constraint::Length(2),
+        ])
+        .split(inner);
+
+    let scene = app.current_mindmap_scene();
+    let camera = scene.camera(
+        sections[1].width.max(1),
+        sections[1].height.max(1),
+        overlay.pan_x,
+        overlay.pan_y,
+    );
+
+    let headline = if let Some(node) = app.editor.current() {
+        format!(
+            "Centered on '{}' · respects current expanded branches and active filter context.",
+            if node.text.is_empty() {
+                "(empty)"
+            } else {
+                &node.text
+            }
+        )
+    } else {
+        "No focused node yet.".to_string()
+    };
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(vec![
+                Span::styled(
+                    "Bubble View",
+                    Style::default()
+                        .fg(PALETTE.text)
+                        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+                ),
+                Span::raw("  "),
+                Span::styled(headline, Style::default().fg(PALETTE.muted)),
+            ]),
+            Line::from(vec![
+                Span::styled(scene.describe(), Style::default().fg(PALETTE.sky)),
+                Span::raw("  "),
+                Span::styled(
+                    format!("pan {}, {}", overlay.pan_x, overlay.pan_y),
+                    Style::default().fg(PALETTE.warn),
+                ),
+            ]),
+        ]),
+        sections[0],
+    );
+
+    let canvas_block = Block::default()
+        .title(styled_title("Map Canvas", PALETTE.sky))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.sky))
+        .style(Style::default().bg(PALETTE.background));
+    let canvas_inner = canvas_block.inner(sections[1]);
+    frame.render_widget(canvas_block, sections[1]);
+    frame.render_widget(
+        MindmapWidget::new(&scene, camera, app.mindmap_theme()),
+        canvas_inner,
+    );
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            key_hint("↑↓←→", "pan"),
+            Span::raw(" · "),
+            key_hint("0", "recenter"),
+            Span::raw(" · "),
+            key_hint("p", "export png"),
+            Span::raw(" · "),
+            key_hint("Esc", "close"),
+            Span::raw(" · "),
+            key_hint("Enter", "close"),
+        ]))
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(PALETTE.muted)),
         sections[2],
     );
 }
@@ -3153,6 +3382,51 @@ mod tests {
             !current_node_matches_filter(&app),
             "ancestor context should not be treated as a direct match"
         );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn mindmap_overlay_opens_pans_and_closes() {
+        let map_path = temp_map_path("mindmap.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE))
+            .expect("m should open the mindmap overlay");
+        assert!(app.mindmap.is_some(), "mindmap overlay should be active");
+
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .expect("right should pan the overlay");
+        assert_eq!(
+            app.mindmap.as_ref().map(|overlay| overlay.pan_x),
+            Some(6),
+            "panning should update the camera offset"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('0'), KeyModifiers::NONE))
+            .expect("0 should recenter the overlay");
+        assert_eq!(
+            app.mindmap
+                .as_ref()
+                .map(|overlay| (overlay.pan_x, overlay.pan_y)),
+            Some((0, 0))
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .expect("escape should close the overlay");
+        assert!(app.mindmap.is_none(), "mindmap overlay should close");
 
         let session_path =
             crate::session::session_path_for(&map_path).expect("session path should be derivable");

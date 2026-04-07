@@ -9,11 +9,9 @@ Each item below has its own design note so future work can start from a concrete
 - Deep-link path fallback: let `file.md#parent/child` resolve by labels when no explicit id exists. See `docs/DEEP_LINK_FALLBACK.md`.
 - Focused TUI views and motion: add tighter navigation modes, branch isolation, and restrained transitions so large maps feel easier to parse. See `docs/FOCUSED_VIEWS.md`.
 - Command palette and fuzzy search: make branch jumping, action discovery, and large-map navigation feel instant. See `docs/COMMAND_PALETTE.md`.
-- Saved filters and recurring views: preserve working sets like `#todo`, `@status:blocked`, or `@owner:jason` as first-class views. See `docs/SAVED_FILTERS.md`.
 
 ## Visual Mind-Mapping
 
-- Mindmap overlay: render the current expanded working set as a visual bubble map with pan and PNG export. See `docs/MINDMAP_VIEW.md`.
 - Spatial canvas mode: grow the overlay into a more ambitious visual navigation surface with stronger clustering and layout freedom. See `docs/SPATIAL_CANVAS.md`.
 - Relations and backlinks: show non-tree connections between nodes and let users navigate them directly. See `docs/RELATIONS_AND_BACKLINKS.md`.
 

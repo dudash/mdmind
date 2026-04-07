@@ -4,6 +4,7 @@ pub mod app;
 pub mod cli;
 pub mod editor;
 pub mod interactive;
+pub mod mindmap;
 pub mod model;
 pub mod parser;
 pub mod query;

@@ -144,6 +144,10 @@ Search and large-map workflows:
 - `/`: open unified search
 - `f`: open unified search on facets
 - `F`: open unified search on saved views
+- `m`: open the visual mindmap overlay
+- `↑` / `↓` / `←` / `→` inside the overlay: pan the camera
+- `0` inside the overlay: recenter on the focused node
+- `p` inside the overlay: export the current rendered view to `map-name.mindmap.png`
 - `Tab`: switch between `Query`, `Facets`, and `Saved Views`
 - `←` / `→` inside facets: switch `Tags`, `Keys`, `Values`
 - `n` / `N`: move to next or previous match
@@ -201,6 +205,8 @@ The app is already useful for:
 - deep-linking into a map by node id
 - filtering large maps by text, tags, and metadata
 - saving and reopening named filtered views
+- opening a visual bubble-style mindmap overlay from the current working set
+- exporting that visual mindmap view as a PNG
 - keyboard-first restructuring of nodes in the tree
 
-The next major UX leap is a more visual rendered mindmap overlay that reflects the current expanded and filtered state.
+The next major UX leap is a stronger command palette and then a more ambitious spatial canvas beyond the current overlay.
