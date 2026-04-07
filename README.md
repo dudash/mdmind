@@ -101,6 +101,8 @@ mdm kv roadmap.md --keys status,owner
 mdm links roadmap.md
 mdm validate roadmap.md
 mdm export roadmap.md --format json
+mdm export roadmap.md --format mermaid
+mdm export roadmap.md#product/tasks --format opml
 ```
 
 Open the interactive TUI:
@@ -144,6 +146,8 @@ Search and large-map workflows:
 - `/`: open unified search
 - `f`: open unified search on facets
 - `F`: open unified search on saved views
+- `v` / `V`: cycle focused view modes forward or backward
+- `g`: jump to the map root, or back to the subtree root while `Subtree Only` is active
 - `m`: open the visual mindmap overlay
 - `↑` / `↓` / `←` / `→` inside the overlay: pan the camera
 - `0` inside the overlay: recenter on the focused node
@@ -190,6 +194,8 @@ mdm init prompts.md --template prompts
 User-facing and product docs:
 
 - [docs/FUTURE_FEATURES.md](docs/FUTURE_FEATURES.md)
+- [docs/TERMINAL_EXPERIENCE.md](docs/TERMINAL_EXPERIENCE.md)
+- [docs/DOCUMENTATION_STRATEGY.md](docs/DOCUMENTATION_STRATEGY.md)
 - [docs/SPATIAL_CANVAS.md](docs/SPATIAL_CANVAS.md)
 - [docs/COMMAND_PALETTE.md](docs/COMMAND_PALETTE.md)
 
@@ -204,6 +210,8 @@ The app is already useful for:
 - authoring and editing structured map files
 - deep-linking into a map by node id
 - filtering large maps by text, tags, and metadata
+- calming large maps with full-map, focus-branch, subtree-only, and filtered-focus views
+- exporting full maps or deep-linked subtrees as JSON, Mermaid, and OPML
 - saving and reopening named filtered views
 - opening a visual bubble-style mindmap overlay from the current working set
 - exporting that visual mindmap view as a PNG

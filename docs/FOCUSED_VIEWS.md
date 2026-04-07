@@ -20,7 +20,7 @@ Add view modes inside `mdmind`:
 
 - Full map: current default tree view
 - Focus branch: show the current node, ancestors, siblings, and descendants, while dimming unrelated branches
-- Subtree only: temporarily isolate the current node and its descendants
+- Subtree only: temporarily isolate the current node as a stable subtree root and work only inside its descendants
 - Filtered focus: combine current filter results with a tighter local context
 
 Small motion can help when entering or exiting these modes:
@@ -31,15 +31,18 @@ Small motion can help when entering or exiting these modes:
 
 ## Controls
 
-Suggested keys:
+Current keys:
 
 - `v`: cycle view modes
-- `V`: open a small “view mode” picker
+- `V`: cycle view modes in reverse
 - `Esc`: exit focused mode back to full map
+- `g`: return to the captured subtree root while `Subtree only` is active
 
 ## Rendering Rules
 
 - Preserve the same focus path and expanded state when switching modes.
+- In `Subtree only`, capture the current node as the subtree root when entering the mode.
+- `Left` should not move above the subtree root.
 - Unrelated rows should dim or collapse, not vanish without explanation.
 - Status and focus panels should clearly state the active view mode.
 
@@ -55,6 +58,7 @@ Phase 1:
 
 - implement view-state enum
 - subtree-only and focus-branch modes
+- done, with `Filtered focus` included as a first pass when a filter is active
 
 Phase 2:
 

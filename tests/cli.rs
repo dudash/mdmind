@@ -58,6 +58,36 @@ fn export_outputs_json() {
 }
 
 #[test]
+fn export_outputs_mermaid_for_a_subtree() {
+    let output = run_mdm(&[
+        "export",
+        &format!("{}#product/mvp", fixture("sample.md")),
+        "--format",
+        "mermaid",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.starts_with("flowchart LR\n"));
+    assert!(stdout.contains(r#"node_0["MVP Scope #todo @status:active [id:product/mvp]"]"#));
+    assert!(stdout.contains("node_0 --> node_0_0"));
+    assert!(!stdout.contains("Product Idea #idea"));
+}
+
+#[test]
+fn export_outputs_opml() {
+    let output = run_mdm(&["export", &fixture("sample.md"), "--format", "opml"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.starts_with(r#"<?xml version="1.0" encoding="UTF-8"?>"#));
+    assert!(
+        stdout.contains(r##"<outline text="Product Idea" mdm_id="product" mdm_tags="#idea">"##)
+    );
+    assert!(stdout.contains(
+        r##"<outline text="MVP Scope" mdm_id="product/mvp" mdm_tags="#todo" status="active">"##
+    ));
+}
+
+#[test]
 fn validate_fails_with_exit_code_one_for_invalid_maps() {
     let output = run_mdm(&["validate", &fixture("invalid.md")]);
     assert_eq!(output.status.code(), Some(1));

@@ -70,6 +70,54 @@ enum StatusTone {
     Error,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ViewMode {
+    FullMap,
+    FocusBranch,
+    SubtreeOnly,
+    FilteredFocus,
+}
+
+impl ViewMode {
+    fn label(self) -> &'static str {
+        match self {
+            Self::FullMap => "Full Map",
+            Self::FocusBranch => "Focus Branch",
+            Self::SubtreeOnly => "Subtree Only",
+            Self::FilteredFocus => "Filtered Focus",
+        }
+    }
+
+    fn status_label(self) -> &'static str {
+        match self {
+            Self::FullMap => "full map",
+            Self::FocusBranch => "focus branch",
+            Self::SubtreeOnly => "subtree only",
+            Self::FilteredFocus => "filtered focus",
+        }
+    }
+
+    fn next(self, has_filter: bool) -> Self {
+        match (self, has_filter) {
+            (Self::FullMap, _) => Self::FocusBranch,
+            (Self::FocusBranch, _) => Self::SubtreeOnly,
+            (Self::SubtreeOnly, true) => Self::FilteredFocus,
+            (Self::SubtreeOnly, false) => Self::FullMap,
+            (Self::FilteredFocus, _) => Self::FullMap,
+        }
+    }
+
+    fn previous(self, has_filter: bool) -> Self {
+        match (self, has_filter) {
+            (Self::FullMap, true) => Self::FilteredFocus,
+            (Self::FullMap, false) => Self::SubtreeOnly,
+            (Self::FocusBranch, _) => Self::FullMap,
+            (Self::SubtreeOnly, _) => Self::FocusBranch,
+            (Self::FilteredFocus, _) => Self::SubtreeOnly,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct StatusMessage {
     tone: StatusTone,
@@ -332,6 +380,21 @@ struct VisibleRow {
     expanded: bool,
     child_count: usize,
     matched: bool,
+    dimmed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PathAnchor {
+    path: Vec<usize>,
+    id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ViewProjection<'a> {
+    filter: Option<&'a ActiveFilter>,
+    filter_visible_paths: Option<&'a HashSet<Vec<usize>>>,
+    focus_path: &'a [usize],
+    view_mode: ViewMode,
 }
 
 #[derive(Debug)]
@@ -339,6 +402,8 @@ struct TuiApp {
     map_path: PathBuf,
     editor: Editor,
     expanded: HashSet<Vec<usize>>,
+    view_mode: ViewMode,
+    subtree_root: Option<PathAnchor>,
     status: StatusMessage,
     prompt: Option<PromptState>,
     filter: Option<ActiveFilter>,
@@ -372,7 +437,7 @@ impl TuiApp {
             },
             None => StatusMessage {
                 tone: StatusTone::Info,
-                text: "Arrows move. / opens search. Alt+arrows reshape. a adds. s saves."
+                text: "Arrows move. v changes view. / opens search. Alt+arrows reshape. a adds."
                     .to_string(),
             },
         };
@@ -381,6 +446,8 @@ impl TuiApp {
             map_path,
             editor: Editor::new(document, focus_path),
             expanded,
+            view_mode: ViewMode::FullMap,
+            subtree_root: None,
             status,
             prompt: None,
             filter: None,
@@ -502,6 +569,14 @@ impl TuiApp {
                     ),
                 );
             }
+            KeyCode::Char('v') => {
+                self.delete_armed = false;
+                self.cycle_view_mode(true);
+            }
+            KeyCode::Char('V') => {
+                self.delete_armed = false;
+                self.cycle_view_mode(false);
+            }
             KeyCode::Char('a') => {
                 self.delete_armed = false;
                 self.begin_prompt(PromptMode::AddChild, String::new());
@@ -532,11 +607,23 @@ impl TuiApp {
                 self.begin_prompt(PromptMode::OpenId, String::new());
             }
             KeyCode::Char('g') => {
-                self.editor.move_root()?;
-                self.expand_focus_chain();
-                self.persist_session()?;
-                self.delete_armed = false;
-                self.set_status(StatusTone::Info, "Jumped to the root.");
+                if self.view_mode == ViewMode::SubtreeOnly {
+                    if let Some(path) = self.subtree_root_path() {
+                        self.editor.set_focus_path(path)?;
+                        self.expand_focus_chain();
+                        self.persist_session()?;
+                        self.delete_armed = false;
+                        self.set_status(StatusTone::Info, "Returned to the subtree root.");
+                    } else {
+                        self.set_status(StatusTone::Warning, "No subtree root is available.");
+                    }
+                } else {
+                    self.editor.move_root()?;
+                    self.expand_focus_chain();
+                    self.persist_session()?;
+                    self.delete_armed = false;
+                    self.set_status(StatusTone::Info, "Jumped to the root.");
+                }
             }
             KeyCode::Char('s') => {
                 self.save_to_disk()?;
@@ -593,7 +680,10 @@ impl TuiApp {
             KeyCode::Esc => {
                 self.quit_armed = false;
                 self.delete_armed = false;
-                if self.clear_filter() {
+                if self.view_mode != ViewMode::FullMap {
+                    self.set_view_mode(ViewMode::FullMap);
+                    self.set_status(StatusTone::Info, "Returned to the full map view.");
+                } else if self.clear_filter() {
                     self.set_status(StatusTone::Info, "Cleared the active filter.");
                 } else {
                     self.set_status(
@@ -928,15 +1018,63 @@ impl TuiApp {
 
     fn visible_rows(&self) -> Vec<VisibleRow> {
         let mut rows = Vec::new();
+        let filter_visible_paths = self.filter.as_ref().map(filter_visible_paths);
+        let projection_focus_path = self.projection_focus_path();
+        let projection = ViewProjection {
+            filter: self.filter.as_ref(),
+            filter_visible_paths: filter_visible_paths.as_ref(),
+            focus_path: &projection_focus_path,
+            view_mode: self.view_mode,
+        };
         collect_visible_rows(
             &self.editor.document().nodes,
             &self.expanded,
-            self.filter.as_ref(),
+            projection,
             &mut rows,
             Vec::new(),
-            0,
         );
         rows
+    }
+
+    fn subtree_root_path(&self) -> Option<Vec<usize>> {
+        let anchor = self.subtree_root.as_ref()?;
+        if let Some(id) = &anchor.id
+            && let Some(path) = find_path_by_id(&self.editor.document().nodes, id)
+        {
+            return Some(path);
+        }
+        if get_node(&self.editor.document().nodes, &anchor.path).is_some() {
+            return Some(anchor.path.clone());
+        }
+        self.editor
+            .current()
+            .map(|_| self.editor.focus_path().to_vec())
+    }
+
+    fn projection_focus_path(&self) -> Vec<usize> {
+        if self.view_mode == ViewMode::SubtreeOnly {
+            self.subtree_root_path()
+                .unwrap_or_else(|| self.editor.focus_path().to_vec())
+        } else {
+            self.editor.focus_path().to_vec()
+        }
+    }
+
+    fn subtree_root_node(&self) -> Option<&Node> {
+        let path = self.subtree_root_path()?;
+        get_node(&self.editor.document().nodes, &path)
+    }
+
+    fn set_view_mode(&mut self, next: ViewMode) {
+        self.view_mode = next;
+        if next == ViewMode::SubtreeOnly {
+            self.subtree_root = self.editor.current().map(|node| PathAnchor {
+                path: self.editor.focus_path().to_vec(),
+                id: node.id.clone(),
+            });
+        } else {
+            self.subtree_root = None;
+        }
     }
 
     fn selected_index(&self, rows: &[VisibleRow]) -> usize {
@@ -971,12 +1109,23 @@ impl TuiApp {
 
     fn collapse_or_parent(&mut self) -> Result<(), AppError> {
         let path = self.editor.focus_path().to_vec();
+        let subtree_root = self.subtree_root_path();
         if let Some(node) = self.editor.current()
             && !node.children.is_empty()
             && self.expanded.contains(&path)
         {
             self.expanded.remove(&path);
             self.set_status(StatusTone::Info, "Collapsed the branch.");
+            return Ok(());
+        }
+
+        if self.view_mode == ViewMode::SubtreeOnly
+            && subtree_root.as_deref() == Some(path.as_slice())
+        {
+            self.set_status(
+                StatusTone::Info,
+                "Already at the subtree root. Press Esc to leave the isolated branch.",
+            );
             return Ok(());
         }
 
@@ -1037,6 +1186,20 @@ impl TuiApp {
         self.prompt = Some(PromptState::new(mode, value));
     }
 
+    fn cycle_view_mode(&mut self, forward: bool) {
+        let has_filter = self.filter.is_some();
+        let next = if forward {
+            self.view_mode.next(has_filter)
+        } else {
+            self.view_mode.previous(has_filter)
+        };
+        self.set_view_mode(next);
+        self.set_status(
+            StatusTone::Info,
+            format!("View mode: {}.", self.view_mode.status_label()),
+        );
+    }
+
     fn open_search_overlay(&mut self, section: SearchSection) {
         self.quit_armed = false;
         self.delete_armed = false;
@@ -1058,11 +1221,17 @@ impl TuiApp {
     }
 
     fn current_mindmap_scene(&self) -> MindmapScene {
+        let visible_paths = self
+            .visible_rows()
+            .into_iter()
+            .map(|row| row.path)
+            .collect::<HashSet<_>>();
         MindmapScene::build(
             self.editor.document(),
             self.editor.focus_path(),
             &self.expanded,
             self.filter.as_ref().map(|filter| filter.matches.as_slice()),
+            Some(&visible_paths),
         )
     }
 
@@ -1144,6 +1313,9 @@ impl TuiApp {
     fn apply_filter(&mut self, raw: &str) -> Result<(), AppError> {
         let Some(query) = FilterQuery::parse(raw) else {
             self.filter = None;
+            if self.view_mode == ViewMode::FilteredFocus {
+                self.set_view_mode(ViewMode::FocusBranch);
+            }
             self.set_status(StatusTone::Info, "Cleared the active filter.");
             return Ok(());
         };
@@ -1166,6 +1338,9 @@ impl TuiApp {
     fn clear_filter(&mut self) -> bool {
         let had_filter = self.filter.is_some();
         self.filter = None;
+        if had_filter && self.view_mode == ViewMode::FilteredFocus {
+            self.set_view_mode(ViewMode::FocusBranch);
+        }
         had_filter
     }
 
@@ -1531,6 +1706,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
     } else {
         (" MANUAL ", PALETTE.border)
     };
+    let view_badge = format!(" {} ", app.view_mode.label());
     let filter_badge = app
         .filter
         .as_ref()
@@ -1564,6 +1740,14 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
             Style::default()
                 .fg(PALETTE.background)
                 .bg(autosave_badge.1)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            view_badge,
+            Style::default()
+                .fg(PALETTE.background)
+                .bg(PALETTE.warn)
                 .add_modifier(Modifier::BOLD),
         ),
     ];
@@ -1614,7 +1798,11 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                 "• "
             };
             let icon_color = if row.has_children {
-                PALETTE.accent
+                if row.dimmed {
+                    PALETTE.border
+                } else {
+                    PALETTE.accent
+                }
             } else {
                 PALETTE.muted
             };
@@ -1622,39 +1810,61 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
             spans.push(Span::styled(
                 row.text.clone(),
                 Style::default()
-                    .fg(if row.matched {
+                    .fg(if row.dimmed {
+                        PALETTE.muted
+                    } else if row.matched {
                         PALETTE.sky
                     } else {
                         PALETTE.text
                     })
-                    .add_modifier(Modifier::BOLD),
+                    .add_modifier(if row.dimmed {
+                        Modifier::empty()
+                    } else {
+                        Modifier::BOLD
+                    }),
             ));
             if !row.tags.is_empty() {
                 spans.push(Span::raw(" "));
                 spans.push(Span::styled(
                     row.tags.join(" "),
-                    Style::default().fg(PALETTE.accent),
+                    Style::default().fg(if row.dimmed {
+                        PALETTE.border
+                    } else {
+                        PALETTE.accent
+                    }),
                 ));
             }
             if !row.metadata.is_empty() {
                 spans.push(Span::raw(" "));
                 spans.push(Span::styled(
                     row.metadata.join(" "),
-                    Style::default().fg(PALETTE.warn),
+                    Style::default().fg(if row.dimmed {
+                        PALETTE.muted
+                    } else {
+                        PALETTE.warn
+                    }),
                 ));
             }
             if let Some(id) = &row.id {
                 spans.push(Span::raw(" "));
                 spans.push(Span::styled(
                     format!("[id:{id}]"),
-                    Style::default().fg(PALETTE.muted),
+                    Style::default().fg(if row.dimmed {
+                        PALETTE.border
+                    } else {
+                        PALETTE.muted
+                    }),
                 ));
             }
             if row.has_children {
                 spans.push(Span::raw(" "));
                 spans.push(Span::styled(
                     format!("({})", row.child_count),
-                    Style::default().fg(PALETTE.sky),
+                    Style::default().fg(if row.dimmed {
+                        PALETTE.border
+                    } else {
+                        PALETTE.sky
+                    }),
                 ));
             }
             if row.matched {
@@ -1793,6 +2003,24 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     Style::default().fg(PALETTE.text),
                 ),
             ]));
+            if app.view_mode == ViewMode::SubtreeOnly
+                && let Some(root) = app.subtree_root_node()
+            {
+                lines.push(Line::from(vec![
+                    Span::styled("subtree root ", Style::default().fg(PALETTE.muted)),
+                    Span::styled(
+                        if root.text.is_empty() {
+                            "(empty)"
+                        } else {
+                            root.text.as_str()
+                        },
+                        Style::default().fg(PALETTE.warn),
+                    ),
+                    Span::raw("  "),
+                    Span::styled("g", Style::default().fg(PALETTE.accent)),
+                    Span::raw(" returns here"),
+                ]));
+            }
             lines.push(Line::from(vec![
                 Span::styled("save mode ", Style::default().fg(PALETTE.muted)),
                 Span::styled(
@@ -1914,7 +2142,7 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
         StatusTone::Warning => ("WARN", PALETTE.warn),
         StatusTone::Error => ("ERROR", PALETTE.danger),
     };
-    let line = Line::from(vec![
+    let mut spans = vec![
         Span::styled(
             format!(" {label} "),
             Style::default()
@@ -1924,7 +2152,43 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
         ),
         Span::raw(" "),
         Span::styled(app.status.text.clone(), Style::default().fg(PALETTE.text)),
-    ]);
+    ];
+    spans.push(Span::raw("  "));
+    spans.push(Span::styled(
+        format!("VIEW {}", app.view_mode.label()),
+        Style::default().fg(PALETTE.warn),
+    ));
+    if let Some(filter) = &app.filter {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            format!("FILTER {}", filter.matches.len()),
+            Style::default().fg(PALETTE.accent),
+        ));
+    }
+    if app.view_mode == ViewMode::SubtreeOnly
+        && let Some(root) = app.subtree_root_node()
+    {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            format!(
+                "ROOT {}",
+                if root.text.is_empty() {
+                    "(empty)"
+                } else {
+                    root.text.as_str()
+                }
+            ),
+            Style::default().fg(PALETTE.warn),
+        ));
+    }
+    if let Some(id) = app.editor.current().and_then(|node| node.id.as_deref()) {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            format!("ID {id}"),
+            Style::default().fg(PALETTE.muted),
+        ));
+    }
+    let line = Line::from(spans);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -1953,6 +2217,8 @@ fn render_keybar(frame: &mut Frame, area: Rect) {
         Span::raw(" · "),
         key_hint("m", "mindmap"),
         Span::raw(" · "),
+        key_hint("v", "views"),
+        Span::raw(" · "),
         key_hint("/", "filter"),
         Span::raw(" · "),
         key_hint("f", "facets"),
@@ -1978,7 +2244,7 @@ fn render_keybar(frame: &mut Frame, area: Rect) {
 fn render_help_overlay(frame: &mut Frame, area: Rect) {
     frame.render_widget(Clear, area);
     let block = Block::default()
-        .title(styled_title("Mindmap Guide", PALETTE.accent))
+        .title(styled_title("mdmind Guide", PALETTE.accent))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(PALETTE.accent))
         .style(Style::default().bg(PALETTE.surface_alt))
@@ -1999,7 +2265,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
         Paragraph::new(vec![
             Line::from(vec![
                 Span::styled(
-                    "Visual Mindmap Mode",
+                    "Keyboard-First Mind Mapping",
                     Style::default()
                         .fg(PALETTE.text)
                         .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
@@ -2011,12 +2277,12 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
                 ),
                 Span::raw("  "),
                 Span::styled(
-                    "Outline on the left, context on the right. Shape the tree without leaving the map.",
+                    "Outline on the left, focus context on the right. Shape the tree without leaving the map.",
                     Style::default().fg(PALETTE.muted),
                 ),
             ]),
             Line::from(Span::styled(
-                "The selected node is the center of gravity for the whole screen.",
+                "Use view modes to calm large maps before you search, reshape, or open the bubble overlay.",
                 Style::default().fg(PALETTE.sky),
             )),
         ]),
@@ -2055,6 +2321,8 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
             Line::from("←       collapse branch or go to parent"),
             Line::from("→       expand branch or enter first child"),
             Line::from("Enter   toggle expanded/collapsed"),
+            Line::from("v / V   cycle focused view modes"),
+            Line::from("g       root, or subtree root in Subtree Only"),
             Line::from("m       open the visual mindmap overlay"),
             Line::from("/       open search"),
             Line::from("f       open search on facets"),
@@ -2091,9 +2359,15 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
     render_help_card(
         frame,
         right[0],
-        "Find / Recover",
+        "Views / Recover",
         PALETTE.accent,
         vec![
+            Line::from("Full Map        current default tree view"),
+            Line::from("Focus Branch    branch, ancestors, siblings"),
+            Line::from("Subtree Only    isolate current branch as a rooted workspace"),
+            Line::from("Filtered Focus  blend filter results with focus"),
+            Line::from("In Subtree Only, ← never leaves the subtree root"),
+            Line::from("In Subtree Only, g jumps back to the subtree root"),
             Line::from("m       visual mindmap overlay"),
             Line::from("p       export PNG while the overlay is open"),
             Line::from("/       search by text, #tag, or @key:value"),
@@ -2182,7 +2456,7 @@ fn render_mindmap_overlay(
 
     let headline = if let Some(node) = app.editor.current() {
         format!(
-            "Centered on '{}' · respects current expanded branches and active filter context.",
+            "Centered on '{}' · respects the current view mode, expanded branches, and active filter context.",
             if node.text.is_empty() {
                 "(empty)"
             } else {
@@ -2689,23 +2963,40 @@ fn current_scope_label(app: &TuiApp, search: Option<&SearchOverlayState>) -> Str
     {
         let count = find_matches(app.editor.document(), &search.draft_query).len();
         return format!(
-            "Draft query: '{}' ({} matching nodes)",
+            "Draft query: '{}' ({} matching nodes) · view {}",
             search.draft_query.trim(),
-            count
+            count,
+            app.view_mode.status_label()
         );
     }
 
     if let Some(filter) = &app.filter {
         return format!(
-            "Active filter: '{}' ({} matching nodes)",
+            "Active filter: '{}' ({} matching nodes) · view {}",
             filter.query.raw(),
-            filter.matches.len()
+            filter.matches.len(),
+            app.view_mode.status_label()
+        );
+    }
+
+    if app.view_mode == ViewMode::SubtreeOnly
+        && let Some(root) = app.subtree_root_node()
+    {
+        return format!(
+            "Subtree rooted at '{}' · view {}",
+            if root.text.is_empty() {
+                "(empty)"
+            } else {
+                root.text.as_str()
+            },
+            app.view_mode.status_label()
         );
     }
 
     format!(
-        "Whole map ({} nodes)",
-        count_nodes(&app.editor.document().nodes)
+        "Whole map ({} nodes) · view {}",
+        count_nodes(&app.editor.document().nodes),
+        app.view_mode.status_label()
     )
 }
 
@@ -2818,62 +3109,148 @@ fn ancestor_paths(path: &[usize]) -> Vec<Vec<usize>> {
     ancestors
 }
 
+fn filter_visible_paths(filter: &ActiveFilter) -> HashSet<Vec<usize>> {
+    let mut visible = HashSet::new();
+    for path in &filter.matches {
+        for index in 0..path.len() {
+            visible.insert(path[..=index].to_vec());
+        }
+    }
+    visible
+}
+
+fn is_path_prefix(prefix: &[usize], path: &[usize]) -> bool {
+    prefix.len() <= path.len() && prefix == &path[..prefix.len()]
+}
+
+fn is_sibling_of(path: &[usize], target: &[usize]) -> bool {
+    path.len() == target.len()
+        && !path.is_empty()
+        && path != target
+        && path[..path.len() - 1] == target[..target.len() - 1]
+}
+
+fn is_focus_branch_context(path: &[usize], focus_path: &[usize]) -> bool {
+    if focus_path.is_empty() {
+        return true;
+    }
+
+    if is_path_prefix(path, focus_path) || is_path_prefix(focus_path, path) {
+        return true;
+    }
+
+    ancestor_paths(focus_path)
+        .into_iter()
+        .any(|ancestor| is_sibling_of(path, &ancestor))
+}
+
+fn visible_in_view_mode(
+    path: &[usize],
+    focus_path: &[usize],
+    filter_visible_paths: Option<&HashSet<Vec<usize>>>,
+    view_mode: ViewMode,
+) -> bool {
+    let in_filter_scope = filter_visible_paths.is_none_or(|paths| paths.contains(path));
+
+    match view_mode {
+        ViewMode::FullMap => in_filter_scope,
+        ViewMode::FocusBranch => in_filter_scope && is_focus_branch_context(path, focus_path),
+        ViewMode::SubtreeOnly => in_filter_scope && is_path_prefix(focus_path, path),
+        ViewMode::FilteredFocus => match filter_visible_paths {
+            Some(paths) => paths.contains(path) || is_focus_branch_context(path, focus_path),
+            None => is_focus_branch_context(path, focus_path),
+        },
+    }
+}
+
+fn visible_row_depth(path: &[usize], focus_path: &[usize], view_mode: ViewMode) -> usize {
+    match view_mode {
+        ViewMode::SubtreeOnly => path.len().saturating_sub(focus_path.len()),
+        _ => path.len().saturating_sub(1),
+    }
+}
+
+fn row_is_dimmed(path: &[usize], focus_path: &[usize], view_mode: ViewMode) -> bool {
+    match view_mode {
+        ViewMode::FullMap | ViewMode::SubtreeOnly => false,
+        ViewMode::FocusBranch | ViewMode::FilteredFocus => {
+            !(is_path_prefix(path, focus_path) || is_path_prefix(focus_path, path))
+        }
+    }
+}
+
 fn collect_visible_rows(
     nodes: &[Node],
     expanded: &HashSet<Vec<usize>>,
-    filter: Option<&ActiveFilter>,
+    projection: ViewProjection<'_>,
     rows: &mut Vec<VisibleRow>,
     prefix: Vec<usize>,
-    depth: usize,
 ) -> bool {
-    let mut subtree_has_visible_match = false;
+    let mut subtree_has_visible_rows = false;
     for (index, node) in nodes.iter().enumerate() {
         let mut path = prefix.clone();
         path.push(index);
-        let matched = filter.is_some_and(|filter| filter.matches.contains(&path));
+        let matched = projection
+            .filter
+            .is_some_and(|filter| filter.matches.contains(&path));
         let include_children_by_expansion = expanded.contains(&path);
         let mut child_rows = Vec::new();
-        let child_has_match = collect_visible_rows(
+        let child_has_visible_rows = collect_visible_rows(
             &node.children,
             expanded,
-            filter,
+            projection,
             &mut child_rows,
             path.clone(),
-            depth + 1,
         );
-        let include_row = match filter {
-            Some(_) => matched || child_has_match,
-            None => true,
+        let include_row = visible_in_view_mode(
+            &path,
+            projection.focus_path,
+            projection.filter_visible_paths,
+            projection.view_mode,
+        );
+
+        if include_row {
+            rows.push(VisibleRow {
+                path: path.clone(),
+                depth: visible_row_depth(&path, projection.focus_path, projection.view_mode),
+                text: node.text.clone(),
+                tags: node.tags.clone(),
+                metadata: node
+                    .metadata
+                    .iter()
+                    .map(|entry| format!("@{}:{}", entry.key, entry.value))
+                    .collect(),
+                id: node.id.clone(),
+                line: node.line,
+                has_children: !node.children.is_empty(),
+                expanded: expanded.contains(&path),
+                child_count: node.children.len(),
+                matched,
+                dimmed: row_is_dimmed(&path, projection.focus_path, projection.view_mode),
+            });
+        }
+
+        let reveal_child_rows = if include_row {
+            match projection.view_mode {
+                ViewMode::SubtreeOnly => {
+                    include_children_by_expansion || path == projection.focus_path
+                }
+                _ => {
+                    projection.filter.is_some()
+                        || include_children_by_expansion
+                        || is_path_prefix(&path, projection.focus_path)
+                }
+            }
+        } else {
+            child_has_visible_rows
         };
 
-        if !include_row {
-            continue;
-        }
-
-        rows.push(VisibleRow {
-            path: path.clone(),
-            depth,
-            text: node.text.clone(),
-            tags: node.tags.clone(),
-            metadata: node
-                .metadata
-                .iter()
-                .map(|entry| format!("@{}:{}", entry.key, entry.value))
-                .collect(),
-            id: node.id.clone(),
-            line: node.line,
-            has_children: !node.children.is_empty(),
-            expanded: expanded.contains(&path),
-            child_count: node.children.len(),
-            matched,
-        });
-
-        if filter.is_some() || include_children_by_expansion {
+        if reveal_child_rows {
             rows.extend(child_rows);
         }
-        subtree_has_visible_match = true;
+        subtree_has_visible_rows |= include_row || child_has_visible_rows;
     }
-    subtree_has_visible_match
+    subtree_has_visible_rows
 }
 
 fn collect_match_paths(document: &Document, query: &FilterQuery) -> Vec<Vec<usize>> {
@@ -3165,6 +3542,207 @@ mod tests {
         app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
             .expect("second right should work");
         assert_eq!(app.editor.focus_path(), &[0, 0, 0]);
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn view_mode_cycle_reprojects_visible_rows() {
+        let map_path = temp_map_path("views.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let full_rows = app.visible_rows();
+        assert_eq!(full_rows[0].text, "Product Idea");
+        assert_eq!(full_rows[1].text, "Direction");
+        assert_eq!(full_rows[2].text, "CLI-first MVP");
+        assert_eq!(full_rows[3].text, "Tasks");
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE))
+            .expect("v should cycle to focus branch");
+        assert_eq!(app.view_mode, ViewMode::FocusBranch);
+        let focus_rows = app.visible_rows();
+        assert_eq!(
+            focus_rows
+                .iter()
+                .map(|row| row.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Product Idea", "Direction", "CLI-first MVP", "Tasks"]
+        );
+        assert!(focus_rows[3].dimmed, "peer branch should be dimmed");
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE))
+            .expect("v should cycle to subtree only");
+        assert_eq!(app.view_mode, ViewMode::SubtreeOnly);
+        let subtree_rows = app.visible_rows();
+        assert_eq!(
+            subtree_rows
+                .iter()
+                .map(|row| (row.text.as_str(), row.depth))
+                .collect::<Vec<_>>(),
+            vec![("Direction", 0), ("CLI-first MVP", 1)]
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .expect("escape should return to full map before clearing filters");
+        assert_eq!(app.view_mode, ViewMode::FullMap);
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn subtree_only_keeps_a_stable_root_for_navigation() {
+        let map_path = temp_map_path("subtree-root.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE))
+            .expect("v should cycle to focus branch");
+        app.handle_key(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE))
+            .expect("v should cycle to subtree only");
+        assert_eq!(app.view_mode, ViewMode::SubtreeOnly);
+        assert_eq!(app.subtree_root_path(), Some(vec![0, 0]));
+
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("down should move inside the subtree");
+        assert_eq!(app.editor.focus_path(), &[0, 0, 0]);
+        assert_eq!(app.subtree_root_path(), Some(vec![0, 0]));
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE))
+            .expect("g should return to the subtree root");
+        assert_eq!(app.editor.focus_path(), &[0, 0]);
+
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE))
+            .expect("left should collapse the subtree root first");
+        assert_eq!(app.editor.focus_path(), &[0, 0]);
+
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE))
+            .expect("left should not escape above the subtree root");
+        assert_eq!(app.editor.focus_path(), &[0, 0]);
+        assert_eq!(
+            app.status.text,
+            "Already at the subtree root. Press Esc to leave the isolated branch."
+        );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn mindmap_scene_follows_the_active_view_mode() {
+        let map_path = temp_map_path("mindmap-view-mode.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let full_scene = app.current_mindmap_scene();
+        assert!(
+            full_scene
+                .bubbles
+                .iter()
+                .any(|bubble| bubble.path == vec![0, 1]),
+            "full map should include the sibling branch"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE))
+            .expect("v should cycle to focus branch");
+        let focus_scene = app.current_mindmap_scene();
+        assert!(
+            focus_scene
+                .bubbles
+                .iter()
+                .any(|bubble| bubble.path == vec![0, 1]),
+            "focus branch should still include the peer branch"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE))
+            .expect("v should cycle to subtree only");
+        let subtree_scene = app.current_mindmap_scene();
+        assert!(
+            !subtree_scene
+                .bubbles
+                .iter()
+                .any(|bubble| bubble.path == vec![0, 1]),
+            "subtree only should hide sibling branches from the visual map"
+        );
+        assert!(
+            subtree_scene
+                .bubbles
+                .iter()
+                .any(|bubble| bubble.path == vec![0, 0]),
+            "subtree root should remain visible in the visual map"
+        );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn clearing_filter_reverts_filtered_focus_to_focus_branch() {
+        let map_path = temp_map_path("filtered-focus.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.open_search_overlay(SearchSection::Query);
+        app.search.as_mut().expect("search should open").draft_query = "#todo".to_string();
+        app.search.as_mut().expect("search should open").cursor = "#todo".len();
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should apply the filter");
+        assert!(app.filter.is_some(), "filter should be active");
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('V'), KeyModifiers::NONE))
+            .expect("V should reverse-cycle to filtered focus");
+        assert_eq!(app.view_mode, ViewMode::FilteredFocus);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE))
+            .expect("c should clear the filter");
+        assert!(app.filter.is_none(), "filter should clear");
+        assert_eq!(
+            app.view_mode,
+            ViewMode::FocusBranch,
+            "filtered focus should fall back once the filter is gone"
+        );
 
         let session_path =
             crate::session::session_path_for(&map_path).expect("session path should be derivable");

@@ -21,12 +21,19 @@ Extend `mdm export` with a format flag:
 - `mdm export map.md --format json`
 - `mdm export map.md --format mermaid`
 - `mdm export map.md --format opml`
+- `mdm export map.md#product/tasks --format mermaid`
 
 For diagram-like targets, expose a few view choices:
 
 - full tree
 - current subtree
 - filtered subtree
+
+Today:
+
+- full tree works by default
+- current subtree works by exporting a deep link target such as `map.md#node/id`
+- filtered subtree is still future work
 
 ## Mapping Rules
 
@@ -52,6 +59,7 @@ Phase 1:
 
 - Mermaid
 - OPML
+- done
 
 Phase 2:
 

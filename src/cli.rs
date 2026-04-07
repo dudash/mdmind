@@ -10,6 +10,7 @@ use crate::app::{
     AppError, create_from_template, diagnostics_for_validate, diagnostics_have_errors,
     ensure_parseable, load_document, select_document,
 };
+use crate::export::export_document;
 use crate::interactive::run_interactive;
 use crate::query::{find_matches, link_entries, metadata_rows, tag_counts};
 use crate::render::{
@@ -25,7 +26,7 @@ use crate::templates::TemplateKind;
     version,
     about = "Inspect and validate local markdown-like thought maps.",
     long_about = "mdm is the CLI for local-first structured maps. It reads plain-text tree files, renders them for humans, and exports machine-friendly output when you ask for --json or --plain.",
-    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm open ideas.md#product/api-design"
+    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm open ideas.md#product/api-design"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -88,7 +89,11 @@ enum Commands {
     #[command(about = "Export normalized representations.")]
     Export {
         target: String,
-        #[arg(long, default_value = "json")]
+        #[arg(
+            long,
+            default_value = "json",
+            value_parser = PossibleValuesParser::new(["json", "mermaid", "opml"])
+        )]
         format: String,
     },
     #[command(about = "Create a new map from a starter template.")]
@@ -271,17 +276,11 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             Ok(())
         }
         Commands::Export { target, format } => {
-            if format != "json" {
-                return Err(CliError::runtime(format!(
-                    "Unsupported export format '{format}'. Only 'json' is available in the MVP."
-                )));
-            }
             let loaded = load_document(&target).map_err(CliError::from_app)?;
             let document = select_document(&loaded).map_err(CliError::from_app)?;
             println!(
                 "{}",
-                serde_json::to_string_pretty(&document.export())
-                    .expect("export serialization should succeed")
+                export_document(&document, &format).map_err(CliError::runtime)?
             );
             Ok(())
         }
@@ -334,8 +333,7 @@ fn render_view_like(target: &str, json: bool, max_depth: Option<usize>) -> Resul
     if json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&document.export())
-                .expect("export serialization should succeed")
+            export_document(&document, "json").expect("json export should succeed")
         );
     } else {
         println!("{}", render_tree(&document, max_depth));

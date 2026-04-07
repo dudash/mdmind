@@ -98,6 +98,16 @@ struct VisibleNode {
     kind: BubbleKind,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct SceneProjection<'a> {
+    expanded: &'a HashSet<Vec<usize>>,
+    filter_matches: Option<&'a HashSet<Vec<usize>>>,
+    visible_paths: Option<&'a HashSet<Vec<usize>>>,
+    focus_path: &'a [usize],
+    focus_parent: Option<&'a [usize]>,
+    focus_ancestors: &'a HashSet<Vec<usize>>,
+}
+
 #[derive(Debug, Clone)]
 struct MeasuredNode {
     node: VisibleNode,
@@ -142,6 +152,7 @@ impl Scene {
         focus_path: &[usize],
         expanded: &HashSet<Vec<usize>>,
         filter_matches: Option<&[Vec<usize>]>,
+        visible_paths: Option<&HashSet<Vec<usize>>>,
     ) -> Self {
         let focus_parent = if focus_path.is_empty() {
             None
@@ -151,17 +162,16 @@ impl Scene {
         let focus_ancestors = ancestor_set(focus_path);
         let match_set =
             filter_matches.map(|matches| matches.iter().cloned().collect::<HashSet<_>>());
-
-        let visible = build_visible_nodes(
-            &document.nodes,
+        let projection = SceneProjection {
             expanded,
-            match_set.as_ref(),
+            filter_matches: match_set.as_ref(),
+            visible_paths,
             focus_path,
-            focus_parent.as_deref(),
-            &focus_ancestors,
-            Vec::new(),
-        )
-        .0;
+            focus_parent: focus_parent.as_deref(),
+            focus_ancestors: &focus_ancestors,
+        };
+
+        let visible = build_visible_nodes(&document.nodes, projection, Vec::new()).0;
 
         let measured = visible.into_iter().map(measure_node).collect::<Vec<_>>();
         if measured.is_empty() {
@@ -394,11 +404,7 @@ pub fn default_export_path(map_path: &Path) -> PathBuf {
 
 fn build_visible_nodes(
     nodes: &[Node],
-    expanded: &HashSet<Vec<usize>>,
-    filter_matches: Option<&HashSet<Vec<usize>>>,
-    focus_path: &[usize],
-    focus_parent: Option<&[usize]>,
-    focus_ancestors: &HashSet<Vec<usize>>,
+    projection: SceneProjection<'_>,
     prefix: Vec<usize>,
 ) -> (Vec<VisibleNode>, bool) {
     let mut visible = Vec::new();
@@ -407,33 +413,38 @@ fn build_visible_nodes(
     for (index, node) in nodes.iter().enumerate() {
         let mut path = prefix.clone();
         path.push(index);
-        let matched = filter_matches.is_some_and(|matches| matches.contains(&path));
-        let show_children = filter_matches.is_some() || expanded.contains(&path);
-        let (children, child_has_match) = build_visible_nodes(
-            &node.children,
-            expanded,
-            filter_matches,
-            focus_path,
-            focus_parent,
-            focus_ancestors,
-            path.clone(),
-        );
-        let include = match filter_matches {
-            Some(_) => matched || child_has_match,
-            None => true,
+        let matched = projection
+            .filter_matches
+            .is_some_and(|matches| matches.contains(&path));
+        let show_children =
+            projection.filter_matches.is_some() || projection.expanded.contains(&path);
+        let (children, child_has_match) =
+            build_visible_nodes(&node.children, projection, path.clone());
+        let include = match projection.visible_paths {
+            Some(paths) => paths.contains(&path),
+            None => match projection.filter_matches {
+                Some(_) => matched || child_has_match,
+                None => true,
+            },
         };
 
         if !include {
+            if child_has_match {
+                visible.extend(children);
+                subtree_has_match = true;
+            }
             continue;
         }
 
-        let kind = if path == focus_path {
+        let kind = if path == projection.focus_path {
             BubbleKind::Focus
-        } else if focus_ancestors.contains(&path) {
+        } else if projection.focus_ancestors.contains(&path) {
             BubbleKind::Ancestor
-        } else if path.starts_with(focus_path) {
+        } else if path.starts_with(projection.focus_path) {
             BubbleKind::Descendant
-        } else if focus_parent.is_some_and(|parent| path[..path.len().saturating_sub(1)] == *parent)
+        } else if projection
+            .focus_parent
+            .is_some_and(|parent| path[..path.len().saturating_sub(1)] == *parent)
         {
             BubbleKind::Peer
         } else if matched {
@@ -1113,7 +1124,7 @@ mod tests {
         )
         .document;
         let expanded = HashSet::from([vec![0]]);
-        let scene = Scene::build(&document, &[0], &expanded, None);
+        let scene = Scene::build(&document, &[0], &expanded, None, None);
 
         assert!(scene.bubbles.iter().any(|bubble| bubble.path == vec![0, 0]));
         let direction = scene
@@ -1131,7 +1142,7 @@ mod tests {
         )
         .document;
         let expanded = HashSet::from([vec![0], vec![0, 0]]);
-        let scene = Scene::build(&document, &[0, 0], &expanded, None);
+        let scene = Scene::build(&document, &[0, 0], &expanded, None, None);
         assert!(scene.focus_center.0 > 0);
         assert!(scene.focus_center.1 > 0);
     }
@@ -1140,7 +1151,7 @@ mod tests {
     fn png_export_writes_a_png_signature() {
         let document = parse_document("- Product [id:product]\n").document;
         let expanded = HashSet::new();
-        let scene = Scene::build(&document, &[0], &expanded, None);
+        let scene = Scene::build(&document, &[0], &expanded, None, None);
         let camera = scene.camera(40, 18, 0, 0);
         let path = std::env::temp_dir().join("mdmind-mindmap-test.png");
         export_png(&scene, camera, theme(), &path).expect("png export should succeed");

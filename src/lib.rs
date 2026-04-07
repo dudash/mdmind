@@ -3,6 +3,7 @@ pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub mod app;
 pub mod cli;
 pub mod editor;
+pub mod export;
 pub mod interactive;
 pub mod mindmap;
 pub mod model;
