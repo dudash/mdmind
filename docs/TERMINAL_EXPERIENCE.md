@@ -132,9 +132,10 @@ Acceptance criteria:
 Capabilities:
 
 - multiple built-in themes
+- live palette preview for themes and surface settings
 - per-theme status line styling
 - improved border and badge language
-- optional startup mark and help art
+- optional startup mark, help art, and ASCII chrome accents
 
 Suggested theme set:
 

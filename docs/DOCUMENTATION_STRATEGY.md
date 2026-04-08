@@ -79,7 +79,7 @@ Recommended surfaces:
 
 This layer matters because many users will never open a browser while actively working in the tool.
 
-The first implementation slice for searchable help and guided in-app documentation is outlined in `docs/PHASE1_UX_IMPLEMENTATION.md`.
+The first searchable-help slice now exists in `mdmind`; the implementation notes for follow-on help and guided documentation work remain in `docs/PHASE1_UX_IMPLEMENTATION.md`.
 
 ## Layer 3: Public Docs Site
 

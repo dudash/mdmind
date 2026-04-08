@@ -44,6 +44,15 @@ Ship the biggest usability win first:
 - focused views
 - richer status model
 
+Current status:
+
+- focused views are implemented
+- command palette is implemented
+- searchable built-in help is implemented
+- richer status modeling is implemented
+- theme system is implemented
+- per-map surface settings are implemented with live palette preview, restrained motion toggles, and ASCII accents
+
 ## Slice B
 
 Once Slice A is stable:

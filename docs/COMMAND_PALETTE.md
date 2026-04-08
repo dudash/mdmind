@@ -43,7 +43,8 @@ Early palette behavior should focus on:
 
 - jump to node by fuzzy label or id
 - run common actions
-- reopen recent filters
+- reopen saved views
+- open built-in help topics
 
 Do not try to replace every dedicated key on day one.
 
@@ -59,11 +60,14 @@ Phase 1:
 
 - node jump
 - action search
-- recent queries
+- saved views
+- help topics
+- implemented first slice
 
 Phase 2:
 
 - richer previews
+- recent items
 - scoped search within subtree or filter
 
 ## Risks

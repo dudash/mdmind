@@ -134,6 +134,7 @@ Editing:
 - `Shift+R`: add root
 - `e`: edit selected node
 - `x`: delete selected node, confirmed on second press
+- `u` / `U`: undo or redo the last structural change
 
 Reshaping:
 
@@ -143,6 +144,9 @@ Reshaping:
 
 Search and large-map workflows:
 
+- `:` / `Ctrl+P`: open the command palette
+- inside the palette, type `undo` or `redo` to browse recent actions, `checkpoint` to find manual checkpoints, `safety` to find automatic safety snapshots, `theme` to preview themes, `ascii` to toggle terminal-style accents, or `motion` to control attention-guiding focus, filter, and input motion
+- `?`: open searchable built-in help
 - `/`: open unified search
 - `f`: open unified search on facets
 - `F`: open unified search on saved views
@@ -171,8 +175,10 @@ Saving:
 
 - session restore: `.<map-file>.mdmind-session.json`
 - saved views: `.<map-file>.mdmind-views.json`
+- checkpoints: `.<map-file>.mdmind-checkpoints.json`
+- UI settings: `.<map-file>.mdmind-ui.json`
 
-These keep editor state local without changing the map format itself.
+These keep editor state local without changing the map format itself. The UI settings sidecar stores the active theme plus per-map surface preferences such as attention-guiding motion and ASCII accents.
 
 ## Project Templates
 

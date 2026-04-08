@@ -12,6 +12,13 @@ pub struct Editor {
     dirty: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct EditorState {
+    pub document: Document,
+    pub focus_path: Vec<usize>,
+    pub dirty: bool,
+}
+
 impl Editor {
     pub fn new(document: Document, focus_path: Vec<usize>) -> Self {
         Self {
@@ -366,6 +373,22 @@ impl Editor {
 
     pub fn mark_clean(&mut self) {
         self.dirty = false;
+    }
+
+    pub fn state(&self) -> EditorState {
+        EditorState {
+            document: self.document.clone(),
+            focus_path: self.focus_path.clone(),
+            dirty: self.dirty,
+        }
+    }
+
+    pub fn restore_state(&mut self, state: EditorState) -> Result<(), AppError> {
+        let (document, focus_path) = reparse_and_validate(state.document, state.focus_path)?;
+        self.document = document;
+        self.focus_path = focus_path;
+        self.dirty = state.dirty;
+        Ok(())
     }
 
     fn apply_change<F>(&mut self, mutator: F) -> Result<(), AppError>
