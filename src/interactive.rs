@@ -429,58 +429,89 @@ impl PaletteItemKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HelpTopic {
+    StartHere,
     Navigation,
     Editing,
     Search,
     Views,
+    Palette,
+    Safety,
     Themes,
     Mindmap,
     Syntax,
+    Ids,
+    Relations,
 }
 
 impl HelpTopic {
     fn title(self) -> &'static str {
         match self {
+            Self::StartHere => "Start Here",
             Self::Navigation => "Navigation",
             Self::Editing => "Editing",
             Self::Search => "Search And Filters",
             Self::Views => "View Modes",
+            Self::Palette => "Command Palette",
+            Self::Safety => "Safety And History",
             Self::Themes => "Themes",
             Self::Mindmap => "Visual Mindmap",
-            Self::Syntax => "Inline Syntax",
+            Self::Syntax => "Tags And Metadata",
+            Self::Ids => "Ids And Deep Links",
+            Self::Relations => "Relations And Backlinks",
         }
     }
 
     fn summary(self) -> &'static str {
         match self {
+            Self::StartHere => "Learn the core mental model and the first few things worth trying.",
             Self::Navigation => "Move through the tree, jump quickly, and open major overlays.",
             Self::Editing => "Add, rename, delete, and reshape branches without leaving the map.",
             Self::Search => {
                 "Filter by text, tags, metadata, and saved views from one search surface."
             }
             Self::Views => "Switch between full-map and focused working modes.",
+            Self::Palette => {
+                "Jump to actions, places, views, relations, and help from one surface."
+            }
+            Self::Safety => "Undo, redo, checkpoints, autosave, and recent restore history.",
             Self::Themes => "Change the visual surface without leaving the map.",
             Self::Mindmap => "Inspect the current working set visually and export it as a PNG.",
-            Self::Syntax => {
-                "Write labels, tags, metadata, deep-link ids, and references inline on one node."
+            Self::Syntax => "Use lightweight inline structure for grouping and structured fields.",
+            Self::Ids => {
+                "Give branches stable addresses for jumps, exports, and deep-linked opens."
+            }
+            Self::Relations => {
+                "Connect distant branches laterally and follow the resulting backlinks."
             }
         }
     }
 
     fn hint(self) -> &'static str {
         match self {
+            Self::StartHere => {
+                "Intro guide for first-time users, first steps, and what matters most."
+            }
             Self::Navigation => "User guide plus movement keys and large-map wayfinding tips.",
             Self::Editing => "User guide plus editing keys, undo safety, and restructuring tips.",
             Self::Search => "User guide plus query keys, facet controls, and filtering tips.",
             Self::Views => "User guide plus view-mode keys and focused-workflow tips.",
+            Self::Palette => "User guide plus jump patterns, previews, and help recipes.",
+            Self::Safety => "User guide plus undo, checkpoints, autosave, and restore habits.",
             Self::Themes => "User guide plus theme controls and calmer-surface tips.",
             Self::Mindmap => "User guide plus visual-map keys and export tips.",
-            Self::Syntax => "User guide plus inline syntax reference and authoring tips.",
+            Self::Syntax => "User guide plus tags and metadata reference and authoring tips.",
+            Self::Ids => "User guide plus id naming, deep-link jumps, and CLI usage.",
+            Self::Relations => {
+                "User guide plus cross-link syntax, backlinks, and relation navigation."
+            }
         }
     }
 
     fn keywords(self) -> &'static str {
         match self {
+            Self::StartHere => {
+                "start begin beginner intro getting started first steps first five minutes overview basics new user"
+            }
             Self::Navigation => {
                 "navigate movement arrows focus jump root open id palette hotkeys relations backlinks related cross links"
             }
@@ -491,18 +522,33 @@ impl HelpTopic {
                 "search filter query facets saved views tags metadata matches key keys value values"
             }
             Self::Views => "views focus branch subtree filtered focus isolate branch presentation",
+            Self::Palette => {
+                "palette command palette actions recent frequent saved views checkpoints help recipes jump launcher"
+            }
+            Self::Safety => {
+                "safety undo redo checkpoint checkpoints autosave save revert restore history recent actions recovery"
+            }
             Self::Themes => {
                 "theme themes paper blueprint calm violet monograph terminal neon workbench palette ui settings motion ascii accents minimal purple lavender"
             }
             Self::Mindmap => "mindmap visual bubble canvas png export pan recenter map overlay",
             Self::Syntax => {
-                "syntax tags metadata key keys value values ids deep links relations backlinks ref rel format example inline node"
+                "syntax tags metadata key keys value values fields structured attributes inline node format example"
+            }
+            Self::Ids => {
+                "ids id deep links deep link open jump palette links stable address target export cli mdm view open"
+            }
+            Self::Relations => {
+                "relations backlinks cross links cross-links references wiki links rel target source incoming outgoing related graph lateral"
             }
         }
     }
 
     fn guide_intro(self) -> &'static str {
         match self {
+            Self::StartHere => {
+                "If you are new to mdmind, start with the smallest useful mental model: one line is one node, focus is the center of the UI, and view or search can reduce noise when the tree gets large."
+            }
             Self::Navigation => {
                 "Navigation in mdmind is tree-first. Stay in the outline while exploring, then use the palette and direct id jumps when the map gets too large to scroll comfortably."
             }
@@ -510,10 +556,16 @@ impl HelpTopic {
                 "Editing is designed to stay inline and reversible. You reshape the tree in place, keep your cursor on the branch you care about, and use undo or checkpoints when a structural change feels risky."
             }
             Self::Search => {
-                "Search is the fastest way to reduce noise without losing your place. Query search, facets, and saved views all feed the same filtering model, so once you understand one entry point the others feel familiar."
+                "Search is the fastest way to reduce noise without losing your place. The beginner path is simple: start with plain text, then add #tags, then add @key:value metadata when the map grows more structured."
             }
             Self::Views => {
                 "View modes are not cosmetic. They change how much of the map stays visible so you can choose between orientation, local focus, and filtered work without manually collapsing half the tree."
+            }
+            Self::Palette => {
+                "The command palette is the fastest way to act when you already know your intent. It pulls actions, jumps, saved views, recipes, relations, history, and help into one place so you do not have to remember which surface owns what."
+            }
+            Self::Safety => {
+                "Safety should make you bolder, not slower. Undo, redo, checkpoints, and recent restore history exist so you can reshape real maps without treating every edit like a risk you only get one shot at."
             }
             Self::Themes => {
                 "Themes and surface settings are there to support different working styles. Use them to make the interface calmer, denser, brighter, or more terminal-native without changing how the map behaves."
@@ -522,13 +574,24 @@ impl HelpTopic {
                 "The visual mindmap is best used as a second lens on the current working set, not as a separate mode with a different truth. It follows your active view and filter so the tree and the map stay aligned."
             }
             Self::Syntax => {
-                "Inline syntax lets one node line carry both human meaning and machine-friendly structure. The goal is to keep capture fast while still making tags, metadata, and deep links easy to search later."
+                "Tags and metadata are the easiest structured layer to adopt. They give you fast grouping and reliable filtering without forcing you to decide every branch's long-term address or relationship model."
+            }
+            Self::Ids => {
+                "Ids are how a branch becomes reliably addressable. They matter when you want to jump by id, deep-link from the CLI, export one subtree, or create a stable target for cross-links."
+            }
+            Self::Relations => {
+                "Relations are for the cases where the tree alone is not enough. They let one branch point to another without changing ownership or turning the whole map into a graph-first document."
             }
         }
     }
 
     fn guide_body(self) -> &'static [&'static str] {
         match self {
+            Self::StartHere => &[
+                "You do not need every feature on day one. A beginner can ignore ids, relations, exports, and even the mindmap at first. The core loop is simpler: move, add or edit a node, search when the map gets noisy, and use the palette when you know what you want.",
+                "A good first map is small and concrete: one project, one trip, one feature area, one story outline. Once that feels natural, tags, metadata, ids, and cross-links start paying off because they make larger maps easier to search and revisit.",
+                "If the interface ever feels dense, press ? and read the short guide first, or turn on minimal mode later when you know the basics and want less chrome.",
+            ],
             Self::Navigation => &[
                 "The current focus is the center of the interface: the outline, focus card, and visual map all follow it. That means simple arrow movement is enough for most work until the map becomes large.",
                 "When you already know the branch or id you want, use the palette instead of drilling manually. It is faster and it preserves your mental model because recent locations, frequent places, inline ids, and guided recipes all meet in one jump surface.",
@@ -539,6 +602,7 @@ impl HelpTopic {
                 "The safety layer matters here. Undo and checkpoints mean you can move quickly through structural edits without treating every change as dangerous, especially in larger maps where a reparent or delete can have bigger consequences.",
             ],
             Self::Search => &[
+                "If search feels abstract, start with the easiest version: press /, type a normal word or phrase, and press Enter. Once that feels natural, move on to #tags and then @key:value metadata filters.",
                 "Use query search when you know the words, tags, or metadata you want. Use facets when you want to browse what is available in the current scope. Use saved views when a filter is worth coming back to repeatedly.",
                 "Filters are designed to land you on a useful result immediately. That is why applying a query, view, or recipe moves focus to the first match and keeps local context visible instead of dropping you into a dead-end result list.",
                 "When a map has shared metadata like @owner or custom @status values, the palette can surface owner-specific and status-specific review recipes automatically. That makes recurring workflows easier to discover than remembering every exact filter string.",
@@ -546,6 +610,14 @@ impl HelpTopic {
             Self::Views => &[
                 "Full Map is for orientation. Focus Branch is for working with context. Subtree Only is for treating one branch as a temporary workspace. Filtered Focus is for mixing search results with enough structure to stay oriented.",
                 "The important mental model is that view mode changes the visible projection, not the underlying document. You are not rewriting the map when you isolate a branch, only changing what the interface chooses to show you.",
+            ],
+            Self::Palette => &[
+                "Use the palette when you already know what you want: a branch, an id, an action, a saved view, a recent location, a checkpoint, a help topic, or a workflow recipe. It is less about browsing and more about intention.",
+                "The palette also makes advanced features feel casual. You do not have to remember a special relation mode, history mode, or settings panel. Typing a few words is often enough to reach the right thing.",
+            ],
+            Self::Safety => &[
+                "Undo and redo restore more than text. They bring back structural state, focus, and working context so the result feels like returning to a known workspace instead of just reversing a single primitive change.",
+                "Checkpoints are for the moments when you want a named restore point before restructuring something large. Recent action history is for quick short-range recovery when you only need to step back through the last few changes.",
             ],
             Self::Themes => &[
                 "A good theme should reduce fatigue and make hierarchy easier to read. It should not feel like decoration layered on top. That is why themes apply across the header, outline, overlays, status surfaces, and mindmap together.",
@@ -557,14 +629,30 @@ impl HelpTopic {
                 "When visible nodes carry cross-links, the mindmap also draws relation edges between them. That lets you see lateral structure without turning the main document into a graph-first model.",
             ],
             Self::Syntax => &[
-                "Keep the visible label human first, then layer structure onto it. Tags are fast markers, metadata carries structured attributes, ids create stable deep links, and relations connect ideas across branches without changing the tree.",
-                "This is most powerful when you stay consistent. Reusing the same tags, metadata keys, ids, and relation kinds across a map makes search, saved views, palette jumps, backlinks, and export much more useful than treating inline syntax as ad hoc annotation.",
+                "Use tags for quick grouping and metadata for fields you expect to query repeatedly. A few stable patterns like #todo, @status:active, and @owner:mira are usually more valuable than lots of one-off annotations.",
+                "Keep the visible label human first, then layer structure onto it. The line should still read well as plain text even if someone ignores the tags and metadata completely.",
+            ],
+            Self::Ids => &[
+                "Not every node needs an id. Add ids to branches you expect to revisit, deep-link, export, or reference from somewhere else. That usually means major branches, durable work items, named sections, or cross-map anchors.",
+                "The payoff is consistency: palette jumps, mdmind and mdm deep-link opens, export targets, saved references, and cross-links all become more reliable when the branch has a stable id instead of depending on its visible label.",
+            ],
+            Self::Relations => &[
+                "A plain relation like [[target/id]] says two branches are connected. A typed relation like [[rel:blocks->target/id]] says why they are connected. The plain form should be the default; the typed form is for cases where the meaning is worth preserving.",
+                "Backlinks are derived from incoming relations. That means you do not maintain them manually. If one branch points at another, the target can surface that incoming reference in the palette, focus area, CLI, and relation navigation.",
             ],
         }
     }
 
     fn command_reference(self) -> &'static [(&'static str, &'static str)] {
         match self {
+            Self::StartHere => &[
+                ("↑ / ↓", "Move through visible nodes"),
+                ("a / e", "Add a child or edit the selected node"),
+                ("/", "Search for text, tags, and metadata"),
+                (": / Ctrl+P", "Open the command palette"),
+                ("?", "Open built-in help"),
+                ("m", "Open the visual mindmap"),
+            ],
             Self::Navigation => &[
                 ("↑ / ↓", "Move through visible nodes"),
                 (
@@ -600,6 +688,9 @@ impl HelpTopic {
             ],
             Self::Search => &[
                 ("/", "Open query search"),
+                ("text query", "Start with a normal word or phrase"),
+                ("#tag query", "Filter by a tag like #todo or #blocked"),
+                ("@key:value", "Filter by metadata like @status:active"),
                 ("f / F", "Open facets or saved views"),
                 ("Tab", "Switch Query, Facets, and Saved Views"),
                 ("Enter", "Apply the current query or selection"),
@@ -615,6 +706,24 @@ impl HelpTopic {
                 ("g", "Return to the subtree root inside Subtree Only"),
                 ("←", "Stay inside the subtree root boundary in Subtree Only"),
                 ("m", "Open a visual map of the current projection"),
+            ],
+            Self::Palette => &[
+                (": / Ctrl+P", "Open the command palette"),
+                ("branch or id", "Jump directly to a place in the map"),
+                ("recipe query", "Run built-in or contextual workflows"),
+                ("checkpoint / undo / redo", "Browse recovery targets"),
+                ("theme / minimal", "Preview surface settings"),
+                ("help topic", "Open built-in help from the same surface"),
+            ],
+            Self::Safety => &[
+                ("u / U", "Undo or redo the last structural change"),
+                (
+                    "checkpoint",
+                    "Create or restore named checkpoints from the palette",
+                ),
+                ("undo / redo", "Browse recent action history in the palette"),
+                ("s / S", "Save now or toggle autosave"),
+                ("r", "Reload from disk"),
             ],
             Self::Themes => &[
                 (
@@ -640,19 +749,41 @@ impl HelpTopic {
             Self::Syntax => &[
                 ("#tag", "Add a topic or workflow marker"),
                 ("@key:value", "Add structured metadata"),
-                ("[id:path/to/node]", "Add a deep-link target id"),
-                ("[[target/id]]", "Reference another node by id"),
-                (
-                    "[[rel:kind->target/id]]",
-                    "Add a typed cross-branch relation",
-                ),
                 (
                     "Label + syntax",
-                    "Combine visible text, tags, metadata, ids, and relations on one line",
+                    "Combine visible text, tags, and metadata on one line",
                 ),
                 (
                     "/ and :",
                     "Search and palette understand the same inline syntax",
+                ),
+            ],
+            Self::Ids => &[
+                ("[id:path/to/node]", "Add a stable id target to a node line"),
+                ("o", "Open the jump-to-id prompt"),
+                ("product/tasks", "Jump by id through the palette"),
+                (
+                    "mdmind map.md#id",
+                    "Open the TUI directly to a deep-linked branch",
+                ),
+                ("mdm links map.md", "List ids available in a map"),
+                (
+                    "mdm view map.md#id",
+                    "Open a deep-linked subtree from the CLI",
+                ),
+            ],
+            Self::Relations => &[
+                ("[[target/id]]", "Create a plain cross-link to another id"),
+                (
+                    "[[rel:kind->target/id]]",
+                    "Create a typed cross-link with meaning",
+                ),
+                ("]", "Follow an outgoing relation"),
+                ("[", "Follow a backlink into the current node"),
+                ("backlink", "Search relation jumps from the palette"),
+                (
+                    "mdm relations map.md#id",
+                    "Inspect outgoing and incoming relations in the CLI",
                 ),
             ],
         }
@@ -660,6 +791,10 @@ impl HelpTopic {
 
     fn tips(self) -> &'static [&'static str] {
         match self {
+            Self::StartHere => &[
+                "If you are just learning, focus on movement, add or edit, search, and the palette first.",
+                "You can adopt ids and relations later. They are power features, not prerequisites.",
+            ],
             Self::Navigation => &[
                 "If the tree starts feeling noisy, change view mode before you keep scrolling.",
                 "Use recent locations in the palette when you are bouncing between two branches repeatedly.",
@@ -672,6 +807,7 @@ impl HelpTopic {
             ],
             Self::Search => &[
                 "Start broad with text, then tighten with #tags or @metadata once you see the pattern you need.",
+                "If you are learning a new map, use facets before you try to guess every available metadata value.",
                 "Saved views are best for recurring workflows, not one-off ad hoc filters.",
                 "Use palette recipes when you know the workflow you want but do not want to remember the exact filter.",
                 "If your map uses @owner or several @status values, try typing 'owner' or 'status' in the palette to see contextual review recipes.",
@@ -679,6 +815,16 @@ impl HelpTopic {
             Self::Views => &[
                 "Use Focus Branch when you still need orientation. Use Subtree Only when you want the rest of the map to disappear.",
                 "If a branch feels slippery, remember that Subtree Only keeps a stable root until you leave the mode.",
+            ],
+            Self::Palette => &[
+                "If you already know the target, use the palette instead of scrolling there manually.",
+                "Think of the palette as the universal jump surface, not just an action launcher.",
+                "Typing a workflow like 'review todo' is often faster than remembering the exact filter.",
+            ],
+            Self::Safety => &[
+                "Use undo for recent edits, checkpoints for larger experiments, and recent history when you want to compare several nearby states.",
+                "If autosave is on, undo still writes the restored state back to disk so the file and the UI stay aligned.",
+                "Before a major restructure, a named checkpoint is usually better than cautious micro-edits.",
             ],
             Self::Themes => &[
                 "Use Monograph with minimal mode for the calmest current surface.",
@@ -691,16 +837,60 @@ impl HelpTopic {
             ],
             Self::Syntax => &[
                 "Prefer consistent metadata keys like @status or @owner across the whole map instead of inventing near-duplicates.",
+                "A few shared tags and metadata fields are usually enough to unlock search, facets, and saved views.",
+            ],
+            Self::Ids => &[
+                "Prefer short, stable id paths like product/api-design over visible labels with spaces.",
                 "Add ids to branches you expect to deep-link, export, or revisit often from the palette.",
+                "A deep link is not only for the CLI. You can launch mdmind itself straight into map.md#some/id.",
+                "If a deep link breaks, run mdm links to see what ids the file actually exposes.",
+            ],
+            Self::Relations => &[
                 "Use plain [[target]] for lightweight references and [[rel:kind->target]] when the link meaning matters.",
+                "Do not use relations as a substitute for basic tree structure. If everything links everywhere, the map gets harder to read.",
+                "If a node has several outgoing or incoming links, [ and ] now open a small picker instead of guessing.",
             ],
         }
     }
 
     fn example(self) -> Option<&'static str> {
         match self {
-            Self::Syntax => Some("API Design #backend @status:todo [id:product/api-design]"),
+            Self::Search => Some("#todo @status:active"),
+            Self::Palette => Some("review todo"),
+            Self::Safety => Some("checkpoint"),
+            Self::Syntax => Some("API Design #backend @status:todo @owner:mira"),
+            Self::Ids => Some("API Design #backend [id:product/api-design]"),
+            Self::Relations => Some("Launch Readiness [[rel:blocked-by->product/api-design]]"),
             _ => None,
+        }
+    }
+
+    fn order_rank(self) -> usize {
+        match self {
+            Self::StartHere => 0,
+            Self::Navigation => 1,
+            Self::Editing => 2,
+            Self::Search => 3,
+            Self::Views => 4,
+            Self::Palette => 5,
+            Self::Safety => 6,
+            Self::Syntax => 7,
+            Self::Ids => 8,
+            Self::Relations => 9,
+            Self::Themes => 10,
+            Self::Mindmap => 11,
+        }
+    }
+
+    fn track_label(self) -> &'static str {
+        match self {
+            Self::StartHere => "Basics",
+            Self::Navigation | Self::Editing | Self::Search | Self::Views | Self::Palette => {
+                "Workflow"
+            }
+            Self::Safety => "Safety",
+            Self::Syntax | Self::Ids | Self::Relations => "Structure",
+            Self::Themes | Self::Mindmap => "Surfaces",
         }
     }
 
@@ -712,8 +902,9 @@ impl HelpTopic {
             .collect::<Vec<_>>()
             .join(" ");
         format!(
-            "{} {} {} {} {} {} {} {}",
+            "{} {} {} {} {} {} {} {} {}",
             self.title(),
+            self.track_label(),
             self.summary(),
             self.hint(),
             self.keywords(),
@@ -3537,13 +3728,18 @@ impl TuiApp {
     fn help_topics(&self, raw: &str) -> Vec<HelpTopic> {
         let query = raw.trim().to_lowercase();
         let mut topics = [
+            HelpTopic::StartHere,
             HelpTopic::Navigation,
             HelpTopic::Editing,
             HelpTopic::Search,
             HelpTopic::Views,
+            HelpTopic::Palette,
+            HelpTopic::Safety,
             HelpTopic::Themes,
             HelpTopic::Mindmap,
             HelpTopic::Syntax,
+            HelpTopic::Ids,
+            HelpTopic::Relations,
         ]
         .into_iter()
         .filter_map(|topic| {
@@ -3560,7 +3756,7 @@ impl TuiApp {
             right
                 .1
                 .cmp(&left.1)
-                .then_with(|| left.0.title().cmp(right.0.title()))
+                .then_with(|| left.0.order_rank().cmp(&right.0.order_rank()))
         });
         topics.into_iter().map(|entry| entry.0).collect()
     }
@@ -5657,7 +5853,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
             Paragraph::new(if minimal {
                 "No help matches."
             } else {
-                "No help articles match yet. Try 'views', 'search', 'syntax', or 'minimal'."
+                "No help articles match yet. Try 'start', 'palette', 'safety', 'relations', or 'deep link'."
             })
             .block(
                 Block::default()
@@ -5675,16 +5871,22 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
         let items = topics
             .iter()
             .map(|topic| {
-                ListItem::new(Line::from(vec![
-                    Span::styled(
-                        topic.title(),
-                        Style::default()
-                            .fg(PALETTE.text)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw("  "),
-                    Span::styled(topic.summary(), Style::default().fg(PALETTE.muted)),
-                ]))
+                ListItem::new(vec![
+                    Line::from(vec![
+                        Span::styled(
+                            topic.title(),
+                            Style::default()
+                                .fg(PALETTE.text)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::raw("  "),
+                        Span::styled(topic.track_label(), Style::default().fg(PALETTE.accent)),
+                    ]),
+                    Line::from(Span::styled(
+                        topic.summary(),
+                        Style::default().fg(PALETTE.muted),
+                    )),
+                ])
             })
             .collect::<Vec<_>>();
         let mut state = ListState::default();
@@ -6779,6 +6981,15 @@ fn current_scope_label(app: &TuiApp, search: Option<&SearchOverlayState>) -> Str
 
 fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
     match topic {
+        HelpTopic::StartHere => {
+            if count_nodes(&app.editor.document().nodes) <= 8 {
+                "this map is still small enough to learn by browsing and editing directly"
+                    .to_string()
+            } else {
+                "if the map feels dense, start with movement, search, and the palette before deeper features"
+                    .to_string()
+            }
+        }
         HelpTopic::Navigation => {
             let breadcrumb = if app.editor.breadcrumb().is_empty() {
                 "(no focus)".to_string()
@@ -6815,6 +7026,25 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
                 });
             }
             context
+        }
+        HelpTopic::Palette => {
+            "use the palette for intentional jumps: actions, ids, workflows, relations, history, and help"
+                .to_string()
+        }
+        HelpTopic::Safety => {
+            if app.autosave {
+                format!(
+                    "autosave is on with {} undo step(s) and {} checkpoint(s) available",
+                    app.undo_history.len(),
+                    app.checkpoints.checkpoints.len()
+                )
+            } else {
+                format!(
+                    "manual save mode with {} undo step(s) and {} checkpoint(s) available",
+                    app.undo_history.len(),
+                    app.checkpoints.checkpoints.len()
+                )
+            }
         }
         HelpTopic::Themes => format!(
             "current theme {}, motion {}, accents {}, minimal {} stored next to the map",
@@ -6856,6 +7086,32 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
             })
             .unwrap_or_else(|| {
                 "create a node first, then add inline tags, ids, or references".to_string()
+            }),
+        HelpTopic::Ids => app
+            .editor
+            .current()
+            .map(|node| match &node.id {
+                Some(id) => format!("current node already exposes [id:{id}]"),
+                None => "current node has no [id:...] yet, so it is not deep-linkable".to_string(),
+            })
+            .unwrap_or_else(|| {
+                "focus a branch first, then add an id if it should be a stable target".to_string()
+            }),
+        HelpTopic::Relations => app
+            .editor
+            .current()
+            .map(|node| {
+                if node.relations.is_empty() {
+                    "current node has no outgoing relations yet".to_string()
+                } else {
+                    format!(
+                        "current node has {} outgoing relation(s)",
+                        node.relations.len()
+                    )
+                }
+            })
+            .unwrap_or_else(|| {
+                "focus a node with an id if you want backlinks to have a stable target".to_string()
             }),
     }
 }
@@ -8264,7 +8520,7 @@ fn help_preview_lines(app: &TuiApp, topic: HelpTopic) -> Vec<Line<'static>> {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw("  "),
-            Span::styled("User Guide", Style::default().fg(palette.accent)),
+            Span::styled(topic.track_label(), Style::default().fg(palette.accent)),
         ]),
         Line::from(Span::styled(
             topic.summary(),
@@ -8859,7 +9115,7 @@ mod tests {
 
         app.handle_key(KeyEvent::new(KeyCode::Char(':'), KeyModifiers::NONE))
             .expect("colon should open the command palette");
-        for character in "syntax".chars() {
+        for character in "start".chars() {
             app.handle_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE))
                 .expect("typing should update the palette query");
         }
@@ -8868,8 +9124,8 @@ mod tests {
 
         assert!(app.help.is_some(), "help should open from the palette");
         let topics = app.help_topics(&app.help.as_ref().expect("help should be open").query);
-        assert_eq!(topics.first().copied(), Some(HelpTopic::Syntax));
-        assert!(app.status.text.contains("Inline Syntax"));
+        assert_eq!(topics.first().copied(), Some(HelpTopic::StartHere));
+        assert!(app.status.text.contains("Start Here"));
 
         let session_path =
             crate::session::session_path_for(&map_path).expect("session path should be derivable");
@@ -9140,6 +9396,48 @@ mod tests {
             "searching for 'value' should find the syntax topic"
         );
 
+        let deep_link_topics = app.help_topics("deep link");
+        assert!(
+            deep_link_topics.contains(&HelpTopic::Ids),
+            "searching for 'deep link' should find the ids topic"
+        );
+
+        let backlink_topics = app.help_topics("backlink");
+        assert!(
+            backlink_topics.contains(&HelpTopic::Relations),
+            "searching for 'backlink' should find the relations topic"
+        );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn help_topics_default_to_a_guided_order_instead_of_alphabetical() {
+        let map_path = temp_map_path("help-order.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let topics = app.help_topics("");
+        assert_eq!(topics.first().copied(), Some(HelpTopic::StartHere));
+        assert_eq!(topics.get(1).copied(), Some(HelpTopic::Navigation));
+        assert_eq!(topics.get(2).copied(), Some(HelpTopic::Editing));
+        assert!(
+            topics.iter().position(|topic| *topic == HelpTopic::Palette)
+                < topics.iter().position(|topic| *topic == HelpTopic::Themes),
+            "workflow topics should appear before surface-polish topics"
+        );
+
         let session_path =
             crate::session::session_path_for(&map_path).expect("session path should be derivable");
         if session_path.exists() {
@@ -9166,10 +9464,34 @@ mod tests {
             "searching for a tip-only term should still find the navigation help article"
         );
 
+        let beginner_topics = app.help_topics("first five minutes");
+        assert!(
+            beginner_topics.contains(&HelpTopic::StartHere),
+            "searching for intro-level guide prose should find the Start Here article"
+        );
+
         let rooted_topics = app.help_topics("temporary workspace");
         assert!(
             rooted_topics.contains(&HelpTopic::Views),
             "searching for guide prose should find the views help article"
+        );
+
+        let first_query_topics = app.help_topics("plain text");
+        assert!(
+            first_query_topics.contains(&HelpTopic::Search),
+            "searching for beginner search phrasing should find the search help article"
+        );
+
+        let palette_topics = app.help_topics("workflow recipe");
+        assert!(
+            palette_topics.contains(&HelpTopic::Palette),
+            "searching for palette workflow language should find the palette article"
+        );
+
+        let safety_topics = app.help_topics("autosave checkpoint");
+        assert!(
+            safety_topics.contains(&HelpTopic::Safety),
+            "searching for recovery language should find the safety article"
         );
 
         let session_path =

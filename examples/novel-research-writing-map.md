@@ -33,24 +33,24 @@
       - city-as-memory novel
       - family reckoning hidden inside an impossible institution
   - Core Cast #guide @section:characters [id:glass-archive/characters]
-    - Lia Voss #character @pov:lia [id:glass-archive/characters/lia]
+    - Lia Voss #character @pov:lia [id:glass-archive/characters/lia] [[rel:embodies->glass-archive/themes/preservation]] [[rel:haunted-by->glass-archive/places/archive]]
       - paper conservator, thirty-two, very good at repairing damage she cannot prevent
       - wants to find her father without becoming him
       - fears that preserving the past may only trap it
       - active emotional arc #arc @status:active
-    - Tomas Voss #character [id:glass-archive/characters/tomas]
+    - Tomas Voss #character [id:glass-archive/characters/tomas] [[rel:drives->glass-archive/plot/main/act-1]] [[rel:shapes->glass-archive/themes/inheritance]]
       - Lia's father, historian, vanished inside the Archive after leaving behind a false final letter
       - knew the Archive was rewriting records long before anyone believed him
       - may be protecting the city or betraying it
-    - Elian Vale #character [id:glass-archive/characters/elian]
+    - Elian Vale #character [id:glass-archive/characters/elian] [[rel:serves->glass-archive/places/archive]] [[rel:complicates->glass-archive/plot/secondary/lia-elian]]
       - private archivist with perfect manners and a suspiciously flexible biography
       - appears to help Lia navigate the stacks
       - possibly in love with the institution more than any person inside it
-    - Mara Seline #character [id:glass-archive/characters/mara]
+    - Mara Seline #character [id:glass-archive/characters/mara] [[rel:drives->glass-archive/plot/secondary/mara-investigation]] [[rel:tests->glass-archive/themes/public-memory]]
       - journalist who tracks erased municipal scandals
       - pushes the book toward public consequence instead of private grief
       - delivers the sharpest dialogue and refuses decorative mystery
-    - Sister Iven #character [id:glass-archive/characters/iven]
+    - Sister Iven #character [id:glass-archive/characters/iven] [[rel:guards->glass-archive/places/chapel]] [[rel:embodies->glass-archive/plot/secondary/chapel-memory]]
       - caretaker of the river chapel whose memory rituals predate the city
       - knows what names cost when they are spoken in the wrong room
     - Character tensions #reference [id:glass-archive/characters/tensions]
@@ -58,7 +58,7 @@
       - Lia and Elian: attraction entangled with institutional loyalty
       - Lia and Mara: truth for one family versus truth for a city
   - Places #guide @section:places [id:glass-archive/places]
-    - The Glass Archive #location @location:archive [id:glass-archive/places/archive]
+    - The Glass Archive #location @location:archive [id:glass-archive/places/archive] [[rel:embodies->glass-archive/themes/record]]
       - a private collection hidden behind a repurposed observatory
       - catalog rooms shift when certain names are restored
       - the building should feel exact, not haunted-for-show
@@ -66,7 +66,7 @@
       - Lia's cramped apartment above a tailor shop
       - where repair work, insomnia, and false starts accumulate
       - should hold the novel's most human-scale scenes
-    - River Chapel #location @location:chapel [id:glass-archive/places/chapel]
+    - River Chapel #location @location:chapel [id:glass-archive/places/chapel] [[rel:echoes->glass-archive/themes/public-memory]]
       - chapel of votive bells sunk one stair below flood level
       - rituals for names forgotten by official record
       - strongest thematic counterweight to the Archive
@@ -91,9 +91,9 @@
         - Lia decides whether to save her father or expose the Archive
         - the ending should feel costly, lucid, and earned
     - Secondary lines #plot @arc:secondary [id:glass-archive/plot/secondary]
-      - Mara's investigation into erased labor strikes #plot @status:active
-      - Lia and Elian's uneasy intimacy #plot @status:active
-      - chapel memory rite inheritance #plot @status:todo
+      - Mara's investigation into erased labor strikes #plot @status:active [id:glass-archive/plot/secondary/mara-investigation] [[glass-archive/characters/mara]] [[rel:draws-on->glass-archive/research/archive-politics]]
+      - Lia and Elian's uneasy intimacy #plot @status:active [id:glass-archive/plot/secondary/lia-elian] [[glass-archive/characters/lia]] [[glass-archive/characters/elian]]
+      - chapel memory rite inheritance #plot @status:todo [id:glass-archive/plot/secondary/chapel-memory] [[glass-archive/characters/iven]] [[glass-archive/places/chapel]]
       - the origin of the observatory conversion #plot @status:todo
     - Mystery obligations #reference [id:glass-archive/plot/obligations]
       - every clue must look emotional before it looks mechanical
@@ -150,9 +150,9 @@
       - chapel bells carried names the river had refused to keep
   - Chapter Board #guide @section:chapters [id:glass-archive/chapters]
     - Drafting now #chapter @status:active [id:glass-archive/chapters/current]
-      - Chapter 3 - First entrance to the Archive @pov:lia #chapter
-      - Chapter 6 - Mara brings the labor strike photos @pov:lia #chapter
-      - Chapter 9 - Bell ritual at the chapel @pov:lia #chapter
+      - Chapter 3 - First entrance to the Archive @pov:lia #chapter [id:glass-archive/chapters/chapter-3] [[glass-archive/characters/elian]] [[glass-archive/places/archive]]
+      - Chapter 6 - Mara brings the labor strike photos @pov:lia #chapter [id:glass-archive/chapters/chapter-6] [[glass-archive/characters/mara]] [[glass-archive/plot/secondary/mara-investigation]]
+      - Chapter 9 - Bell ritual at the chapel @pov:lia #chapter [id:glass-archive/chapters/chapter-9] [[glass-archive/characters/iven]] [[glass-archive/places/chapel]] [[glass-archive/themes/public-memory]]
     - Outline spine #chapter [id:glass-archive/chapters/spine]
       - opening letter and impossible date #chapter
       - apartment repair scene to establish craft and restraint #chapter

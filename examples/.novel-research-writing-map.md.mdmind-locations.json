@@ -1,0 +1,194 @@
+{
+  "frequent": [
+    {
+      "anchor": {
+        "path": [
+          0,
+          4
+        ],
+        "id": "glass-archive/plot"
+      },
+      "visits": 9,
+      "last_seen": 84
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4,
+          0
+        ],
+        "id": "glass-archive/plot/main"
+      },
+      "visits": 7,
+      "last_seen": 64
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3
+        ],
+        "id": "glass-archive/places"
+      },
+      "visits": 5,
+      "last_seen": 85
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          8
+        ],
+        "id": "glass-archive/chapters"
+      },
+      "visits": 5,
+      "last_seen": 80
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          5
+        ],
+        "id": "glass-archive/themes"
+      },
+      "visits": 4,
+      "last_seen": 83
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          6
+        ],
+        "id": "glass-archive/research"
+      },
+      "visits": 4,
+      "last_seen": 82
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          7
+        ],
+        "id": "glass-archive/quotes"
+      },
+      "visits": 4,
+      "last_seen": 81
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          9
+        ],
+        "id": "glass-archive/revision"
+      },
+      "visits": 4,
+      "last_seen": 79
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          10
+        ],
+        "id": "glass-archive/workflow"
+      },
+      "visits": 4,
+      "last_seen": 78
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4,
+          0,
+          0
+        ],
+        "id": "glass-archive/plot/main/act-1"
+      },
+      "visits": 4,
+      "last_seen": 65
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          8,
+          1
+        ],
+        "id": "glass-archive/chapters/spine"
+      },
+      "visits": 3,
+      "last_seen": 75
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          8,
+          0,
+          2
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 74
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          8,
+          0,
+          1
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 73
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          8,
+          0,
+          0
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 72
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          8,
+          0
+        ],
+        "id": "glass-archive/chapters/current"
+      },
+      "visits": 3,
+      "last_seen": 71
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4,
+          0,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 66
+    }
+  ]
+}

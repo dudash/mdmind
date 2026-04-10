@@ -240,6 +240,12 @@ mdm init prompts.md --template prompts
 User-facing and product docs:
 
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+- [docs/TUI_WORKFLOWS.md](docs/TUI_WORKFLOWS.md)
+- [docs/PALETTE_AND_HELP.md](docs/PALETTE_AND_HELP.md)
+- [docs/SAFETY_AND_HISTORY.md](docs/SAFETY_AND_HISTORY.md)
+- [docs/QUERY_LANGUAGE.md](docs/QUERY_LANGUAGE.md)
+- [docs/IDS_AND_DEEP_LINKS.md](docs/IDS_AND_DEEP_LINKS.md)
+- [docs/CROSS_LINKS_AND_BACKLINKS.md](docs/CROSS_LINKS_AND_BACKLINKS.md)
 - [docs/FUTURE_FEATURES.md](docs/FUTURE_FEATURES.md)
 - [docs/TERMINAL_EXPERIENCE.md](docs/TERMINAL_EXPERIENCE.md)
 - [docs/DOCUMENTATION_STRATEGY.md](docs/DOCUMENTATION_STRATEGY.md)

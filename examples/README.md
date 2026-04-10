@@ -195,6 +195,7 @@ What it demonstrates:
 
 - writing projects as structured maps instead of loose notes
 - `#theme`, `#quote`, `#chapter`, and location-based metadata
+- cross-links between characters, locations, themes, plot lines, and current chapters
 - how research, drafting, and revision can live in one file
 
 Good first jumps:
@@ -211,6 +212,7 @@ mdm tags examples/novel-research-writing-map.md --plain
 mdm find examples/novel-research-writing-map.md "#quote" --plain
 mdm find examples/novel-research-writing-map.md "@location:archive" --plain
 mdm kv examples/novel-research-writing-map.md --keys pov,location,owner,status --plain
+mdm relations examples/novel-research-writing-map.md#glass-archive/characters/mara --plain
 ```
 
 ## Suggested Workflow

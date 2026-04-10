@@ -4,12 +4,16 @@
       - mdmind is a local-first mind mapping tool for structured thinking in plain text
       - the same map file works in both the mdm CLI and the mdmind TUI
       - the goal is keyboard-first thinking, not whiteboard-style diagramming
+    - If you are completely new #guide [id:guide/start/new-user]
+      - you do not need ids, relations, exports, or the visual mindmap on day one
+      - first learn focus, moving around the tree, adding a child, editing a line, and opening search or the palette
+      - the structured features become useful as the map gets bigger and more long-lived
     - What a map line can hold #guide [id:guide/start/map-line]
       - a visible label for people
       - #tags for grouping and workflow markers #reference
       - @key:value metadata for structured attributes #reference
-      - [id:path/to/node] for stable deep links #reference
-      - [[target]] or [[rel:kind->target]] for cross-links across branches #reference
+      - an id token for stable deep links #reference
+      - double-bracket cross-links for lateral references across branches #reference
     - First five minutes #recipe [id:guide/start/first-five]
       - run mdmind on a small map file
       - move with the arrow keys
@@ -19,6 +23,7 @@
       - press m to open the visual mindmap
     - Good first habit #tip [id:guide/start/first-habit]
       - keep node labels short and readable
+      - start with just labels, tags, and a little metadata before you worry about ids or relations
       - use ids on important branches you want to revisit later
       - use a few consistent tags and metadata keys across the whole map
   - Core Mental Model #guide @section:model [id:guide/model]
@@ -56,6 +61,26 @@
       - if scrolling starts to feel noisy, try a focused view before you keep navigating
       - if you bounce between two branches often, use the palette instead of retracing the tree
       - if a branch matters long term, give it an id
+  - Command Palette And Help #guide @section:palette [id:guide/palette]
+    - Why the palette matters #guide [id:guide/palette/why]
+      - the palette is the fastest surface when you already know your intent
+      - it is not only for commands; it also handles branch jumps, ids, recipes, relations, recovery, and help
+    - Good palette queries #reference [id:guide/palette/queries]
+      - tasks
+      - product/api-design
+      - review todo
+      - checkpoint
+      - backlink
+      - theme
+      - help
+    - Built-in help #guide [id:guide/palette/help]
+      - ? opens searchable help with beginner guides, reference, and tips
+      - the best reading order for new users is Start Here, Navigation, Editing, and Search
+      - ids and relations are worth reading later, once the basics feel natural
+    - Palette tips #tip [id:guide/palette/tips]
+      - use the palette when you know the target
+      - use search when you need to narrow the working set
+      - use help when you know the question but not the answer
   - Editing #guide @section:editing [id:guide/editing]
     - Everyday editing #reference [id:guide/editing/keys]
       - a adds a child
@@ -77,6 +102,10 @@
       - if a change feels risky, create a checkpoint first
       - use consistent metadata keys such as status and owner instead of near-duplicates
   - Search And Filters #guide @section:search [id:guide/search]
+    - How to start search #guide [id:guide/search/start]
+      - if you are new, begin with plain text instead of trying to memorize query syntax
+      - press /, type a word or phrase, and press Enter
+      - once that feels natural, add #tags and then @key:value metadata
     - Query search #reference [id:guide/search/query]
       - / opens unified search on the Query tab
       - plain text, #tags, and @key:value are supported
@@ -97,6 +126,7 @@
       - Example: #todo @owner:jason
     - Search tips #tip [id:guide/search/tips]
       - start broad with text, then tighten with tags or metadata
+      - if you do not know the map's vocabulary yet, use facets before you guess metadata values
       - saved views are best for recurring workflows, not one-off searches
       - facet browsing is the fastest way to learn what metadata already exists in a map
   - CLI Inspection #guide @section:cli [id:guide/cli]
@@ -145,35 +175,66 @@
       - the mindmap follows the current view mode too
       - Esc exits a focused projection before it clears filters
       - Subtree Only is for local work, not for changing the document itself
-  - Inline Syntax #guide @section:syntax [id:guide/syntax]
+  - Tags And Metadata #guide @section:syntax [id:guide/syntax]
+    - Why start here #guide [id:guide/syntax/why]
+      - tags and metadata are the easiest structured layer to adopt
+      - they unlock search, facets, and saved views without asking you to model every branch deeply
+      - if you only add one kind of structure beyond the label, make it this one
     - Tags #reference [id:guide/syntax/tags]
       - #tag adds a topic or workflow marker
       - use tags for fast grouping such as #todo, #idea, or #blocked
     - Metadata #reference [id:guide/syntax/metadata]
       - @key:value adds structured metadata
       - use metadata for attributes like @status:active or @owner:jason
-    - Ids and deep links #reference [id:guide/syntax/ids]
-      - Example token: [id:your/path] adds a stable deep-link target
-      - ids are ideal for palette jumps, deep links, and export targets
-    - Cross-links and backlinks #reference [id:guide/syntax/cross-links]
-      - Example token: [[product/api-design]] points to a node id from another branch
-      - Example token: [[rel:blocks->product/api-design]] adds meaning to that reference
-      - use cross-links when two branches are meaningfully connected but should still live in different parts of the tree
-      - backlinks are derived from incoming cross-links, not stored as extra tree structure
-      - the palette can surface outgoing relations and backlinks for the current node, then jump directly to the related branch
-    - Markdown compatibility #guide [id:guide/syntax/markdown]
-      - mdmind keeps these tokens inline in ordinary plain-text Markdown files
-      - most normal Markdown renderers will just show [id:...] and [[...]] as literal text
-      - tools with wiki-link support may also interpret [[target]] as a link, which is usually close to the intended meaning
     - Example node lines #example [id:guide/syntax/examples]
-      - API Design #backend @status:todo [id:product/api-design]
-      - Sprint Review #meeting @owner:jason @status:planned [id:team/sprint-review]
-      - Launch Readiness #release [[rel:blocked-by->product/api-design]]
+      - API Design #backend @status:todo
+      - Sprint Review #meeting @owner:jason @status:planned
     - Syntax tips #tip [id:guide/syntax/tips]
       - keep labels human-readable first, then add structure
       - reuse the same metadata keys across the map
-      - reserve ids for branches you expect to revisit or link to directly
-      - use plain [[target]] as the normal cross-link and typed [[rel:kind->target]] only when the relationship meaning is worth preserving
+      - a few shared tags and metadata fields are usually more valuable than lots of one-off annotations
+  - Ids And Deep Links #guide @section:ids [id:guide/ids]
+    - What ids are for #guide [id:guide/ids/why]
+      - an id token gives a branch a stable address
+      - ids are most useful for large maps, long-lived maps, exports, and reliable CLI or palette jumps
+      - not every node needs an id
+    - Common uses #reference [id:guide/ids/uses]
+      - jump by id with o
+      - jump by id through the palette with product/tasks or a literal id token
+      - deep-link into the CLI with mdm view map.md#product/tasks
+      - export one stable subtree with mdm export map.md#product/tasks --format mermaid
+    - Id naming tips #tip [id:guide/ids/naming]
+      - prefer short stable paths like product/api-design over visible labels with spaces
+      - add ids to durable branches, not every transient leaf
+      - if a link target feels important enough to revisit later, it probably deserves an id
+    - Example node lines #example [id:guide/ids/examples]
+      - API Design #backend [id:product/api-design]
+      - Sprint Review #meeting @owner:jason [id:team/sprint-review]
+    - Troubleshooting #tip [id:guide/ids/troubleshooting]
+      - if a deep link fails, run mdm links map.md to inspect the actual ids exposed by the file
+  - Relations And Backlinks #guide @section:relations [id:guide/relations]
+    - What they are for #guide [id:guide/relations/why]
+      - use a relation when two branches are meaningfully connected but should still live in different parts of the tree
+      - a plain double-bracket relation says these branches are connected
+      - a typed relation says how they are connected
+    - Plain and typed forms #reference [id:guide/relations/forms]
+      - Example token: [[guide/ids/examples]] points to a node id from another branch
+      - Example token: [[rel:related-to->guide/ids/examples]] adds meaning to that reference
+      - use the plain form most of the time and the typed form when the meaning is worth preserving
+    - Backlinks #reference [id:guide/relations/backlinks]
+      - backlinks are derived from incoming cross-links, not stored as extra tree structure
+      - the palette can surface outgoing relations and backlinks for the current node, then jump directly to the related branch
+      - ] follows outgoing relations and [ follows backlinks, opening a picker when there is more than one choice
+    - Markdown compatibility #guide [id:guide/relations/markdown]
+      - mdmind keeps these tokens inline in ordinary plain-text Markdown files
+      - most normal Markdown renderers will just show [id:...] and [[...]] as literal text
+      - tools with wiki-link support may also interpret a double-bracket target as a link, which is usually close to the intended meaning
+    - Example node lines #example [id:guide/relations/examples]
+      - Launch Readiness #release [[rel:blocked-by->guide/ids/examples]]
+      - Chapter 8 Reunion [[guide/ids/examples]] [[guide/relations/backlinks]]
+    - Relation tips #tip [id:guide/relations/tips]
+      - do not use relations as a substitute for basic tree structure
+      - backlinks come from incoming relations automatically, so you never maintain them by hand
   - Themes And Minimal Mode #guide @section:themes [id:guide/themes]
     - What themes affect #guide [id:guide/themes/what]
       - themes change the header, outline, overlays, status surfaces, and mindmap together
@@ -216,6 +277,7 @@
     - Safety tips #tip [id:guide/safety/tips]
       - take a manual checkpoint before major restructuring if you expect to compare outcomes
       - use recent action history in the palette when you want to jump back more than one step
+      - if autosave is on, restored states still write back to disk so the file and UI stay aligned
   - Recipes #recipe @section:recipes [id:guide/recipes]
     - Review all todo work #recipe [id:guide/recipes/review-todo]
       - open search
