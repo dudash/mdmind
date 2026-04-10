@@ -33,6 +33,7 @@ fn ui_settings_round_trip_through_disk() {
         theme: ThemeId::Blueprint,
         motion_enabled: true,
         ascii_accents: false,
+        minimal_mode: true,
     };
     save_ui_settings_for(&map_path, &settings).expect("ui settings should write");
 
@@ -44,5 +45,58 @@ fn ui_settings_round_trip_through_disk() {
     if settings_path.exists() {
         std::fs::remove_file(settings_path).ok();
     }
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
+fn ui_settings_load_older_sidecars_without_minimal_mode() {
+    let map_path = temp_map_path("older-product.md");
+    std::fs::write(&map_path, "- Root\n").expect("fixture map should be writable");
+    let settings_path =
+        ui_settings_path_for(&map_path).expect("ui settings path should be derivable");
+    std::fs::write(
+        &settings_path,
+        r#"{
+  "theme": "paper",
+  "motion_enabled": true,
+  "ascii_accents": true
+}"#,
+    )
+    .expect("older ui settings should write");
+
+    let loaded = load_ui_settings_for(&map_path).expect("older settings should still load");
+    assert_eq!(loaded.theme, ThemeId::Paper);
+    assert!(loaded.motion_enabled);
+    assert!(loaded.ascii_accents);
+    assert!(!loaded.minimal_mode);
+
+    std::fs::remove_file(settings_path).ok();
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
+fn ui_settings_load_reduced_motion_sidecars() {
+    let map_path = temp_map_path("reduced-motion.md");
+    std::fs::write(&map_path, "- Root\n").expect("fixture map should be writable");
+    let settings_path =
+        ui_settings_path_for(&map_path).expect("ui settings path should be derivable");
+    std::fs::write(
+        &settings_path,
+        r#"{
+  "theme": "monograph",
+  "reduced_motion": true,
+  "ascii_accents": false
+}"#,
+    )
+    .expect("reduced-motion ui settings should write");
+
+    let loaded =
+        load_ui_settings_for(&map_path).expect("reduced-motion settings should still load");
+    assert_eq!(loaded.theme, ThemeId::Monograph);
+    assert!(!loaded.motion_enabled);
+    assert!(!loaded.ascii_accents);
+    assert!(!loaded.minimal_mode);
+
+    std::fs::remove_file(settings_path).ok();
     std::fs::remove_file(map_path).ok();
 }

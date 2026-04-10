@@ -1,0 +1,273 @@
+- Lantern Studio Operating Map #guide @surface:big-example @horizon:8-weeks [id:lantern]
+  - Read Me First #guide #beginner [id:lantern/start]
+    - What this map is
+      - a fictional but realistic studio map built over roughly two months
+      - it mixes creative direction, route design, rehearsal planning, launch prep, audience signals, and team rituals
+      - it is intentionally dense so you can try views, filters, ids, relations, and saved views on a map with real shape
+    - Good first jumps #reference
+      - production core: lantern/product
+      - active production lane: lantern/execution/now
+      - audience signals: lantern/signals
+      - opening night: lantern/launch/week
+      - story and copy lab: lantern/prompts
+    - Good first filters #reference
+      - query #todo @status:active
+      - query @owner:jason
+      - query #blocked
+      - query @area:guest
+    - Cross-link demo #reference
+      - open lantern/product/docs or lantern/launch/assets, then type supports, depends-on, or backlink in the palette
+      - open the mindmap in Full Map to see typed relation edges between roadmap, guides, launch assets, and team branches
+  - Studio Story #guide @section:story [id:lantern/story]
+    - Mission #idea @status:active [id:lantern/story/mission]
+      - Build Drift Signal, a city-at-night audio adventure that makes strangers feel like they have wandered into a shared secret
+    - Experience Promise #idea [id:lantern/story/promise]
+      - intimate enough to feel discovered
+      - organized enough that guests never feel abandoned
+      - atmospheric enough that the city feels rewritten for one evening
+    - Studio Mood Board #fun [id:lantern/story/mood]
+      - sodium streetlight glow, ferry horns, taped maps, velvet jackets, radio hiss
+      - serious craft with a little mischief
+      - less escape room, more living poem with logistics
+    - Success in one sentence #metrics [id:lantern/story/success]
+      - a guest leaves with one line they cannot stop repeating and one route they want to walk again
+    - Flagship project #guide [id:lantern/story/flagship]
+      - Drift Signal is a ticketed nighttime walking experience that blends live performers, audio cues, found ephemera, and branching city routes
+      - the show should feel handcrafted and local, not theme-park smooth
+  - Production Core #guide @section:product [id:lantern/product]
+    - Audience #guide [id:lantern/product/audience]
+      - people who love immersive theatre but want something more intimate @segment:immersive
+      - locals who want to see their own city turned strange for one night @segment:city
+      - couples and friend groups looking for a memorable shared ritual @segment:shared-night
+      - arts audiences who value atmosphere and story more than challenge mechanics @segment:arts
+    - Experience Loop #guide [id:lantern/product/workflow]
+      - discover the event through haunting, low-pressure launch materials
+      - arrive and receive a role card plus first audio cue
+      - follow a route that mixes listening, walking, performer encounters, and found objects
+      - choose when to linger and when to chase the next signal
+      - end with a reveal that reframes the whole city route
+      - leave with a keepsake that extends the story for another day
+    - Capability Stack #guide [id:lantern/product/capabilities]
+      - Story Design #feature @area:story [id:lantern/product/story]
+        - route beats and chapter cards #done @status:done
+        - character voice packets #doing @status:active
+        - alternate ending decision map #todo @status:todo
+      - Route Design #feature @area:route [id:lantern/product/routes]
+        - harbor route locked #done @status:done
+        - station route timing pass #doing @status:active
+        - weather fallback route #todo @status:todo
+      - Performer Ops #feature @area:performers [id:lantern/product/performers]
+        - casting grid and role coverage #done @status:done
+        - understudy contingency plan #doing @status:active
+        - backstage handoff timing #todo @status:todo
+      - Guest Experience #feature @area:guest [id:lantern/product/guest]
+        - check-in script #done @status:done
+        - accessibility pass #doing @status:active
+        - post-show keepsake polish #todo @status:todo
+      - Guides And Ops Docs #feature @area:docs [id:lantern/product/docs]
+        - route guide for stewards #doing @status:active
+        - volunteer briefing packet #doing @status:active
+        - opening-night runbook #todo @status:active
+        - printed field cards #todo @status:todo
+        - docs cross-link launch work, ownership, and route risk without moving the tree [[rel:supports->lantern/roadmap/help]] [[rel:feeds->lantern/launch/assets]] [[rel:owned-by->lantern/team/leah]]
+    - Production Constraints #reference [id:lantern/product/constraints]
+      - guests must feel safe even while the city feels uncanny
+      - no single performer can become a single point of failure
+      - route instructions must remain legible under low light
+      - every tactile artifact has to survive rain or be easy to replace
+    - Quality Bar #reference [id:lantern/product/quality]
+      - guests should never feel processed
+      - atmosphere cannot outrun logistics
+      - docs and runbooks must update with every route or cast change
+      - examples and training material should feel as intentional as the show itself
+  - Roadmap #guide @section:roadmap [id:lantern/roadmap]
+    - Now #todo @status:active [id:lantern/roadmap/now]
+      - lock the field guide and volunteer handbook @owner:jason @priority:high [id:lantern/roadmap/help] [[rel:implemented-in->lantern/product/docs]] [[rel:owned-by->lantern/team/jason]]
+      - publish richer teaser materials @owner:leah @priority:high [id:lantern/roadmap/examples]
+      - polish nightfinding and route transitions @owner:mira @priority:high [id:lantern/roadmap/minimal]
+      - clarify weather fallback and accessibility story @owner:theo @priority:medium
+    - Next #todo [id:lantern/roadmap/next]
+      - sharpen post-show keepsake package
+      - add neighborhood partner version of the event brief
+      - tighten understudy handoff and cue recovery
+      - run one low-volume friends-and-family night
+    - Later #idea [id:lantern/roadmap/later]
+      - daytime version for schools and archives
+      - second neighborhood route with ferry departure
+      - companion booklet sold after the run
+      - portable version for festivals in other cities
+  - Execution Board #guide @section:execution [id:lantern/execution]
+    - Active Lane #todo @status:active [id:lantern/execution/now]
+      - tighten steward route guide language @owner:jason @area:docs
+      - write comprehensive guest prep email @owner:leah @area:guest
+      - make volunteer briefing cards feel elegant under low light @owner:mira @area:docs
+      - reduce dead time between station encounters @owner:mira @area:route
+    - Ready Lane #todo @status:todo [id:lantern/execution/ready]
+      - record alternate ending cue pack @owner:jason @area:story
+      - opening-night photo capture plan @owner:leah @area:launch
+      - accessibility escort timing review @owner:theo @area:guest
+    - Blocked Lane #blocked @status:blocked [id:lantern/execution/blocked]
+      - final permit timing waits on city events office @owner:mira @dependency:permit
+      - rain shelter decision waits on backup venue quote @owner:theo @dependency:venue
+    - Done Lane #done @status:done [id:lantern/execution/done]
+      - route scouting
+      - casting grid
+      - audio device shortlist
+      - nightly reset checklist
+      - ticket tiers and session cadence
+  - Eight Week Build Log #guide @section:timeline [id:lantern/timeline]
+    - Week 1 - Premise And Feasibility #done @status:done [id:lantern/timeline/week-1]
+      - decided the show had to be walkable, modular, and weather-aware
+      - proved the harbor route could hold the right emotional shape
+      - learned quickly that romance without logistics is just stress in nice lighting
+    - Week 2 - Route And Story Spine #done @status:done [id:lantern/timeline/week-2]
+      - route beats became chapter cards
+      - performer entrances started to map cleanly to physical landmarks
+      - the final reveal finally found the right district
+    - Week 3 - Audience Flow #done @status:done [id:lantern/timeline/week-3]
+      - check-in and first cue went from vague to usable
+      - ticket pacing and group spacing became real operating constraints
+      - we started designing the evening, not just the narrative
+    - Week 4 - Performer Systems #done @status:done [id:lantern/timeline/week-4]
+      - casting grid stabilized
+      - role packets improved consistency without flattening the performances
+      - understudy risk became visible instead of hypothetical
+    - Week 5 - Guides And Training #done @status:done [id:lantern/timeline/week-5]
+      - steward docs turned into something other people could actually run
+      - volunteer packet started teaching tone, not just rules
+      - backstage handoffs stopped feeling hand-wavy
+    - Week 6 - Surface And Atmosphere #done @status:done [id:lantern/timeline/week-6]
+      - signage, field cards, and printed objects gained a shared visual language
+      - route transitions got calmer and more legible
+      - the event started to feel like one authored world
+    - Week 7 - Contingencies And Recovery #done @status:done [id:lantern/timeline/week-7]
+      - weather fallback got credible
+      - recovery plans for missed cues stopped being improvised
+      - we learned which parts of the night were fragile and which were resilient
+    - Week 8 - Launch Materials And Dress Rehearsal #doing @status:active [id:lantern/timeline/week-8]
+      - teaser rollout
+      - route guide final pass
+      - opening-night asset checklist
+      - this week ties roadmap, docs, launch, and examples together [[rel:delivers->lantern/roadmap/examples]] [[rel:supports->lantern/launch/assets]]
+  - Audience Signals #guide @section:signals [id:lantern/signals]
+    - What early guests love #signal @tone:positive [id:lantern/signals/love]
+      - the city starts to feel rewritten without needing a giant build
+      - audio cues make people pay attention to ordinary places differently
+      - the keepsake ending gives the night a soft landing
+    - Where guests hesitate #signal @tone:mixed [id:lantern/signals/hesitation]
+      - some people are not sure how physically demanding the route is
+      - they want clearer expectations before arrival
+      - they love mystery but still want reassurance about safety and timing
+    - Friction we must remove #signal @tone:negative [id:lantern/signals/friction]
+      - ticket confirmation needs clearer arrival guidance
+      - one route handoff still feels too abrupt
+      - weather backup language sounds more alarming than calm
+    - Quotes Worth Designing Around #reference [id:lantern/signals/quotes]
+      - it felt like the city had been listening to itself
+      - I never got lost, but I did feel slightly haunted
+      - the ending made me want to walk the route again alone the next morning
+  - Story Lab And Copy #guide @section:prompts [id:lantern/prompts]
+    - Why this branch exists
+      - Drift Signal lives or dies on tone as much as logistics
+      - teaser copy, cue scripts, performer notes, and guide language all need the same authored voice
+    - Active copy work #todo @status:active [id:lantern/prompts/active]
+      - guest prep email tone pass @owner:leah
+      - route card naming pass @owner:jason
+      - partner venue intro copy @owner:leah
+      - copy work feeds launch story and guide polish [[rel:feeds->lantern/launch/story]] [[rel:supports->lantern/product/docs]]
+    - Evaluation tags #reference [id:lantern/prompts/evals]
+      - strong line @score:strong
+      - too purple @failure:overwritten
+      - too vague @failure:unclear
+      - too corporate @failure:dead-voice
+    - Copy tips #tip [id:lantern/prompts/tips]
+      - write for low light and low bandwidth
+      - keep instructions calm even when the tone is eerie
+      - every poetic line should still help the guest move forward
+  - Launch Plan #guide @section:launch [id:lantern/launch]
+    - Opening night objectives #guide [id:lantern/launch/week]
+      - guests arrive curious, not confused
+      - stewards feel overprepared rather than barely ready
+      - every route pivot has a graceful fallback
+    - Assets #reference [id:lantern/launch/assets]
+      - teaser stills and route teaser cards #todo @status:todo @owner:leah
+      - rehearsal photo selects #todo @status:todo @owner:mira
+      - printed field guide bundle #todo @status:todo @owner:jason
+      - these launch assets depend on docs quality, teaser materials, and route polish [[rel:depends-on->lantern/product/docs]] [[rel:depends-on->lantern/roadmap/examples]] [[rel:depends-on->lantern/roadmap/minimal]]
+    - Story points for launch copy #reference [id:lantern/launch/story]
+      - intimate city mystery
+      - guided but not over-controlled
+      - handcrafted nighttime ritual
+      - memorable objects and repeatable routes
+      - safe enough to trust, strange enough to talk about
+    - Launch risks #blocked @status:blocked [id:lantern/launch/risks]
+      - poor weather could flatten the atmosphere if backup language feels cheap
+      - one signage bug in the dark will feel much bigger than it sounds on paper
+      - opening-night staff fatigue could make tone drift into rushed logistics
+  - Team And Rituals #guide @section:team [id:lantern/team]
+    - Jason @owner:jason [id:lantern/team/jason]
+      - overall creative direction
+      - route guide writing
+      - audio cue review
+    - Mira @owner:mira [id:lantern/team/mira]
+      - visual systems
+      - signage and printed object polish
+      - route transitions and on-site calm
+    - Theo @owner:theo [id:lantern/team/theo]
+      - permits and backup plans
+      - accessibility and operating risk review
+      - weather and venue contingencies
+    - Leah @owner:leah [id:lantern/team/leah]
+      - guest-facing copy
+      - teaser materials
+      - partner comms and opening-night tone
+    - Daily ritual #reference [id:lantern/team/daily]
+      - check #todo @status:active
+      - review blockers
+      - walk one live route segment if possible
+    - Weekly ritual #reference [id:lantern/team/weekly]
+      - refresh roadmap
+      - retire one stale idea
+      - mark one branch as the week's fragile point
+      - celebrate one thing that became more believable
+    - Fun branch #fun [id:lantern/team/fun]
+      - possible edition names
+        - Drift Signal
+        - Ferrylight
+        - The Last Warm Frequency
+      - mascot ideas
+        - brass transit bird
+        - moody harbor fox
+        - rainproof paper ghost with a clipboard
+  - Risks And Recovery #guide @section:risks [id:lantern/risks]
+    - Production risks #blocked [id:lantern/risks/product]
+      - too much atmosphere could blur the practical guest path
+      - route ambition could outrun volunteer capacity
+      - docs could become stale if route changes are not reflected immediately
+    - Recovery plans #reference [id:lantern/risks/recovery]
+      - cut complexity before cutting emotional clarity
+      - keep one fallback per fragile moment
+      - update guides, launch materials, and training together whenever a route changes
+    - Watch list #reference [id:lantern/risks/watch]
+      - signage legibility in rain
+      - guest pacing between station encounters
+      - understudy confidence on the river segment
+  - Parking Lot #idea @section:parking [id:lantern/parking]
+    - daylight archive walk for schools
+    - companion zine sold after the run
+    - audio-only late-night radio edition
+    - neighborhood business tie-ins with stamped route cards
+    - tiny post-show phone line with one more clue
+  - Suggested Views And Filters #reference [id:lantern/lenses]
+    - Guest experience work
+      - query @area:guest
+    - Visual systems
+      - query @owner:mira
+    - Operating risk
+      - query #blocked
+    - Story and copy
+      - query @section:prompts
+    - Live work this week
+      - query #todo @status:active
+    - Launch branch
+      - jump lantern/launch

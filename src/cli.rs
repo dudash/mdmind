@@ -12,11 +12,14 @@ use crate::app::{
 };
 use crate::export::export_document;
 use crate::interactive::run_interactive;
-use crate::query::{find_matches, link_entries, metadata_rows, tag_counts};
+use crate::query::{
+    find_matches, link_entries, metadata_rows, relation_entries, relation_entries_for_anchor,
+    tag_counts,
+};
 use crate::render::{
     render_find, render_find_plain, render_links, render_links_plain, render_metadata,
-    render_metadata_plain, render_tags, render_tags_plain, render_tree, render_validate,
-    render_validate_plain,
+    render_metadata_plain, render_relations, render_relations_plain, render_tags,
+    render_tags_plain, render_tree, render_validate, render_validate_plain,
 };
 use crate::templates::TemplateKind;
 
@@ -26,7 +29,7 @@ use crate::templates::TemplateKind;
     version,
     about = "Inspect and validate local markdown-like thought maps.",
     long_about = "mdm is the CLI for local-first structured maps. It reads plain-text tree files, renders them for humans, and exports machine-friendly output when you ask for --json or --plain.",
-    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm open ideas.md#product/api-design"
+    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm open ideas.md#product/api-design"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -72,6 +75,14 @@ enum Commands {
     },
     #[command(about = "List every id and its deep-linkable path.")]
     Links {
+        target: String,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+    },
+    #[command(about = "List outgoing relations, or incoming backlinks for a deep-linked node.")]
+    Relations {
         target: String,
         #[arg(long)]
         json: bool,
@@ -252,6 +263,28 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
                 &links,
                 || render_links(&links),
                 || render_links_plain(&links),
+            )
+        }
+        Commands::Relations {
+            target,
+            json,
+            plain,
+        } => {
+            let loaded = load_document(&target).map_err(CliError::from_app)?;
+            ensure_parseable(&loaded).map_err(CliError::from_app)?;
+            let rows = match loaded.target.anchor.as_deref() {
+                Some(anchor) => {
+                    select_document(&loaded).map_err(CliError::from_app)?;
+                    relation_entries_for_anchor(&loaded.document, anchor)
+                }
+                None => relation_entries(&select_document(&loaded).map_err(CliError::from_app)?),
+            };
+            print_output(
+                json,
+                plain,
+                &rows,
+                || render_relations(&rows),
+                || render_relations_plain(&rows),
             )
         }
         Commands::Validate {

@@ -1,0 +1,39 @@
+- Decision Map #guide @surface:strategy [id:example/decisions]
+  - Current Decision #guide [id:example/decisions/current]
+    - Question #question
+      - How should built-in help and repo docs relate over time?
+    - Working answer #idea @status:active
+      - keep built-in help contextual and searchable
+      - keep repo docs as the deeper source of truth
+      - avoid forcing both surfaces to be identical too early
+  - Options #guide [id:example/decisions/options]
+    - Fully generated from markdown @status:todo [id:example/decisions/options/generated]
+      - pros
+        - one source of truth
+        - less content drift
+      - risks
+        - harder to keep contextual inside the TUI
+        - more infrastructure before the content stabilizes
+    - Separate but aligned @status:active [id:example/decisions/options/aligned]
+      - pros
+        - faster iteration on in-app help
+        - easier contextual writing
+      - risks
+        - requires discipline to keep concepts aligned
+    - Manual only forever @status:blocked [id:example/decisions/options/manual]
+      - pros
+        - simplest implementation
+      - risks
+        - content drift becomes likely
+        - examples and terminology may diverge
+  - Recommendation #guide [id:example/decisions/recommendation]
+    - Use separate but aligned content for now #idea @status:active
+    - Revisit generation later when the docs and help model stabilize #tip
+  - Evidence #reference [id:example/decisions/evidence]
+    - Built-in help is best for contextual guidance
+    - Repo docs are better for long-form reading and screenshots
+    - A map-based user guide can bridge both worlds
+  - Related Deep Links #reference [id:example/decisions/links]
+    - User guide root: guide
+    - Decision option: example/decisions/options/aligned
+    - Product docs branch: example/product/features/docs

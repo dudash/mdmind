@@ -1,0 +1,207 @@
+- The Glass Archive Novel Research And Writing Map #guide @surface:writing @genre:literary-mystery [id:glass-archive]
+  - Start Here #guide #beginner [id:glass-archive/start]
+    - What this map is
+      - a combined novel-planning, research, drafting, and revision map for a literary mystery
+      - it is designed to show how mdmind can hold characters, locations, plotlines, themes, quotes, and active writing work in one file
+      - the shape is intentionally layered so you can jump by id, filter by theme, and isolate one thread at a time
+    - Good first jumps #reference
+      - premise: glass-archive/book
+      - main cast: glass-archive/characters
+      - chapter board: glass-archive/chapters
+      - research notes: glass-archive/research
+      - themes and symbols: glass-archive/themes
+    - Good first filters #reference
+      - query #chapter @status:active
+      - query #theme
+      - query @pov:lia
+      - query @location:archive
+      - query #quote
+  - Book Overview #guide @section:book [id:glass-archive/book]
+    - One-line pitch #reference [id:glass-archive/book/pitch]
+      - After her estranged father disappears inside a private archive that collects letters history tried to destroy, a conservator discovers the building is editing the city around it
+    - Project goals #guide [id:glass-archive/book/goals]
+      - write a mystery that feels intimate before it feels strange
+      - let research deepen the emotional world instead of reading like display-case trivia
+      - keep the prose elegant but legible
+    - Tone #reference [id:glass-archive/book/tone]
+      - candlelight on brass rails
+      - rain on stone stairs
+      - tenderness inside dread
+      - occasional dry humor so the book can breathe
+    - Comparative shelf #reference [id:glass-archive/book/comps]
+      - archival mystery with literary pacing
+      - city-as-memory novel
+      - family reckoning hidden inside an impossible institution
+  - Core Cast #guide @section:characters [id:glass-archive/characters]
+    - Lia Voss #character @pov:lia [id:glass-archive/characters/lia]
+      - paper conservator, thirty-two, very good at repairing damage she cannot prevent
+      - wants to find her father without becoming him
+      - fears that preserving the past may only trap it
+      - active emotional arc #arc @status:active
+    - Tomas Voss #character [id:glass-archive/characters/tomas]
+      - Lia's father, historian, vanished inside the Archive after leaving behind a false final letter
+      - knew the Archive was rewriting records long before anyone believed him
+      - may be protecting the city or betraying it
+    - Elian Vale #character [id:glass-archive/characters/elian]
+      - private archivist with perfect manners and a suspiciously flexible biography
+      - appears to help Lia navigate the stacks
+      - possibly in love with the institution more than any person inside it
+    - Mara Seline #character [id:glass-archive/characters/mara]
+      - journalist who tracks erased municipal scandals
+      - pushes the book toward public consequence instead of private grief
+      - delivers the sharpest dialogue and refuses decorative mystery
+    - Sister Iven #character [id:glass-archive/characters/iven]
+      - caretaker of the river chapel whose memory rituals predate the city
+      - knows what names cost when they are spoken in the wrong room
+    - Character tensions #reference [id:glass-archive/characters/tensions]
+      - Lia and Tomas: inheritance versus refusal
+      - Lia and Elian: attraction entangled with institutional loyalty
+      - Lia and Mara: truth for one family versus truth for a city
+  - Places #guide @section:places [id:glass-archive/places]
+    - The Glass Archive #location @location:archive [id:glass-archive/places/archive]
+      - a private collection hidden behind a repurposed observatory
+      - catalog rooms shift when certain names are restored
+      - the building should feel exact, not haunted-for-show
+    - Flood Street Apartment #location @location:apartment [id:glass-archive/places/apartment]
+      - Lia's cramped apartment above a tailor shop
+      - where repair work, insomnia, and false starts accumulate
+      - should hold the novel's most human-scale scenes
+    - River Chapel #location @location:chapel [id:glass-archive/places/chapel]
+      - chapel of votive bells sunk one stair below flood level
+      - rituals for names forgotten by official record
+      - strongest thematic counterweight to the Archive
+    - Hall Of Indexes #location @location:index-hall [id:glass-archive/places/index-hall]
+      - a chamber of suspended drawer cabinets and mirrored ladders
+      - central reveal location for Act 2
+    - North Station #location @location:station [id:glass-archive/places/station]
+      - rain-swept commuter station where several missing-person threads intersect
+      - good recurring transit image for time and departure
+  - Plot Architecture #guide @section:plot [id:glass-archive/plot]
+    - Main line #plot @arc:main [id:glass-archive/plot/main]
+      - Act 1 - The false farewell #plot @status:active [id:glass-archive/plot/main/act-1]
+        - Lia receives a letter in her father's hand that references an event he could not have witnessed
+        - Mara brings proof that civic archives have quietly changed over the last decade
+        - Lia enters the Glass Archive under the pretense of restoration work
+      - Act 2 - Rooms that correct the world #plot @status:todo [id:glass-archive/plot/main/act-2]
+        - Lia learns the Archive can strengthen one history by weakening another
+        - Elian reveals he has been trained to preserve institutional continuity at any cost
+        - Tomas appears to be hiding evidence inside damaged bindings
+      - Act 3 - The cost of keeping a city intact #plot @status:todo [id:glass-archive/plot/main/act-3]
+        - the city must choose whether memory should remain stable or become honest
+        - Lia decides whether to save her father or expose the Archive
+        - the ending should feel costly, lucid, and earned
+    - Secondary lines #plot @arc:secondary [id:glass-archive/plot/secondary]
+      - Mara's investigation into erased labor strikes #plot @status:active
+      - Lia and Elian's uneasy intimacy #plot @status:active
+      - chapel memory rite inheritance #plot @status:todo
+      - the origin of the observatory conversion #plot @status:todo
+    - Mystery obligations #reference [id:glass-archive/plot/obligations]
+      - every clue must look emotional before it looks mechanical
+      - the father must remain a person, not a puzzle box
+      - the ending cannot hinge on hidden rules introduced too late
+  - Themes And Secondary Meaning #guide @section:themes [id:glass-archive/themes]
+    - Preservation versus truth #theme [id:glass-archive/themes/preservation]
+      - restoration can rescue or erase depending on who gets to decide the original
+      - Lia's craft must mirror the moral argument of the novel
+    - Inheritance as architecture #theme [id:glass-archive/themes/inheritance]
+      - children inhabit rooms built by other people's decisions
+      - family legacy should feel spatial, not abstract
+    - Public memory versus private grief #theme [id:glass-archive/themes/public-memory]
+      - the city wants coherent stories
+      - mourning resists coherence
+    - Chosen record versus lived experience #theme [id:glass-archive/themes/record]
+      - official documents are often polished lies with expensive bindings
+      - the book should repeatedly ask what counts as evidence
+    - Symbol system #reference [id:glass-archive/themes/symbols]
+      - glass means preservation, fragility, and selective transparency
+      - bells mean names carried outward
+      - river water means drift, loss, and accidental continuity
+      - mirrored brass means beauty that can redirect attention
+  - Research Notes #guide @section:research [id:glass-archive/research]
+    - Conservation practice #research [id:glass-archive/research/conservation]
+      - wheat starch paste and tissue repair methods
+      - what water damage actually does to paper fiber
+      - how much realism to keep before process overwhelms scene momentum
+    - Archive politics #research [id:glass-archive/research/archive-politics]
+      - private collections and access control
+      - donor influence over historical framing
+      - how institutions soften scandal through catalog language
+    - City history texture #research [id:glass-archive/research/city]
+      - flood-control projects
+      - rail expansion and displaced neighborhoods
+      - chapel traditions that survive redevelopment
+    - Open research questions #todo [id:glass-archive/research/questions]
+      - what would a realistic conservation workspace smell like after flood recovery? @owner:research
+      - how many staff members make the Archive feel plausible but secretive? @owner:research
+      - what legal path would Mara use to verify altered civic records? @owner:research
+  - Voice, Lines, And Quotable Fragments #guide @section:quotes [id:glass-archive/quotes]
+    - Voice notes #reference [id:glass-archive/quotes/voice]
+      - sentences should feel precise enough to cut paper cleanly
+      - dialogue should avoid theatrical omniscience
+      - metaphors should come from repair, weather, bells, ledgers, and river light
+    - Candidate lines #quote [id:glass-archive/quotes/lines]
+      - We keep calling it preservation when what we mean is permission.
+      - The city was full of repaired wounds pretending to be architecture.
+      - Some rooms do not hide the truth; they teach it better manners.
+      - My father trusted paper because paper remembers its injuries.
+    - Quotable image seeds #quote [id:glass-archive/quotes/images]
+      - rain tapped the skylight like a patient code
+      - the drawers opened with the courtesy of a threat
+      - chapel bells carried names the river had refused to keep
+  - Chapter Board #guide @section:chapters [id:glass-archive/chapters]
+    - Drafting now #chapter @status:active [id:glass-archive/chapters/current]
+      - Chapter 3 - First entrance to the Archive @pov:lia #chapter
+      - Chapter 6 - Mara brings the labor strike photos @pov:lia #chapter
+      - Chapter 9 - Bell ritual at the chapel @pov:lia #chapter
+    - Outline spine #chapter [id:glass-archive/chapters/spine]
+      - opening letter and impossible date #chapter
+      - apartment repair scene to establish craft and restraint #chapter
+      - first guided tour with Elian #chapter
+      - station confrontation with Tomas sighting rumor #chapter
+      - Act 2 ladder scene in Hall Of Indexes #chapter
+      - final record-room choice #chapter
+    - POV discipline #reference [id:glass-archive/chapters/pov]
+      - stay with Lia unless a structural break is absolutely necessary
+      - let Mara widen the political frame through scene pressure, not extra POV
+      - Elian should remain partially unreadable until late Act 2
+  - Revision Board #guide @section:revision [id:glass-archive/revision]
+    - Active revisions #todo @status:active [id:glass-archive/revision/active]
+      - make Tomas present earlier in absence @owner:editor
+      - simplify the explanation of catalog shifts @owner:editor
+      - give Mara one scene of private uncertainty @owner:editor
+    - Line edit watch list #reference [id:glass-archive/revision/line]
+      - too many elegant nouns in one sentence
+      - archive descriptions drifting into generic gothic
+      - dialogue that sounds smarter than the speaker's fear
+    - Structural risks #blocked @status:blocked [id:glass-archive/revision/risks]
+      - if Act 2 withholds too much, the reader may admire the book without trusting it
+      - if Tomas becomes only symbolic, the ending will flatten
+      - if the rules are too crisp, the wonder evaporates
+  - Workflow And Owners #guide @section:workflow [id:glass-archive/workflow]
+    - Roles #reference [id:glass-archive/workflow/roles]
+      - writer @owner:lia-draft
+      - editor @owner:editor
+      - research pass @owner:research
+      - beta feedback collation @owner:beta
+    - Current sprint #todo @status:active [id:glass-archive/workflow/current]
+      - finish Chapter 3 scene pass @owner:lia-draft
+      - verify archive workflow realism @owner:research
+      - tighten mystery reveal cadence outline @owner:editor
+      - prepare beta packet for first five chapters @owner:beta
+    - Next sprint #todo [id:glass-archive/workflow/next]
+      - draft Hall Of Indexes reveal
+      - test theme visibility chapter by chapter
+      - build continuity sheet for dates and weather
+  - Suggested Views And Filters #reference [id:glass-archive/lenses]
+    - Active drafting
+      - query #chapter @status:active
+    - Theme pass
+      - query #theme
+    - Lia only
+      - query @pov:lia
+    - Archive scenes
+      - query @location:archive
+    - Revision work
+      - query @owner:editor
+    - Best quotes
+      - query #quote

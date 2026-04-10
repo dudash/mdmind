@@ -1,0 +1,44 @@
+- Team Delivery Board #guide @surface:execution [id:example/team]
+  - Weekly Focus #guide [id:example/team/focus]
+    - Must ship this week #todo @status:active
+      - Fix prompt layout edge cases @owner:jason @priority:high [id:example/team/focus/prompts]
+      - Finalize built-in help structure @owner:jason @priority:high [id:example/team/focus/help]
+      - Add example maps for docs and demos @owner:jason @priority:high [id:example/team/focus/examples]
+    - Nice to have #todo
+      - Add more theme screenshots @owner:jason
+      - Draft docs-site information architecture @owner:jason
+  - Work By Lane #guide [id:example/team/lanes]
+    - Ready #todo @status:todo [id:example/team/lanes/ready]
+      - Improve saved view deletion flow @owner:team
+      - Add filter recipes to help @owner:team
+    - In Progress #doing @status:active [id:example/team/lanes/active]
+      - Prompt polish pass @owner:jason
+      - Example map pack @owner:jason
+    - Blocked #blocked @status:blocked [id:example/team/lanes/blocked]
+      - Public docs site branding @owner:design @blocked_by:docs-direction
+    - Done #done @status:done [id:example/team/lanes/done]
+      - View-mode projection cleanup
+      - Mindmap follows current view
+      - Theme previews in the palette
+  - By Person #reference [id:example/team/owners]
+    - Jason @owner:jason [id:example/team/owners/jason]
+      - Prompt polish pass @status:active
+      - Example map pack @status:active
+      - Help content upgrade @status:active
+    - Team @owner:team [id:example/team/owners/team]
+      - CLI help improvements @status:todo
+      - Public docs site setup @status:todo
+  - Review Rituals #guide [id:example/team/review]
+    - Daily check
+      - query #todo @status:active
+      - step matches with n and N
+    - Blocker review
+      - query #blocked
+      - inspect blocked-by style metadata
+    - Owner review
+      - query @owner:jason
+      - save as a recurring view if needed
+  - Deep Links Worth Keeping #reference [id:example/team/links]
+    - Active lane: example/team/lanes/active
+    - Jason's workload: example/team/owners/jason
+    - Prompt work: example/team/focus/prompts

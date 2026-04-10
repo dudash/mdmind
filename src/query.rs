@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::model::{
     Document, LinkEntry, MetadataEntry, MetadataKeyCount, MetadataRow, MetadataValueCount, Node,
-    SearchMatch, TagCount,
+    RelationDirection, RelationRow, SearchMatch, TagCount,
 };
 
 pub fn find_matches(document: &Document, query: &str) -> Vec<SearchMatch> {
@@ -180,6 +180,77 @@ pub fn link_entries(document: &Document) -> Vec<LinkEntry> {
     links
 }
 
+pub fn relation_entries(document: &Document) -> Vec<RelationRow> {
+    let mut rows = Vec::new();
+    walk_nodes(&document.nodes, &mut Vec::new(), &mut |node, breadcrumb| {
+        let breadcrumb_text = breadcrumb.join(" / ");
+        for relation in &node.relations {
+            rows.push(RelationRow {
+                direction: RelationDirection::Outgoing,
+                line: node.line,
+                breadcrumb: breadcrumb_text.clone(),
+                text: node.text.clone(),
+                id: node.id.clone(),
+                relation: relation.label(),
+                target: relation.target.clone(),
+                resolved_path: find_relation_target_breadcrumb(document, &relation.target),
+            });
+        }
+    });
+    rows
+}
+
+pub fn relation_entries_for_anchor(document: &Document, anchor_id: &str) -> Vec<RelationRow> {
+    let mut rows = Vec::new();
+
+    walk_nodes(&document.nodes, &mut Vec::new(), &mut |node, breadcrumb| {
+        let breadcrumb_text = breadcrumb.join(" / ");
+        if node.id.as_deref() == Some(anchor_id) {
+            for relation in &node.relations {
+                rows.push(RelationRow {
+                    direction: RelationDirection::Outgoing,
+                    line: node.line,
+                    breadcrumb: breadcrumb_text.clone(),
+                    text: node.text.clone(),
+                    id: node.id.clone(),
+                    relation: relation.label(),
+                    target: relation.target.clone(),
+                    resolved_path: find_relation_target_breadcrumb(document, &relation.target),
+                });
+            }
+        }
+
+        for relation in &node.relations {
+            if relation.target == anchor_id {
+                rows.push(RelationRow {
+                    direction: RelationDirection::Incoming,
+                    line: node.line,
+                    breadcrumb: breadcrumb_text.clone(),
+                    text: node.text.clone(),
+                    id: node.id.clone(),
+                    relation: relation.label(),
+                    target: relation.target.clone(),
+                    resolved_path: find_relation_target_breadcrumb(document, &relation.target),
+                });
+            }
+        }
+    });
+
+    rows.sort_by(|left, right| {
+        left.line
+            .cmp(&right.line)
+            .then_with(|| left.breadcrumb.cmp(&right.breadcrumb))
+    });
+    rows
+}
+
+pub fn backlinks_to(document: &Document, target_id: &str) -> Vec<RelationRow> {
+    relation_entries_for_anchor(document, target_id)
+        .into_iter()
+        .filter(|row| row.direction == RelationDirection::Incoming)
+        .collect()
+}
+
 pub fn find_by_id<'a>(nodes: &'a [Node], id: &str) -> Option<&'a Node> {
     for node in nodes {
         if node.id.as_deref() == Some(id) {
@@ -256,8 +327,26 @@ fn term_matches(term: &QueryTerm, node: &Node) -> bool {
                     .metadata
                     .iter()
                     .any(|entry| metadata_matches(entry, lowered))
+                || node.relations.iter().any(|relation| {
+                    relation.target.to_lowercase().contains(lowered)
+                        || relation
+                            .kind
+                            .as_ref()
+                            .is_some_and(|kind| kind.to_lowercase().contains(lowered))
+                        || relation.display_token().to_lowercase().contains(lowered)
+                })
         }
     }
+}
+
+fn find_relation_target_breadcrumb(document: &Document, target: &str) -> Option<String> {
+    let mut resolved = None;
+    walk_nodes(&document.nodes, &mut Vec::new(), &mut |node, breadcrumb| {
+        if resolved.is_none() && node.id.as_deref() == Some(target) {
+            resolved = Some(breadcrumb.join(" / "));
+        }
+    });
+    resolved
 }
 
 fn walk_nodes<F>(nodes: &[Node], breadcrumb: &mut Vec<String>, visitor: &mut F)

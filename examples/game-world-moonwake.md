@@ -1,0 +1,183 @@
+- Moonwake Field Guide And Production Map #guide @surface:worldbuilding @genre:fantasy-sci-fi [id:moonwake]
+  - Start Here #guide #beginner [id:moonwake/start]
+    - What this map is
+      - a combined worldbuilding, quest design, production, and playtest map for a narrative exploration game
+      - it is meant to feel like something a small game team would actually live in for weeks
+      - it uses ids, tags, metadata, and deep links heavily so you can explore it like a real working document
+    - Good first jumps #reference
+      - world overview: moonwake/world
+      - active sprint: moonwake/production/current
+      - main questline: moonwake/quests/main
+      - faction tensions: moonwake/factions
+      - playtest feedback: moonwake/testing
+    - Good first filters #reference
+      - query #quest @status:active
+      - query @owner:nora
+      - query #blocked
+      - query @region:glass-marsh
+  - Pitch #guide @section:pitch [id:moonwake/pitch]
+    - One-line pitch #reference [id:moonwake/pitch/line]
+      - A drifting marsh-world wakes for one impossible night each month, and the player must bargain with cities, ghosts, and machines before dawn closes the paths again
+    - Player fantasy #guide [id:moonwake/pitch/fantasy]
+      - navigate a beautiful dangerous world with incomplete maps
+      - broker fragile alliances between rival powers
+      - gather stories, relics, and routes that only exist under moon-tide light
+    - Tone pillars #reference [id:moonwake/pitch/tone]
+      - melancholic but adventurous
+      - mysterious without becoming muddy
+      - strange technology grounded by human rituals
+  - World #guide @section:world [id:moonwake/world]
+    - Core premise #guide [id:moonwake/world/premise]
+      - the planet Moonwake has flooded into a maze of marsh basins, mirror canyons, and tide-powered ruins
+      - once each month the silver tide rises and hidden causeways appear for a single night
+    - Regions #guide [id:moonwake/world/regions]
+      - Glass Marsh #region @region:glass-marsh [id:moonwake/world/glass-marsh]
+        - mirror reeds ring when the tide changes
+        - smugglers trade maps scratched on salt vellum
+        - first-hour exploration zone #quest @status:active
+      - Ember Stair #region @region:ember-stair [id:moonwake/world/ember-stair]
+        - a vertical city built around volcanic rail lifts
+        - the market only opens when the lifts sing in harmony
+        - late-game political hub #quest @status:todo
+      - Hollow Reef #region @region:hollow-reef [id:moonwake/world/hollow-reef]
+        - fossil cathedrals form natural docks for storm skiffs
+        - ghost divers return with memories that are not theirs
+        - high-risk traversal zone #blocked @status:blocked
+      - Night Orchard #region @region:night-orchard [id:moonwake/world/night-orchard]
+        - fruit glows with stored moonlight
+        - caretakers prune dreams as if they were branches
+        - companion quest zone #quest @status:active
+    - World rules #reference [id:moonwake/world/rules]
+      - moon-tide pathways last one night per cycle
+      - relic machines respond to songs, vows, and tuned metals
+      - no teleportation, only routes, lifts, ferries, and ritual doors
+  - Factions #guide @section:factions [id:moonwake/factions]
+    - Tidecart Guild #faction @stance:mercantile [id:moonwake/factions/tidecart]
+      - controls ferries, fuel, and route rumors
+      - wants stable passage maps, even if that means privatizing them
+      - currently friendly but transactional
+    - Choir of Brass #faction @stance:ritual [id:moonwake/factions/choir]
+      - maintains the tuned machines that open the old causeways
+      - believes some roads should stay forgotten
+      - split internally over helping the player
+    - Mirebound Court #faction @stance:noble [id:moonwake/factions/court]
+      - marsh aristocrats with decaying legitimacy and excellent boats
+      - funds expeditions but hoards recovered relics
+      - potential alliance branch #quest @status:todo
+    - Lanternless #faction @stance:rebellious [id:moonwake/factions/lanternless]
+      - smugglers, defectors, and route-breakers who refuse official charts
+      - best source of secrets, worst source of orderly plans
+      - easiest faction to love, hardest faction to trust
+  - Characters #guide @section:characters [id:moonwake/characters]
+    - Nora Vale @owner:nora [id:moonwake/characters/nora]
+      - narrative lead
+      - owns main questline and companion arcs
+    - Ivo Chen @owner:ivo [id:moonwake/characters/ivo]
+      - systems designer
+      - owns traversal, economy, and route-risk tuning
+    - Sable Reed @owner:sable [id:moonwake/characters/sable]
+      - art director
+      - owns regional silhouettes, lighting, and prop language
+    - Maren Quill #npc [id:moonwake/characters/maren]
+      - ferrymaster with a perfect memory for tides and a terrible memory for names
+    - Sister Caligo #npc [id:moonwake/characters/caligo]
+      - brass chorister whose songs can wake locked machines
+    - Thim Glass #npc [id:moonwake/characters/thim]
+      - cheerful smuggler who treats every catastrophe like a networking opportunity
+  - Quest Architecture #guide @section:quests [id:moonwake/quests]
+    - Main route #quest @arc:main [id:moonwake/quests/main]
+      - Act 1 - Find a map that should not exist #quest @status:active [id:moonwake/quests/main/act-1]
+        - reach Glass Marsh archive vault
+        - choose whether to return the stolen chart
+        - meet two factions before the first moon-tide closes
+      - Act 2 - The city that opens by song #quest @status:todo [id:moonwake/quests/main/act-2]
+        - gain entry to Ember Stair
+        - decide which choir verse to restore
+        - expose the false census of ferries
+      - Act 3 - What the reef remembers #quest @status:todo [id:moonwake/quests/main/act-3]
+        - dive the Hollow Reef cathedrals
+        - learn who built the tide engines
+        - choose whether to shut one forever
+    - Companion quests #quest @arc:companion [id:moonwake/quests/companions]
+      - Maren - The ferry with no passengers #quest @status:active
+      - Caligo - A hymn missing its last note #quest @status:active
+      - Thim - The map folded into a knife #quest @status:todo
+    - Side content #quest @arc:side [id:moonwake/quests/side]
+      - ghost market errands #quest @status:active
+      - orchard lantern races #quest @status:todo
+      - salvage contracts from the Court #quest @status:todo
+  - Systems #guide @section:systems [id:moonwake/systems]
+    - Traversal loop #reference [id:moonwake/systems/traversal]
+      - scout route
+      - read risk markers
+      - pack tide tools
+      - travel before dawn closes the path
+    - Reputation #reference [id:moonwake/systems/reputation]
+      - each faction tracks trust and debt separately
+      - debt opens short-term doors and long-term trouble
+    - Economy #reference [id:moonwake/systems/economy]
+      - shellmarks buy tools and maps
+      - favors unlock people, not items
+      - relic fuel is rare and should stay dramatic
+    - Open design questions #todo [id:moonwake/systems/questions]
+      - how punishing should route collapse be? @owner:ivo
+      - should ferry schedules be simulation-backed or hand-authored? @owner:ivo
+      - where should players learn machine songs? @owner:nora
+  - Production Board #guide @section:production [id:moonwake/production]
+    - Current sprint #todo @status:active [id:moonwake/production/current]
+      - tune first-hour exploration in Glass Marsh @owner:ivo @region:glass-marsh
+      - rewrite ferry introduction scene @owner:nora
+      - lock region palette for Night Orchard @owner:sable @region:night-orchard
+      - improve quest journal language @owner:nora
+    - Next sprint #todo [id:moonwake/production/next]
+      - prototype storm-skiff handling @owner:ivo
+      - rough blockout for Ember Stair market @owner:sable
+      - draft Court alliance branch @owner:nora
+    - Blocked #blocked @status:blocked [id:moonwake/production/blocked]
+      - Hollow Reef encounter timing waits on traversal metrics @owner:ivo
+      - song-door UI waits on final chord glyph set @owner:sable
+    - Done #done @status:done [id:moonwake/production/done]
+      - route marker icon pass
+      - moon-tide calendar prototype
+      - first faction glossary draft
+  - Art And Audio #guide @section:craft [id:moonwake/craft]
+    - Visual motifs #reference [id:moonwake/craft/visual]
+      - wet metal
+      - lacquered wood
+      - silver bioluminescence
+      - signal flags and brass geometry
+    - Audio motifs #reference [id:moonwake/craft/audio]
+      - distant ferry horns
+      - tuned metal chimes
+      - water under stone vaults
+      - voices traveling too far across the marsh
+    - Style warnings #tip [id:moonwake/craft/warnings]
+      - avoid generic grimdark sludge
+      - keep silhouettes readable in moonlight
+      - weirdness should feel deliberate, not random
+  - Testing And Feedback #guide @section:testing [id:moonwake/testing]
+    - Playtest wins #signal @tone:positive [id:moonwake/testing/wins]
+      - players love discovering temporary routes
+      - the ferry network makes the world feel legible
+      - the Lanternless are everyone's immediate favorite problem
+    - Pain points #signal @tone:negative [id:moonwake/testing/pain]
+      - some players do not understand when the moon-tide window closes
+      - Ember Stair politics arrive too early for first-time players
+      - journal text is evocative but sometimes vague
+    - Fixes in flight #todo @status:active [id:moonwake/testing/fixes]
+      - clearer route countdown in HUD @owner:ivo
+      - stronger first encounter with Caligo @owner:nora
+      - simplify market signage in Ember Stair @owner:sable
+  - Suggested Views And Filters #reference [id:moonwake/lenses]
+    - Narrative work
+      - query @owner:nora
+    - Systems tuning
+      - query @owner:ivo
+    - Art direction
+      - query @owner:sable
+    - Active quests
+      - query #quest @status:active
+    - Glass Marsh only
+      - query @region:glass-marsh
+    - Main story
+      - jump to moonwake/quests/main

@@ -56,6 +56,7 @@ The repository should remain the source of truth for versioned docs tied to code
 Recommended structure:
 
 - `README.md`: product pitch, install, quickstart, screenshots, and primary links
+- `docs/USER_GUIDE.md`: task-first user guide written as a real map that also works inside `mdmind`
 - `docs/format.md`: file format, ids, tags, metadata, and deep links
 - `docs/query_language.md`: search grammar and examples
 - `docs/tui.md`: navigation, editing, filters, views, and mindmap mode
@@ -72,6 +73,7 @@ The terminal product should teach itself.
 Recommended surfaces:
 
 - `?` opens searchable help inside `mdmind`
+- built-in help should blend user-guide explanation, command reference, and practical tips in one surface
 - `mdm help <topic>` for focused CLI guidance
 - built-in examples for map syntax and query patterns
 - recipe-oriented answers such as `how do I export one branch?`

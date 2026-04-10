@@ -1,5 +1,8 @@
 use mdmind::parser::parse_document;
-use mdmind::query::{find_matches, link_entries, metadata_rows, tag_counts};
+use mdmind::query::{
+    find_matches, link_entries, metadata_rows, relation_entries, relation_entries_for_anchor,
+    tag_counts,
+};
 use mdmind::validate::validate_document;
 
 fn fixture(name: &str) -> String {
@@ -78,6 +81,56 @@ fn validate_reports_parser_and_duplicate_id_problems() {
             .iter()
             .any(|diagnostic| diagnostic.message.contains("Duplicate id")),
         "expected duplicate id validation diagnostics, got: {:?}",
+        diagnostics
+    );
+}
+
+#[test]
+fn parser_extracts_inline_relations_and_backlinks_are_queryable() {
+    let parsed = parse_document(&fixture("relations.md"));
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "parser diagnostics: {:?}",
+        parsed.diagnostics
+    );
+
+    let document = parsed.document;
+    let mvp = &document.nodes[0].children[0];
+    assert_eq!(mvp.relations.len(), 2);
+    assert_eq!(mvp.relations[0].kind, None);
+    assert_eq!(mvp.relations[0].target, "prompts/library");
+    assert_eq!(mvp.relations[1].kind.as_deref(), Some("supports"));
+    assert_eq!(mvp.relations[1].target, "product/requirements");
+
+    let rows = relation_entries(&document);
+    assert_eq!(rows.len(), 3);
+    assert!(
+        rows.iter()
+            .any(|row| row.relation == "supports" && row.target == "product/requirements")
+    );
+
+    let anchor_rows = relation_entries_for_anchor(&document, "product/mvp");
+    assert!(
+        anchor_rows
+            .iter()
+            .any(|row| row.direction == mdmind::model::RelationDirection::Incoming)
+    );
+    assert!(
+        anchor_rows
+            .iter()
+            .any(|row| row.direction == mdmind::model::RelationDirection::Outgoing)
+    );
+}
+
+#[test]
+fn validate_reports_unresolved_relation_targets() {
+    let parsed = parse_document("- Root [id:root] [[missing/target]]\n");
+    let diagnostics = validate_document(&parsed.document);
+    assert!(
+        diagnostics.iter().any(|diagnostic| diagnostic
+            .message
+            .contains("Relation target 'missing/target'")),
+        "expected unresolved relation diagnostic, got: {:?}",
         diagnostics
     );
 }

@@ -26,13 +26,18 @@ use crate::checkpoints::{
     save_checkpoints_for,
 };
 use crate::editor::{Editor, EditorState, default_focus_path, find_path_by_id, get_node};
+use crate::locations::{
+    FrequentLocation, LocationMemoryAnchor, LocationMemoryState, load_locations_for,
+    save_locations_for,
+};
 use crate::mindmap::{
     MindmapWidget, Scene as MindmapScene, Theme as MindmapTheme, default_export_path, export_png,
 };
 use crate::model::{Document, Node};
+use crate::parser::parse_node_fragment;
 use crate::query::{
-    FilterQuery, find_matches, metadata_key_counts_for_filter, metadata_value_counts_for_filter,
-    tag_counts_for_filter,
+    FilterQuery, backlinks_to, find_matches, link_entries, metadata_key_counts_for_filter,
+    metadata_value_counts_for_filter, tag_counts, tag_counts_for_filter,
 };
 use crate::serializer::serialize_document;
 use crate::session::{load_session_for, resolve_session_focus, save_session_for};
@@ -42,12 +47,16 @@ use crate::views::{SavedView, SavedViewsState, load_views_for, save_views_for};
 const TICK_RATE: Duration = Duration::from_millis(150);
 const HISTORY_LIMIT: usize = 64;
 const CHECKPOINT_LIMIT: usize = 12;
+const RECENT_LOCATION_LIMIT: usize = 16;
+const FREQUENT_LOCATION_LIMIT: usize = 16;
+const FREQUENT_LOCATION_MIN_VISITS: usize = 3;
 
 type Palette = MindmapTheme;
 
 thread_local! {
     static ACTIVE_PALETTE: Cell<Palette> = Cell::new(ThemeId::Workbench.theme());
     static ACTIVE_ASCII_ACCENTS: Cell<bool> = const { Cell::new(false) };
+    static ACTIVE_MINIMAL_MODE: Cell<bool> = const { Cell::new(false) };
     static ACTIVE_MOTION_TARGET: Cell<Option<MotionTarget>> = const { Cell::new(None) };
     static ACTIVE_MOTION_LEVEL: Cell<u8> = const { Cell::new(0) };
 }
@@ -159,6 +168,12 @@ enum MotionTarget {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FocusReveal {
+    Preserve,
+    Reveal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct MotionCue {
     target: MotionTarget,
     ticks_remaining: u8,
@@ -222,7 +237,7 @@ impl PromptMode {
             Self::SaveView => "Give the current active filter a short name.",
             Self::SaveCheckpoint => "Name a local snapshot of the current map state.",
             Self::OpenId => "Type a node id, then press Enter.",
-            _ => "Use full node syntax: Label #tag @key:value [id:path/to/node]",
+            _ => "Use full node syntax: Label #tag @key:value [id:path/to/node] [[target]]",
         }
     }
 }
@@ -376,7 +391,12 @@ impl SearchOverlayState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PaletteItemKind {
     Action,
+    Recipe,
     Setting,
+    Relation,
+    Inline,
+    Frequent,
+    Location,
     Node,
     SavedView,
     History,
@@ -390,7 +410,12 @@ impl PaletteItemKind {
     fn label(self) -> &'static str {
         match self {
             Self::Action => "Action",
+            Self::Recipe => "Recipe",
             Self::Setting => "Setting",
+            Self::Relation => "Relation",
+            Self::Inline => "Inline",
+            Self::Frequent => "Frequent",
+            Self::Location => "Location",
             Self::Node => "Node",
             Self::SavedView => "View",
             Self::History => "History",
@@ -436,25 +461,29 @@ impl HelpTopic {
             Self::Views => "Switch between full-map and focused working modes.",
             Self::Themes => "Change the visual surface without leaving the map.",
             Self::Mindmap => "Inspect the current working set visually and export it as a PNG.",
-            Self::Syntax => "Write labels, tags, metadata, and deep-link ids inline on one node.",
+            Self::Syntax => {
+                "Write labels, tags, metadata, deep-link ids, and references inline on one node."
+            }
         }
     }
 
     fn hint(self) -> &'static str {
         match self {
-            Self::Navigation => "Move through the visible tree, jump, and open overlays.",
-            Self::Editing => "Add, edit, delete, and reorder branches from the keyboard.",
-            Self::Search => "Search by content, browse facets, and reopen saved views.",
-            Self::Views => "Cycle between full-map and branch-focused working modes.",
-            Self::Themes => "Open the palette, preview surface changes live, and commit them.",
-            Self::Mindmap => "Open the visual map, pan it, and export a PNG.",
-            Self::Syntax => "Use tags, metadata, and deep-link ids inline on the same node.",
+            Self::Navigation => "User guide plus movement keys and large-map wayfinding tips.",
+            Self::Editing => "User guide plus editing keys, undo safety, and restructuring tips.",
+            Self::Search => "User guide plus query keys, facet controls, and filtering tips.",
+            Self::Views => "User guide plus view-mode keys and focused-workflow tips.",
+            Self::Themes => "User guide plus theme controls and calmer-surface tips.",
+            Self::Mindmap => "User guide plus visual-map keys and export tips.",
+            Self::Syntax => "User guide plus inline syntax reference and authoring tips.",
         }
     }
 
     fn keywords(self) -> &'static str {
         match self {
-            Self::Navigation => "navigate movement arrows focus jump root open id palette hotkeys",
+            Self::Navigation => {
+                "navigate movement arrows focus jump root open id palette hotkeys relations backlinks related cross links"
+            }
             Self::Editing => {
                 "edit add delete reshape move indent outdent sibling child root write undo redo checkpoint history"
             }
@@ -463,101 +492,235 @@ impl HelpTopic {
             }
             Self::Views => "views focus branch subtree filtered focus isolate branch presentation",
             Self::Themes => {
-                "theme themes paper blueprint calm terminal neon workbench palette ui settings motion ascii accents"
+                "theme themes paper blueprint calm violet monograph terminal neon workbench palette ui settings motion ascii accents minimal purple lavender"
             }
             Self::Mindmap => "mindmap visual bubble canvas png export pan recenter map overlay",
             Self::Syntax => {
-                "syntax tags metadata key keys value values ids deep links format example inline node"
+                "syntax tags metadata key keys value values ids deep links relations backlinks ref rel format example inline node"
             }
         }
     }
 
-    fn body(self) -> &'static [&'static str] {
+    fn guide_intro(self) -> &'static str {
+        match self {
+            Self::Navigation => {
+                "Navigation in mdmind is tree-first. Stay in the outline while exploring, then use the palette and direct id jumps when the map gets too large to scroll comfortably."
+            }
+            Self::Editing => {
+                "Editing is designed to stay inline and reversible. You reshape the tree in place, keep your cursor on the branch you care about, and use undo or checkpoints when a structural change feels risky."
+            }
+            Self::Search => {
+                "Search is the fastest way to reduce noise without losing your place. Query search, facets, and saved views all feed the same filtering model, so once you understand one entry point the others feel familiar."
+            }
+            Self::Views => {
+                "View modes are not cosmetic. They change how much of the map stays visible so you can choose between orientation, local focus, and filtered work without manually collapsing half the tree."
+            }
+            Self::Themes => {
+                "Themes and surface settings are there to support different working styles. Use them to make the interface calmer, denser, brighter, or more terminal-native without changing how the map behaves."
+            }
+            Self::Mindmap => {
+                "The visual mindmap is best used as a second lens on the current working set, not as a separate mode with a different truth. It follows your active view and filter so the tree and the map stay aligned."
+            }
+            Self::Syntax => {
+                "Inline syntax lets one node line carry both human meaning and machine-friendly structure. The goal is to keep capture fast while still making tags, metadata, and deep links easy to search later."
+            }
+        }
+    }
+
+    fn guide_body(self) -> &'static [&'static str] {
         match self {
             Self::Navigation => &[
-                "↑ / ↓ move through visible nodes",
-                "← collapses a branch or moves to the parent",
-                "→ expands a branch or enters the first child",
-                "Enter or Space toggles expanded and collapsed state",
-                "g jumps to the map root, or the subtree root in Subtree Only",
-                ": or Ctrl+P opens the command palette",
-                "o jumps directly to a node id",
-                "m opens the visual mindmap overlay",
+                "The current focus is the center of the interface: the outline, focus card, and visual map all follow it. That means simple arrow movement is enough for most work until the map becomes large.",
+                "When you already know the branch or id you want, use the palette instead of drilling manually. It is faster and it preserves your mental model because recent locations, frequent places, inline ids, and guided recipes all meet in one jump surface.",
+                "That same palette can also surface outgoing relations and incoming backlinks for the current node, so cross-branch navigation still feels like normal focus movement instead of a separate graph mode.",
             ],
             Self::Editing => &[
-                "a adds a child under the current node",
-                "A adds a sibling next to the current node",
-                "Shift+R adds a root-level branch",
-                "e edits the selected node inline",
-                "x deletes after a second confirmation press",
-                "u undoes the last structural change",
-                "U redoes the last undone change",
-                "Alt+↑ and Alt+↓ reorder a node among siblings",
-                "Alt+← moves the node out one level",
-                "Alt+→ indents the node into the previous sibling",
-                "The palette can create manual checkpoints and restore named snapshots",
-                "Large structural edits also capture automatic safety checkpoints",
-                "The palette can browse recent actions and jump back through history",
+                "Most edits should feel like shaping a branch rather than opening a separate editor. Add, rename, move, indent, and delete all happen from the current focus, so your attention stays on structure instead of mode switching.",
+                "The safety layer matters here. Undo and checkpoints mean you can move quickly through structural edits without treating every change as dangerous, especially in larger maps where a reparent or delete can have bigger consequences.",
             ],
             Self::Search => &[
-                "/ opens query search",
-                "f opens facets for tags and metadata",
-                "F opens saved views",
-                "Tab switches Query, Facets, and Saved Views",
-                "Enter applies the current query or selection",
-                "Applying a query, facet, or saved view lands on the first matching node",
-                "n and N move between matches in the tree",
-                "c clears the active filter",
-                "Search supports plain text, #tag, and @key:value",
+                "Use query search when you know the words, tags, or metadata you want. Use facets when you want to browse what is available in the current scope. Use saved views when a filter is worth coming back to repeatedly.",
+                "Filters are designed to land you on a useful result immediately. That is why applying a query, view, or recipe moves focus to the first match and keeps local context visible instead of dropping you into a dead-end result list.",
+                "When a map has shared metadata like @owner or custom @status values, the palette can surface owner-specific and status-specific review recipes automatically. That makes recurring workflows easier to discover than remembering every exact filter string.",
             ],
             Self::Views => &[
-                "v and V cycle Full Map, Focus Branch, Subtree Only, and Filtered Focus",
-                "Focus Branch keeps ancestors and sibling context visible",
-                "Subtree Only isolates the current branch as a rooted workspace",
-                "In Subtree Only, g returns to the subtree root",
-                "In Subtree Only, ← never climbs above the subtree root",
-                "Filtered Focus blends filter results with local context",
-                "The visual mindmap follows the current view mode too",
+                "Full Map is for orientation. Focus Branch is for working with context. Subtree Only is for treating one branch as a temporary workspace. Filtered Focus is for mixing search results with enough structure to stay oriented.",
+                "The important mental model is that view mode changes the visible projection, not the underlying document. You are not rewriting the map when you isolate a branch, only changing what the interface chooses to show you.",
             ],
             Self::Themes => &[
-                ": or Ctrl+P opens the command palette",
-                "Type 'theme' or a theme name like 'paper' or 'blueprint'",
-                "Selecting a theme previews it immediately inside the palette",
-                "Enter applies the selected theme and persists it locally",
-                "Esc closes the palette and restores the previous theme or surface settings",
-                "Search 'motion' to toggle attention-guiding focus, filter, and input motion",
-                "Search 'ascii' to toggle terminal-style separators and title marks",
-                "Themes change the header, outline, overlays, status line, and mindmap surface",
-                "The selected theme lives in a local UI settings sidecar next to the map",
+                "A good theme should reduce fatigue and make hierarchy easier to read. It should not feel like decoration layered on top. That is why themes apply across the header, outline, overlays, status surfaces, and mindmap together.",
+                "Minimal mode belongs here too: it is the pro layout choice when you want less instructional chrome and more working space. It condenses the shell, widens the main outline, and trims the right-side context lanes down to the essentials.",
             ],
             Self::Mindmap => &[
-                "m opens the visual mindmap overlay",
-                "The map recenters on the focused node",
-                "Arrow keys pan the canvas",
-                "0 recenters the camera",
-                "p exports a PNG from the current visual map",
-                "The mindmap respects the active view mode and filter scope",
+                "The mindmap is most useful for cluster recognition, branch shape, and presentation. It is less about editing directly and more about seeing the current scope as a visual structure when the outline stops being enough.",
+                "Because it follows filters and view modes, the map becomes especially useful after you isolate a subtree or apply a focused query. The visual surface then reinforces the exact working set you are already using in the tree.",
+                "When visible nodes carry cross-links, the mindmap also draws relation edges between them. That lets you see lateral structure without turning the main document into a graph-first model.",
             ],
             Self::Syntax => &[
-                "#tag adds a topic or workflow marker",
-                "@key:value adds structured metadata",
-                "[id:path/to/node] adds a deep-link target id",
-                "Combine label, tags, metadata, and id on one line",
-                "",
-                "Example:",
-                "API Design #backend @status:todo [id:product/api-design]",
+                "Keep the visible label human first, then layer structure onto it. Tags are fast markers, metadata carries structured attributes, ids create stable deep links, and relations connect ideas across branches without changing the tree.",
+                "This is most powerful when you stay consistent. Reusing the same tags, metadata keys, ids, and relation kinds across a map makes search, saved views, palette jumps, backlinks, and export much more useful than treating inline syntax as ad hoc annotation.",
             ],
+        }
+    }
+
+    fn command_reference(self) -> &'static [(&'static str, &'static str)] {
+        match self {
+            Self::Navigation => &[
+                ("↑ / ↓", "Move through visible nodes"),
+                (
+                    "← / →",
+                    "Collapse or expand, or move to parent / first child",
+                ),
+                ("Enter / Space", "Toggle expanded and collapsed state"),
+                ("g", "Jump to the map root, or subtree root in Subtree Only"),
+                (": / Ctrl+P", "Open the command palette"),
+                (
+                    "recipe query",
+                    "Run built-in workflows like review todo or work inside branch",
+                ),
+                (
+                    "relation query",
+                    "Use the palette to jump across outgoing relations and backlinks",
+                ),
+                ("[", "Follow the next backlink into this node"),
+                ("]", "Follow the next outgoing relation"),
+                ("o", "Jump directly to a node id"),
+                ("m", "Open the visual mindmap overlay"),
+            ],
+            Self::Editing => &[
+                ("a / A / Shift+R", "Add a child, sibling, or root branch"),
+                ("e", "Edit the selected node inline"),
+                ("x", "Delete after a second confirmation press"),
+                ("u / U", "Undo or redo the last structural change"),
+                ("Alt+↑ / Alt+↓", "Reorder the node among siblings"),
+                (
+                    "Alt+← / Alt+→",
+                    "Move out one level or indent into the previous sibling",
+                ),
+            ],
+            Self::Search => &[
+                ("/", "Open query search"),
+                ("f / F", "Open facets or saved views"),
+                ("Tab", "Switch Query, Facets, and Saved Views"),
+                ("Enter", "Apply the current query or selection"),
+                ("n / N", "Move between matches in the tree"),
+                ("c", "Clear the active filter"),
+            ],
+            Self::Views => &[
+                (
+                    "v / V",
+                    "Cycle Full Map, Focus Branch, Subtree Only, and Filtered Focus",
+                ),
+                ("Esc", "Exit a focused projection before clearing filters"),
+                ("g", "Return to the subtree root inside Subtree Only"),
+                ("←", "Stay inside the subtree root boundary in Subtree Only"),
+                ("m", "Open a visual map of the current projection"),
+            ],
+            Self::Themes => &[
+                (
+                    ": / Ctrl+P",
+                    "Open the palette for themes and surface settings",
+                ),
+                (
+                    "theme",
+                    "Preview themes like paper, violet, monograph, or blueprint",
+                ),
+                ("minimal", "Toggle the quieter pro layout"),
+                ("ascii", "Toggle terminal-style accents"),
+                ("motion", "Toggle attention-guiding motion"),
+                ("Enter / Esc", "Commit or revert a previewed surface change"),
+            ],
+            Self::Mindmap => &[
+                ("m", "Open or close the visual mindmap"),
+                ("Arrow keys", "Pan the canvas"),
+                ("0", "Recenter the camera"),
+                ("p", "Export a PNG from the current visual map"),
+                ("Esc", "Return to the main tree surface"),
+            ],
+            Self::Syntax => &[
+                ("#tag", "Add a topic or workflow marker"),
+                ("@key:value", "Add structured metadata"),
+                ("[id:path/to/node]", "Add a deep-link target id"),
+                ("[[target/id]]", "Reference another node by id"),
+                (
+                    "[[rel:kind->target/id]]",
+                    "Add a typed cross-branch relation",
+                ),
+                (
+                    "Label + syntax",
+                    "Combine visible text, tags, metadata, ids, and relations on one line",
+                ),
+                (
+                    "/ and :",
+                    "Search and palette understand the same inline syntax",
+                ),
+            ],
+        }
+    }
+
+    fn tips(self) -> &'static [&'static str] {
+        match self {
+            Self::Navigation => &[
+                "If the tree starts feeling noisy, change view mode before you keep scrolling.",
+                "Use recent locations in the palette when you are bouncing between two branches repeatedly.",
+                "If the current branch has cross-links, type a target id, relation kind, or 'backlink' in the palette to jump across them.",
+                "Use ] to follow outgoing relations and [ to follow backlinks when you want quick keyboard navigation without opening the palette.",
+            ],
+            Self::Editing => &[
+                "Take a manual checkpoint before a large reparent or delete if you expect to compare two structures.",
+                "Treat node labels as concise map lines; keep long-form detail for a later dedicated notes feature.",
+            ],
+            Self::Search => &[
+                "Start broad with text, then tighten with #tags or @metadata once you see the pattern you need.",
+                "Saved views are best for recurring workflows, not one-off ad hoc filters.",
+                "Use palette recipes when you know the workflow you want but do not want to remember the exact filter.",
+                "If your map uses @owner or several @status values, try typing 'owner' or 'status' in the palette to see contextual review recipes.",
+            ],
+            Self::Views => &[
+                "Use Focus Branch when you still need orientation. Use Subtree Only when you want the rest of the map to disappear.",
+                "If a branch feels slippery, remember that Subtree Only keeps a stable root until you leave the mode.",
+            ],
+            Self::Themes => &[
+                "Use Monograph with minimal mode for the calmest current surface.",
+                "Keep motion on if you want attention guidance, but use minimal mode when you want less explanatory chrome and a roomier main tree.",
+            ],
+            Self::Mindmap => &[
+                "Open the mindmap after isolating a branch or applying a filter, not before.",
+                "If the canvas feels busy, tighten the working set in the tree first and reopen the map.",
+                "Relation edges only appear when both linked nodes are visible in the current projection, so view mode still controls visual noise.",
+            ],
+            Self::Syntax => &[
+                "Prefer consistent metadata keys like @status or @owner across the whole map instead of inventing near-duplicates.",
+                "Add ids to branches you expect to deep-link, export, or revisit often from the palette.",
+                "Use plain [[target]] for lightweight references and [[rel:kind->target]] when the link meaning matters.",
+            ],
+        }
+    }
+
+    fn example(self) -> Option<&'static str> {
+        match self {
+            Self::Syntax => Some("API Design #backend @status:todo [id:product/api-design]"),
+            _ => None,
         }
     }
 
     fn search_text(self) -> String {
+        let reference_text = self
+            .command_reference()
+            .iter()
+            .map(|(command, description)| format!("{command} {description}"))
+            .collect::<Vec<_>>()
+            .join(" ");
         format!(
-            "{} {} {} {} {}",
+            "{} {} {} {} {} {} {} {}",
             self.title(),
             self.summary(),
             self.hint(),
             self.keywords(),
-            self.body().join(" ")
+            self.guide_intro(),
+            self.guide_body().join(" "),
+            reference_text,
+            self.tips().join(" ")
         )
     }
 }
@@ -587,9 +750,95 @@ enum PaletteAction {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PaletteRecipe {
+    ReviewTodo,
+    ReviewActive,
+    ReviewBlocked,
+    WorkInsideBranch,
+    BrowseFacets,
+    SaveWorkingSet,
+    VisualizeCurrentView,
+}
+
+impl PaletteRecipe {
+    fn title(self) -> &'static str {
+        match self {
+            Self::ReviewTodo => "Review Todo Work",
+            Self::ReviewActive => "Review Active Work",
+            Self::ReviewBlocked => "Review Blocked Work",
+            Self::WorkInsideBranch => "Work Inside This Branch",
+            Self::BrowseFacets => "Browse Tags And Metadata",
+            Self::SaveWorkingSet => "Save Current Working Set",
+            Self::VisualizeCurrentView => "Visualize Current View",
+        }
+    }
+
+    fn subtitle(self) -> &'static str {
+        match self {
+            Self::ReviewTodo => "Filter to #todo items and land on the first match",
+            Self::ReviewActive => "Filter to @status:active work and focus the working set",
+            Self::ReviewBlocked => "Filter to @status:blocked work and review what is stuck",
+            Self::WorkInsideBranch => "Isolate the current branch as a rooted workspace",
+            Self::BrowseFacets => "Open the facet browser for tags, keys, and values",
+            Self::SaveWorkingSet => "Name the current filter as a reusable saved view",
+            Self::VisualizeCurrentView => "Open the mindmap on the current visible working set",
+        }
+    }
+
+    fn keywords(self) -> &'static str {
+        match self {
+            Self::ReviewTodo => "recipe workflow review todo tasks triage open work filter #todo",
+            Self::ReviewActive => {
+                "recipe workflow review active status current work filter @status:active"
+            }
+            Self::ReviewBlocked => {
+                "recipe workflow review blocked status stuck work filter @status:blocked"
+            }
+            Self::WorkInsideBranch => {
+                "recipe workflow subtree branch isolate focus local workspace"
+            }
+            Self::BrowseFacets => "recipe workflow browse facets tags metadata values keys",
+            Self::SaveWorkingSet => {
+                "recipe workflow save current filter working set saved view reuse"
+            }
+            Self::VisualizeCurrentView => {
+                "recipe workflow mindmap visualize current visible view map"
+            }
+        }
+    }
+
+    fn preview(self) -> &'static str {
+        match self {
+            Self::ReviewTodo => {
+                "Apply `#todo`, switch to Filtered Focus, and land on the first matching branch.\nUse this when you want to review open work without manually building a query."
+            }
+            Self::ReviewActive => {
+                "Apply `@status:active`, switch to Filtered Focus, and land on the first matching branch.\nThis is useful for a quick pass over work already in motion."
+            }
+            Self::ReviewBlocked => {
+                "Apply `@status:blocked`, switch to Filtered Focus, and land on the first matching branch.\nUse this as a recurring unblock review when your map tracks status."
+            }
+            Self::WorkInsideBranch => {
+                "Enter Subtree Only on the current node and keep that node as the rooted workspace.\nThis is best for local edits, cleanup, and presenting one branch."
+            }
+            Self::BrowseFacets => {
+                "Open the Find surface directly on Facets so you can browse tags, metadata keys, and values.\nThis is the fastest guided way to discover a map's vocabulary."
+            }
+            Self::SaveWorkingSet => {
+                "Open the saved-view prompt for the current active filter.\nUse this after you have a working query you expect to revisit."
+            }
+            Self::VisualizeCurrentView => {
+                "Open the visual mindmap for the current view and filter scope.\nGood for a quick spatial read or for exporting a polished PNG."
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SurfaceSetting {
     Motion(bool),
     AsciiAccents(bool),
+    MinimalMode(bool),
 }
 
 impl SurfaceSetting {
@@ -599,6 +848,8 @@ impl SurfaceSetting {
             Self::Motion(false) => "Motion: Off",
             Self::AsciiAccents(true) => "ASCII Accents: On",
             Self::AsciiAccents(false) => "ASCII Accents: Off",
+            Self::MinimalMode(true) => "Minimal Mode: On",
+            Self::MinimalMode(false) => "Minimal Mode: Off",
         }
     }
 
@@ -612,6 +863,10 @@ impl SurfaceSetting {
             Self::AsciiAccents(false) => {
                 "Turn off ASCII separators and return to the default chrome"
             }
+            Self::MinimalMode(true) => {
+                "Reduce secondary copy and chrome in overlays for a quieter expert-focused surface"
+            }
+            Self::MinimalMode(false) => "Restore richer helper text and fuller overlay chrome",
         }
     }
 
@@ -629,6 +884,12 @@ impl SurfaceSetting {
             Self::AsciiAccents(false) => {
                 "Preview the quieter default chrome without ASCII marks. Enter commits it; Esc restores the previous surface."
             }
+            Self::MinimalMode(true) => {
+                "Preview a quieter overlay style with less helper copy. Enter commits it; Esc restores the previous surface."
+            }
+            Self::MinimalMode(false) => {
+                "Preview the fuller guided surface with richer helper copy. Enter commits it; Esc restores the previous surface."
+            }
         }
     }
 
@@ -638,6 +899,12 @@ impl SurfaceSetting {
             Self::Motion(false) => "motion off static reduce disable animation guidance",
             Self::AsciiAccents(true) => "ascii accents on terminal art separators chrome",
             Self::AsciiAccents(false) => "ascii accents off terminal art separators chrome default",
+            Self::MinimalMode(true) => {
+                "minimal mode on reduced chrome fewer hints quieter overlays"
+            }
+            Self::MinimalMode(false) => {
+                "minimal mode off full hints guided overlays descriptive chrome"
+            }
         }
     }
 }
@@ -645,9 +912,25 @@ impl SurfaceSetting {
 #[derive(Debug, Clone)]
 enum PaletteTarget {
     Action(PaletteAction),
+    Recipe(PaletteRecipe),
+    QueryRecipe {
+        title: String,
+        query: String,
+        view_mode: ViewMode,
+    },
     Setting(SurfaceSetting),
+    RelationPath {
+        path: Vec<usize>,
+        message: String,
+    },
+    InlineFilter(String),
+    InlineId(String),
+    RecentLocation(Vec<usize>),
     NodePath(Vec<usize>),
-    SavedView { name: String, query: String },
+    SavedView {
+        name: String,
+        query: String,
+    },
     UndoSteps(usize),
     RedoSteps(usize),
     Checkpoint(usize),
@@ -673,6 +956,10 @@ impl PaletteTarget {
             }
             Self::Setting(SurfaceSetting::AsciiAccents(enabled)) => {
                 preview.ascii_accents = *enabled;
+                Some(preview)
+            }
+            Self::Setting(SurfaceSetting::MinimalMode(enabled)) => {
+                preview.minimal_mode = *enabled;
                 Some(preview)
             }
             _ => None,
@@ -742,6 +1029,7 @@ struct HelpOverlayState {
     query: String,
     cursor: usize,
     selected: usize,
+    preview_scroll: u16,
 }
 
 impl HelpOverlayState {
@@ -754,6 +1042,7 @@ impl HelpOverlayState {
             query,
             cursor,
             selected: 0,
+            preview_scroll: 0,
         }
     }
 
@@ -786,6 +1075,10 @@ impl HelpOverlayState {
         let next = next_boundary(&self.query, self.cursor);
         self.query.replace_range(self.cursor..next, "");
     }
+
+    fn reset_preview_scroll(&mut self) {
+        self.preview_scroll = 0;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -793,6 +1086,57 @@ struct PromptState {
     mode: PromptMode,
     value: String,
     cursor: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PromptAssistTone {
+    Info,
+    Success,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PromptAssist {
+    tone: PromptAssistTone,
+    lines: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RelationPickerKind {
+    Outgoing,
+    Backlink,
+}
+
+impl RelationPickerKind {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Outgoing => "Outgoing Relations",
+            Self::Backlink => "Backlinks",
+        }
+    }
+
+    fn open_message(self) -> &'static str {
+        match self {
+            Self::Outgoing => "Choose an outgoing relation to follow.",
+            Self::Backlink => "Choose a backlink source to follow.",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RelationPickerItem {
+    path: Vec<usize>,
+    title: String,
+    subtitle: String,
+    status_message: String,
+}
+
+#[derive(Debug, Clone)]
+struct RelationPickerState {
+    kind: RelationPickerKind,
+    selected: usize,
+    items: Vec<RelationPickerItem>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -861,6 +1205,7 @@ struct VisibleRow {
     text: String,
     tags: Vec<String>,
     metadata: Vec<String>,
+    relations: Vec<String>,
     id: Option<String>,
     line: usize,
     has_children: bool,
@@ -912,7 +1257,10 @@ struct TuiApp {
     filter: Option<ActiveFilter>,
     search: Option<SearchOverlayState>,
     saved_views: SavedViewsState,
+    location_memory: LocationMemoryState,
+    recent_locations: Vec<PathAnchor>,
     checkpoints: CheckpointsState,
+    relation_picker: Option<RelationPickerState>,
     mindmap: Option<MindmapOverlayState>,
     help: Option<HelpOverlayState>,
     palette_preview_base: Option<UiSettings>,
@@ -972,7 +1320,7 @@ impl TuiApp {
             },
         };
 
-        Self {
+        let mut app = Self {
             map_path,
             editor: Editor::new(document, focus_path),
             expanded,
@@ -984,7 +1332,10 @@ impl TuiApp {
             filter: None,
             search: None,
             saved_views,
+            location_memory: LocationMemoryState::default(),
+            recent_locations: Vec::new(),
             checkpoints: CheckpointsState::default(),
+            relation_picker: None,
             mindmap: None,
             help: None,
             palette_preview_base: None,
@@ -995,7 +1346,9 @@ impl TuiApp {
             ui_settings,
             undo_history: Vec::new(),
             redo_history: Vec::new(),
-        }
+        };
+        app.remember_current_location();
+        app
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
@@ -1019,6 +1372,12 @@ impl TuiApp {
             self.quit_armed = false;
             self.delete_armed = false;
             return self.handle_help_key(key);
+        }
+
+        if self.relation_picker.is_some() {
+            self.quit_armed = false;
+            self.delete_armed = false;
+            return self.handle_relation_picker_key(key);
         }
 
         if self.search.is_some() {
@@ -1172,9 +1531,7 @@ impl TuiApp {
                 if self.view_mode == ViewMode::SubtreeOnly {
                     if let Some(path) = self.subtree_root_path() {
                         self.editor.set_focus_path(path)?;
-                        self.expand_focus_chain();
-                        self.persist_session()?;
-                        self.trigger_motion(MotionTarget::Focus);
+                        self.finalize_focus_change(MotionTarget::Focus)?;
                         self.delete_armed = false;
                         self.set_status(StatusTone::Info, "Returned to the subtree root.");
                     } else {
@@ -1182,9 +1539,7 @@ impl TuiApp {
                     }
                 } else {
                     self.editor.move_root()?;
-                    self.expand_focus_chain();
-                    self.persist_session()?;
-                    self.trigger_motion(MotionTarget::Focus);
+                    self.finalize_focus_change(MotionTarget::Focus)?;
                     self.delete_armed = false;
                     self.set_status(StatusTone::Info, "Jumped to the root.");
                 }
@@ -1224,6 +1579,14 @@ impl TuiApp {
             KeyCode::Char('N') => {
                 self.delete_armed = false;
                 self.move_match(-1)?;
+            }
+            KeyCode::Char(']') => {
+                self.delete_armed = false;
+                self.follow_outgoing_relation()?;
+            }
+            KeyCode::Char('[') => {
+                self.delete_armed = false;
+                self.follow_backlink()?;
             }
             KeyCode::Char('x') => {
                 self.quit_armed = false;
@@ -1322,14 +1685,6 @@ impl TuiApp {
             KeyCode::Tab => {
                 search.section = search.section.next();
             }
-            KeyCode::Char('c') => {
-                self.clear_filter();
-                search.draft_query.clear();
-                search.cursor = 0;
-                search.facet_selected = 0;
-                search.view_selected = 0;
-                self.set_status(StatusTone::Info, "Cleared the active filter.");
-            }
             _ => match search.section {
                 SearchSection::Query => {
                     let submitted = self.handle_search_query_key(&mut search, key)?;
@@ -1427,6 +1782,41 @@ impl TuiApp {
         Ok(true)
     }
 
+    fn handle_relation_picker_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
+        let Some(mut picker) = self.relation_picker.take() else {
+            return Ok(true);
+        };
+
+        match key.code {
+            KeyCode::Esc => {
+                self.set_status(StatusTone::Info, "Closed relation picker.");
+                return Ok(true);
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                picker.selected = picker.selected.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if !picker.items.is_empty() {
+                    picker.selected = (picker.selected + 1).min(picker.items.len() - 1);
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(item) = picker.items.get(picker.selected).cloned() {
+                    self.editor.set_focus_path(item.path)?;
+                    self.finalize_focus_change(MotionTarget::Focus)?;
+                    self.set_status(StatusTone::Success, item.status_message);
+                    return Ok(true);
+                }
+                self.set_status(StatusTone::Warning, "No relation is selected.");
+                return Ok(true);
+            }
+            _ => {}
+        }
+
+        self.relation_picker = Some(picker);
+        Ok(true)
+    }
+
     fn handle_help_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
         let Some(mut help) = self.help.take() else {
             return Ok(true);
@@ -1439,19 +1829,43 @@ impl TuiApp {
             }
             KeyCode::Up => {
                 help.selected = help.selected.saturating_sub(1);
+                help.reset_preview_scroll();
             }
             KeyCode::Down => {
                 let len = self.help_topics(&help.query).len();
                 if len > 0 {
                     help.selected = (help.selected + 1).min(len - 1);
                 }
+                help.reset_preview_scroll();
             }
-            KeyCode::Backspace => help.backspace(),
-            KeyCode::Delete => help.delete(),
+            KeyCode::PageUp => {
+                help.preview_scroll = help.preview_scroll.saturating_sub(8);
+            }
+            KeyCode::PageDown => {
+                help.preview_scroll = help.preview_scroll.saturating_add(8);
+            }
+            KeyCode::Home if key.modifiers.contains(KeyModifiers::CONTROL) => help.cursor = 0,
+            KeyCode::End if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                help.cursor = help.query.len()
+            }
+            KeyCode::Home => help.preview_scroll = 0,
+            KeyCode::End => help.preview_scroll = u16::MAX,
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                help.preview_scroll = help.preview_scroll.saturating_sub(4);
+            }
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                help.preview_scroll = help.preview_scroll.saturating_add(4);
+            }
+            KeyCode::Backspace => {
+                help.backspace();
+                help.reset_preview_scroll();
+            }
+            KeyCode::Delete => {
+                help.delete();
+                help.reset_preview_scroll();
+            }
             KeyCode::Left => help.move_left(),
             KeyCode::Right => help.move_right(),
-            KeyCode::Home => help.cursor = 0,
-            KeyCode::End => help.cursor = help.query.len(),
             KeyCode::Enter => {
                 if let Some(topic) = self.help_topics(&help.query).get(help.selected).copied() {
                     self.set_status(
@@ -1465,6 +1879,7 @@ impl TuiApp {
                     && !key.modifiers.contains(KeyModifiers::ALT) =>
             {
                 help.insert(character);
+                help.reset_preview_scroll();
             }
             _ => {}
         }
@@ -1543,6 +1958,14 @@ impl TuiApp {
                 }
                 return Ok(true);
             }
+            KeyCode::Char('c') if key.modifiers.is_empty() => {
+                self.clear_filter();
+                search.draft_query.clear();
+                search.cursor = 0;
+                search.facet_selected = 0;
+                search.view_selected = 0;
+                self.set_status(StatusTone::Info, "Cleared the active filter.");
+            }
             _ => {}
         }
 
@@ -1602,6 +2025,14 @@ impl TuiApp {
                         format!("Deleted saved view '{}'.", removed.name),
                     );
                 }
+            }
+            KeyCode::Char('c') if key.modifiers.is_empty() => {
+                self.clear_filter();
+                search.draft_query.clear();
+                search.cursor = 0;
+                search.facet_selected = 0;
+                search.view_selected = 0;
+                self.set_status(StatusTone::Info, "Cleared the active filter.");
             }
             KeyCode::Enter => {
                 if let Some(view) = self.saved_views.views.get(search.view_selected).cloned() {
@@ -1698,8 +2129,7 @@ impl TuiApp {
             }
             PromptMode::OpenId => {
                 self.editor.open_id(value)?;
-                self.expand_focus_chain();
-                self.persist_session()?;
+                self.finalize_focus_change(MotionTarget::Focus)?;
                 self.quit_armed = false;
                 self.set_status(StatusTone::Success, "Jumped to the requested id.");
                 Ok(())
@@ -1756,6 +2186,116 @@ impl TuiApp {
         get_node(&self.editor.document().nodes, &path)
     }
 
+    fn current_anchor(&self) -> Option<PathAnchor> {
+        self.editor.current().map(|node| PathAnchor {
+            path: self.editor.focus_path().to_vec(),
+            id: node.id.clone(),
+        })
+    }
+
+    fn memory_anchor(anchor: &PathAnchor) -> LocationMemoryAnchor {
+        LocationMemoryAnchor {
+            path: anchor.path.clone(),
+            id: anchor.id.clone(),
+        }
+    }
+
+    fn anchors_match(
+        existing_id: &Option<String>,
+        existing_path: &[usize],
+        anchor: &PathAnchor,
+    ) -> bool {
+        existing_id
+            .as_ref()
+            .zip(anchor.id.as_ref())
+            .is_some_and(|(left, right)| left == right)
+            || existing_path == anchor.path
+    }
+
+    fn resolve_anchor_path(&self, anchor: &PathAnchor) -> Option<Vec<usize>> {
+        if let Some(id) = &anchor.id
+            && let Some(path) = find_path_by_id(&self.editor.document().nodes, id)
+        {
+            return Some(path);
+        }
+        get_node(&self.editor.document().nodes, &anchor.path).map(|_| anchor.path.clone())
+    }
+
+    fn remember_current_location(&mut self) {
+        let Some(anchor) = self.current_anchor() else {
+            return;
+        };
+        if self
+            .recent_locations
+            .first()
+            .is_some_and(|existing| Self::anchors_match(&existing.id, &existing.path, &anchor))
+        {
+            return;
+        }
+
+        self.recent_locations
+            .retain(|existing| !Self::anchors_match(&existing.id, &existing.path, &anchor));
+        self.recent_locations.insert(0, anchor.clone());
+        if self.recent_locations.len() > RECENT_LOCATION_LIMIT {
+            self.recent_locations.truncate(RECENT_LOCATION_LIMIT);
+        }
+
+        let next_seen = self
+            .location_memory
+            .frequent
+            .iter()
+            .map(|entry| entry.last_seen)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        if let Some(entry) = self
+            .location_memory
+            .frequent
+            .iter_mut()
+            .find(|entry| Self::anchors_match(&entry.anchor.id, &entry.anchor.path, &anchor))
+        {
+            entry.visits += 1;
+            entry.last_seen = next_seen;
+            entry.anchor = Self::memory_anchor(&anchor);
+        } else {
+            self.location_memory.frequent.push(FrequentLocation {
+                anchor: Self::memory_anchor(&anchor),
+                visits: 1,
+                last_seen: next_seen,
+            });
+        }
+        self.location_memory.frequent.sort_by(|left, right| {
+            right
+                .visits
+                .cmp(&left.visits)
+                .then_with(|| right.last_seen.cmp(&left.last_seen))
+        });
+        if self.location_memory.frequent.len() > FREQUENT_LOCATION_LIMIT {
+            self.location_memory
+                .frequent
+                .truncate(FREQUENT_LOCATION_LIMIT);
+        }
+    }
+
+    fn finalize_focus_change_with_reveal(
+        &mut self,
+        motion: MotionTarget,
+        reveal: FocusReveal,
+    ) -> Result<(), AppError> {
+        if reveal == FocusReveal::Reveal {
+            self.expand_focus_chain();
+        }
+        self.remember_current_location();
+        self.persist_session()?;
+        self.persist_location_memory()?;
+        self.trigger_motion(motion);
+        Ok(())
+    }
+
+    fn finalize_focus_change(&mut self, motion: MotionTarget) -> Result<(), AppError> {
+        self.finalize_focus_change_with_reveal(motion, FocusReveal::Reveal)
+    }
+
     fn set_view_mode(&mut self, next: ViewMode) {
         self.view_mode = next;
         if next == ViewMode::SubtreeOnly {
@@ -1792,8 +2332,7 @@ impl TuiApp {
         let current_index = self.selected_index(&rows) as isize;
         let next_index = (current_index + delta).clamp(0, rows.len() as isize - 1) as usize;
         self.editor.set_focus_path(rows[next_index].path.clone())?;
-        self.persist_session()?;
-        self.trigger_motion(MotionTarget::Focus);
+        self.finalize_focus_change_with_reveal(MotionTarget::Focus, FocusReveal::Preserve)?;
         if let Some(node) = self.editor.current() {
             self.set_status(StatusTone::Info, format!("Focused '{}'.", node.text));
         }
@@ -1823,8 +2362,7 @@ impl TuiApp {
         }
 
         self.editor.move_parent()?;
-        self.persist_session()?;
-        self.trigger_motion(MotionTarget::Focus);
+        self.finalize_focus_change_with_reveal(MotionTarget::Focus, FocusReveal::Preserve)?;
         self.set_status(StatusTone::Info, "Moved to the parent node.");
         Ok(())
     }
@@ -1847,9 +2385,7 @@ impl TuiApp {
         }
 
         self.editor.move_child(1)?;
-        self.expand_focus_chain();
-        self.persist_session()?;
-        self.trigger_motion(MotionTarget::Focus);
+        self.finalize_focus_change_with_reveal(MotionTarget::Focus, FocusReveal::Preserve)?;
         self.set_status(StatusTone::Info, "Moved into the first child.");
         Ok(())
     }
@@ -1889,7 +2425,7 @@ impl TuiApp {
         self.trigger_motion(MotionTarget::PaletteInput);
         self.set_status(
             StatusTone::Info,
-            "Palette open. Type to search actions, recent history, manual checkpoints, safety snapshots, themes, settings, nodes, saved views, and help.",
+            "Palette open. Type actions, recipes, relations, #tags, @metadata, ids, frequent places, recent locations, history, checkpoints, themes, settings, nodes, saved views, or help.",
         );
     }
 
@@ -1899,8 +2435,11 @@ impl TuiApp {
         self.help = Some(HelpOverlayState::new(topic));
         self.trigger_motion(MotionTarget::HelpInput);
         let message = match topic {
-            Some(topic) => format!("Help open on {}. Type to refine topics.", topic.title()),
-            None => "Help open. Type to search topics and shortcuts.".to_string(),
+            Some(topic) => format!(
+                "Help open on {}. Type to refine guides, references, and tips.",
+                topic.title()
+            ),
+            None => "Help open. Type to search guides, references, and tips.".to_string(),
         };
         self.set_status(StatusTone::Info, message);
     }
@@ -1917,6 +2456,77 @@ impl TuiApp {
             StatusTone::Info,
             format!("View mode: {}.", self.view_mode.status_label()),
         );
+    }
+
+    fn open_relation_picker(&mut self, kind: RelationPickerKind, items: Vec<RelationPickerItem>) {
+        self.quit_armed = false;
+        self.delete_armed = false;
+        self.relation_picker = Some(RelationPickerState {
+            kind,
+            selected: 0,
+            items,
+        });
+        self.set_status(StatusTone::Info, kind.open_message());
+    }
+
+    fn follow_outgoing_relation(&mut self) -> Result<(), AppError> {
+        let Some(_) = self.editor.current() else {
+            self.set_status(StatusTone::Warning, "No focused node is available.");
+            return Ok(());
+        };
+
+        let items = collect_outgoing_relation_picker_items(
+            self.editor.document(),
+            self.editor.focus_path(),
+        );
+        if items.is_empty() {
+            self.set_status(
+                StatusTone::Info,
+                "This node has no outgoing relations. Use [id:...] and [[target]] to add one.",
+            );
+            return Ok(());
+        }
+
+        if items.len() == 1 {
+            let item = items.into_iter().next().expect("single item should exist");
+            self.editor.set_focus_path(item.path)?;
+            self.finalize_focus_change(MotionTarget::Focus)?;
+            self.set_status(StatusTone::Success, item.status_message);
+        } else {
+            self.open_relation_picker(RelationPickerKind::Outgoing, items);
+        }
+        Ok(())
+    }
+
+    fn follow_backlink(&mut self) -> Result<(), AppError> {
+        let Some(node) = self.editor.current() else {
+            self.set_status(StatusTone::Warning, "No focused node is available.");
+            return Ok(());
+        };
+
+        let Some(target_id) = node.id.as_deref() else {
+            self.set_status(
+                StatusTone::Info,
+                "This node has no [id:...], so backlinks cannot target it yet.",
+            );
+            return Ok(());
+        };
+
+        let items = collect_backlink_picker_items(self.editor.document(), target_id);
+        if items.is_empty() {
+            self.set_status(StatusTone::Info, "No backlinks point at this node yet.");
+            return Ok(());
+        }
+
+        if items.len() == 1 {
+            let item = items.into_iter().next().expect("single item should exist");
+            self.editor.set_focus_path(item.path)?;
+            self.finalize_focus_change(MotionTarget::Focus)?;
+            self.set_status(StatusTone::Success, item.status_message);
+        } else {
+            self.open_relation_picker(RelationPickerKind::Backlink, items);
+        }
+        Ok(())
     }
 
     fn execute_palette_target(&mut self, target: PaletteTarget) -> Result<(), AppError> {
@@ -1942,16 +2552,12 @@ impl TuiApp {
                     if self.view_mode == ViewMode::SubtreeOnly {
                         if let Some(path) = self.subtree_root_path() {
                             self.editor.set_focus_path(path)?;
-                            self.expand_focus_chain();
-                            self.persist_session()?;
-                            self.trigger_motion(MotionTarget::Focus);
+                            self.finalize_focus_change(MotionTarget::Focus)?;
                             self.set_status(StatusTone::Info, "Returned to the subtree root.");
                         }
                     } else {
                         self.editor.move_root()?;
-                        self.expand_focus_chain();
-                        self.persist_session()?;
-                        self.trigger_motion(MotionTarget::Focus);
+                        self.finalize_focus_change(MotionTarget::Focus)?;
                         self.set_status(StatusTone::Info, "Jumped to the root.");
                     }
                 }
@@ -2004,14 +2610,115 @@ impl TuiApp {
                     self.open_help(None);
                 }
             },
+            PaletteTarget::Recipe(recipe) => match recipe {
+                PaletteRecipe::ReviewTodo => {
+                    self.apply_filter("#todo")?;
+                    if self.active_filter_match_count() > 0 {
+                        self.set_view_mode(ViewMode::FilteredFocus);
+                        self.set_status(
+                            StatusTone::Success,
+                            "Recipe applied: reviewing #todo work in Filtered Focus.",
+                        );
+                    }
+                }
+                PaletteRecipe::ReviewActive => {
+                    self.apply_filter("@status:active")?;
+                    if self.active_filter_match_count() > 0 {
+                        self.set_view_mode(ViewMode::FilteredFocus);
+                        self.set_status(
+                            StatusTone::Success,
+                            "Recipe applied: reviewing @status:active work in Filtered Focus.",
+                        );
+                    }
+                }
+                PaletteRecipe::ReviewBlocked => {
+                    self.apply_filter("@status:blocked")?;
+                    if self.active_filter_match_count() > 0 {
+                        self.set_view_mode(ViewMode::FilteredFocus);
+                        self.set_status(
+                            StatusTone::Success,
+                            "Recipe applied: reviewing @status:blocked work in Filtered Focus.",
+                        );
+                    }
+                }
+                PaletteRecipe::WorkInsideBranch => {
+                    self.set_view_mode(ViewMode::SubtreeOnly);
+                    if let Some(node) = self.editor.current() {
+                        self.set_status(
+                            StatusTone::Success,
+                            format!("Recipe applied: working inside '{}'.", node.text),
+                        );
+                    }
+                }
+                PaletteRecipe::BrowseFacets => {
+                    self.open_search_overlay(SearchSection::Facets);
+                }
+                PaletteRecipe::SaveWorkingSet => {
+                    if self.filter.is_some() {
+                        self.begin_prompt(PromptMode::SaveView, String::new());
+                        self.set_status(
+                            StatusTone::Info,
+                            "Recipe applied: name the current filter to save it as a view.",
+                        );
+                    } else {
+                        self.set_status(
+                            StatusTone::Warning,
+                            "Save Current Working Set needs an active filter first.",
+                        );
+                    }
+                }
+                PaletteRecipe::VisualizeCurrentView => {
+                    self.mindmap = Some(MindmapOverlayState::default());
+                    let scene = self.current_mindmap_scene();
+                    self.set_status(
+                        StatusTone::Info,
+                        format!(
+                            "Recipe applied: visual mindmap open. {}. Arrow keys pan, 0 recenters, p exports PNG.",
+                            scene.describe()
+                        ),
+                    );
+                }
+            },
+            PaletteTarget::QueryRecipe {
+                title,
+                query,
+                view_mode,
+            } => {
+                self.apply_filter(&query)?;
+                if self.active_filter_match_count() > 0 {
+                    self.set_view_mode(view_mode);
+                    self.set_status(StatusTone::Success, format!("Recipe applied: {title}."));
+                }
+            }
             PaletteTarget::Setting(setting) => {
                 self.apply_surface_setting(setting)?;
             }
+            PaletteTarget::RelationPath { path, message } => {
+                self.editor.set_focus_path(path)?;
+                self.finalize_focus_change(MotionTarget::Focus)?;
+                self.set_status(StatusTone::Success, message);
+            }
+            PaletteTarget::InlineFilter(query) => {
+                self.apply_inline_palette_filter(&query)?;
+            }
+            PaletteTarget::InlineId(id) => {
+                self.editor.open_id(&id)?;
+                self.finalize_focus_change(MotionTarget::Focus)?;
+                self.set_status(StatusTone::Success, format!("Jumped to inline id '{id}'."));
+            }
+            PaletteTarget::RecentLocation(path) => {
+                self.editor.set_focus_path(path)?;
+                self.finalize_focus_change(MotionTarget::Focus)?;
+                if let Some(node) = self.editor.current() {
+                    self.set_status(
+                        StatusTone::Success,
+                        format!("Returned to recent location '{}'.", node.text),
+                    );
+                }
+            }
             PaletteTarget::NodePath(path) => {
                 self.editor.set_focus_path(path)?;
-                self.expand_focus_chain();
-                self.persist_session()?;
-                self.trigger_motion(MotionTarget::Focus);
+                self.finalize_focus_change(MotionTarget::Focus)?;
                 if let Some(node) = self.editor.current() {
                     self.set_status(StatusTone::Success, format!("Jumped to '{}'.", node.text));
                 }
@@ -2143,8 +2850,14 @@ impl TuiApp {
         let query = raw.trim().to_lowercase();
         let mut items = Vec::new();
         items.extend(self.palette_action_items(&query));
+        items.extend(self.palette_recipe_items(&query));
+        items.extend(self.palette_contextual_recipe_items(&query));
         items.extend(self.palette_theme_items(&query));
         items.extend(self.palette_setting_items(&query));
+        items.extend(self.palette_relation_items(&query));
+        items.extend(self.palette_inline_items(&query));
+        items.extend(self.palette_frequent_location_items(&query));
+        items.extend(self.palette_recent_location_items(&query));
         items.extend(self.palette_saved_view_items(&query));
         items.extend(self.palette_history_items(&query));
         items.extend(self.palette_checkpoint_items(&query));
@@ -2304,6 +3017,116 @@ impl TuiApp {
             .collect()
     }
 
+    fn palette_recipe_items(&self, query: &str) -> Vec<PaletteItem> {
+        let mut recipes = vec![
+            PaletteRecipe::ReviewTodo,
+            PaletteRecipe::ReviewActive,
+            PaletteRecipe::ReviewBlocked,
+            PaletteRecipe::WorkInsideBranch,
+            PaletteRecipe::BrowseFacets,
+            PaletteRecipe::VisualizeCurrentView,
+        ];
+
+        if self.filter.is_some() {
+            recipes.push(PaletteRecipe::SaveWorkingSet);
+        }
+
+        recipes
+            .into_iter()
+            .filter_map(|recipe| {
+                let title = recipe.title();
+                let subtitle = recipe.subtitle();
+                let preview = recipe.preview();
+                let haystack = format!("{title} {subtitle} {preview} {}", recipe.keywords());
+                palette_match_score(query, title, &haystack).map(|score| PaletteItem {
+                    kind: PaletteItemKind::Recipe,
+                    title: title.to_string(),
+                    subtitle: subtitle.to_string(),
+                    preview: preview.to_string(),
+                    score: score + 325,
+                    target: PaletteTarget::Recipe(recipe),
+                })
+            })
+            .collect()
+    }
+
+    fn palette_contextual_recipe_items(&self, query: &str) -> Vec<PaletteItem> {
+        if query.is_empty() {
+            return Vec::new();
+        }
+
+        let owner_items = metadata_value_counts_for_filter(self.editor.document(), None)
+            .into_iter()
+            .filter(|entry| entry.key == "owner")
+            .take(4)
+            .filter_map(|entry| {
+                let title = format!("Review Owner · {}", entry.value);
+                let subtitle = format!(
+                    "Review {} node{} owned by {}",
+                    entry.count,
+                    if entry.count == 1 { "" } else { "s" },
+                    entry.value
+                );
+                let preview = format!(
+                    "Apply `@owner:{}` in Filtered Focus and land on the first matching branch.\nUse this when you want a quick owner-specific review without typing the full filter every time.",
+                    entry.value
+                );
+                let haystack = format!(
+                    "{title} {subtitle} {preview} recipe workflow owner assignee assigned {} @owner:{}",
+                    entry.value, entry.value
+                );
+                palette_match_score(query, &title, &haystack).map(|score| PaletteItem {
+                    kind: PaletteItemKind::Recipe,
+                    title: title.clone(),
+                    subtitle,
+                    preview,
+                    score: score + 320 + entry.count.min(20) as i64,
+                    target: PaletteTarget::QueryRecipe {
+                        title: format!("reviewing @owner:{} work in Filtered Focus", entry.value),
+                        query: format!("@owner:{}", entry.value),
+                        view_mode: ViewMode::FilteredFocus,
+                    },
+                })
+            });
+
+        let status_items = metadata_value_counts_for_filter(self.editor.document(), None)
+            .into_iter()
+            .filter(|entry| entry.key == "status")
+            .filter(|entry| entry.value != "active" && entry.value != "blocked")
+            .take(4)
+            .filter_map(|entry| {
+                let title = format!("Review Status · {}", entry.value);
+                let subtitle = format!(
+                    "Review {} node{} with status {}",
+                    entry.count,
+                    if entry.count == 1 { "" } else { "s" },
+                    entry.value
+                );
+                let preview = format!(
+                    "Apply `@status:{}` in Filtered Focus and land on the first matching branch.\nUseful when this map tracks a custom workflow state beyond the built-in active and blocked recipes.",
+                    entry.value
+                );
+                let haystack = format!(
+                    "{title} {subtitle} {preview} recipe workflow status state review {} @status:{}",
+                    entry.value, entry.value
+                );
+                palette_match_score(query, &title, &haystack).map(|score| PaletteItem {
+                    kind: PaletteItemKind::Recipe,
+                    title: title.clone(),
+                    subtitle,
+                    preview,
+                    score: score + 318 + entry.count.min(20) as i64,
+                    target: PaletteTarget::QueryRecipe {
+                        title: format!("reviewing @status:{} work in Filtered Focus", entry.value),
+                        query: format!("@status:{}", entry.value),
+                        view_mode: ViewMode::FilteredFocus,
+                    },
+                })
+            });
+
+        owner_items.chain(status_items).collect()
+    }
+
     fn palette_theme_items(&self, query: &str) -> Vec<PaletteItem> {
         let baseline_theme = self.palette_surface_baseline().theme;
         ThemeId::ALL
@@ -2342,6 +3165,8 @@ impl TuiApp {
             SurfaceSetting::Motion(false),
             SurfaceSetting::AsciiAccents(true),
             SurfaceSetting::AsciiAccents(false),
+            SurfaceSetting::MinimalMode(true),
+            SurfaceSetting::MinimalMode(false),
         ];
 
         settings
@@ -2366,6 +3191,25 @@ impl TuiApp {
             .collect()
     }
 
+    fn palette_relation_items(&self, query: &str) -> Vec<PaletteItem> {
+        collect_relation_palette_entries(self.editor.document(), self.editor.focus_path())
+            .into_iter()
+            .filter_map(|entry| {
+                palette_match_score(query, &entry.title, &entry.haystack).map(|score| PaletteItem {
+                    kind: PaletteItemKind::Relation,
+                    title: entry.title,
+                    subtitle: entry.subtitle,
+                    preview: entry.preview,
+                    score: score + 390,
+                    target: PaletteTarget::RelationPath {
+                        path: entry.path,
+                        message: entry.message,
+                    },
+                })
+            })
+            .collect()
+    }
+
     fn palette_saved_view_items(&self, query: &str) -> Vec<PaletteItem> {
         self.saved_views
             .views
@@ -2383,6 +3227,206 @@ impl TuiApp {
                             query: view.query.clone(),
                         },
                     })
+            })
+            .collect()
+    }
+
+    fn palette_inline_items(&self, query: &str) -> Vec<PaletteItem> {
+        if query.is_empty() {
+            return Vec::new();
+        }
+
+        let mut items = Vec::new();
+
+        items.extend(
+            link_entries(self.editor.document())
+                .into_iter()
+                .filter_map(|entry| {
+                    let haystack = format!(
+                        "[id:{}] {} {} inline id deep link target jump",
+                        entry.id, entry.text, entry.breadcrumb
+                    );
+                    let score_boost = if query.contains('/') || query.starts_with("[id:") {
+                        540
+                    } else {
+                        430
+                    };
+                    palette_match_score(query, &entry.id, &haystack).map(|score| PaletteItem {
+                        kind: PaletteItemKind::Inline,
+                        title: format!("[id:{}]", entry.id),
+                        subtitle: entry.breadcrumb,
+                        preview: format!(
+                            "Jump directly to this inline id target.\n{}\nCurrent label '{}'.",
+                            entry.id, entry.text
+                        ),
+                        score: score + score_boost,
+                        target: PaletteTarget::InlineId(entry.id),
+                    })
+                }),
+        );
+
+        items.extend(
+            tag_counts(self.editor.document())
+                .into_iter()
+                .filter_map(|entry| {
+                    let token = entry.tag;
+                    let haystack =
+                        format!("{token} tag inline filter {} matching nodes", entry.count);
+                    let score_boost = if query.starts_with('#') { 520 } else { 400 };
+                    palette_match_score(query, &token, &haystack).map(|score| PaletteItem {
+                        kind: PaletteItemKind::Inline,
+                        title: token.clone(),
+                        subtitle: format!(
+                            "tag · {} match{}",
+                            entry.count,
+                            if entry.count == 1 { "" } else { "es" }
+                        ),
+                        preview: format!(
+                            "Filter to nodes tagged {token}.\n{} matching node{} in this map.",
+                            entry.count,
+                            if entry.count == 1 { "" } else { "s" }
+                        ),
+                        score: score + score_boost,
+                        target: PaletteTarget::InlineFilter(token),
+                    })
+                }),
+        );
+
+        items.extend(
+            metadata_key_counts_for_filter(self.editor.document(), None)
+                .into_iter()
+                .filter_map(|entry| {
+                    let token = format!("@{}", entry.key);
+                    let haystack =
+                        format!("{token} metadata key inline filter {} matching nodes", entry.count);
+                    let score_boost = if query.starts_with('@') { 500 } else { 390 };
+                    palette_match_score(query, &token, &haystack).map(|score| PaletteItem {
+                        kind: PaletteItemKind::Inline,
+                        title: token.clone(),
+                        subtitle: format!(
+                            "metadata key · {} match{}",
+                            entry.count,
+                            if entry.count == 1 { "" } else { "es" }
+                        ),
+                        preview: format!(
+                            "Filter to nodes with metadata key {token}.\n{} matching node{} in this map.",
+                            entry.count,
+                            if entry.count == 1 { "" } else { "s" }
+                        ),
+                        score: score + score_boost,
+                        target: PaletteTarget::InlineFilter(token),
+                    })
+                }),
+        );
+
+        items.extend(
+            metadata_value_counts_for_filter(self.editor.document(), None)
+                .into_iter()
+                .filter_map(|entry| {
+                    let token = format!("@{}:{}", entry.key, entry.value);
+                    let haystack =
+                        format!("{token} metadata value inline filter {} matching nodes", entry.count);
+                    let score_boost = if query.starts_with('@') && query.contains(':') {
+                        530
+                    } else {
+                        410
+                    };
+                    palette_match_score(query, &token, &haystack).map(|score| PaletteItem {
+                        kind: PaletteItemKind::Inline,
+                        title: token.clone(),
+                        subtitle: format!(
+                            "metadata value · {} match{}",
+                            entry.count,
+                            if entry.count == 1 { "" } else { "es" }
+                        ),
+                        preview: format!(
+                            "Filter to nodes with metadata value {token}.\n{} matching node{} in this map.",
+                            entry.count,
+                            if entry.count == 1 { "" } else { "s" }
+                        ),
+                        score: score + score_boost,
+                        target: PaletteTarget::InlineFilter(token),
+                    })
+                }),
+        );
+
+        items
+    }
+
+    fn palette_recent_location_items(&self, query: &str) -> Vec<PaletteItem> {
+        self.recent_locations
+            .iter()
+            .filter_map(|anchor| {
+                let path = self.resolve_anchor_path(anchor)?;
+                let node = get_node(&self.editor.document().nodes, &path)?;
+                let title = if node.text.is_empty() {
+                    "(empty)".to_string()
+                } else {
+                    node.text.clone()
+                };
+                let breadcrumb = breadcrumb_for_path(self.editor.document(), &path);
+                let subtitle = node
+                    .id
+                    .clone()
+                    .unwrap_or_else(|| breadcrumb.clone());
+                let preview = format!(
+                    "Jump back to this recent location.\n{}\nThe current view and filter stay in place.",
+                    breadcrumb
+                );
+                let haystack = format!("{title} {subtitle} {breadcrumb} recent location jump");
+                palette_match_score(query, &title, &haystack).map(|score| PaletteItem {
+                    kind: PaletteItemKind::Location,
+                    title,
+                    subtitle,
+                    preview,
+                    score: score + 360,
+                    target: PaletteTarget::RecentLocation(path),
+                })
+            })
+            .collect()
+    }
+
+    fn palette_frequent_location_items(&self, query: &str) -> Vec<PaletteItem> {
+        self.location_memory
+            .frequent
+            .iter()
+            .filter(|entry| entry.visits >= FREQUENT_LOCATION_MIN_VISITS)
+            .filter_map(|entry| {
+                let anchor = PathAnchor {
+                    path: entry.anchor.path.clone(),
+                    id: entry.anchor.id.clone(),
+                };
+                let path = self.resolve_anchor_path(&anchor)?;
+                let node = get_node(&self.editor.document().nodes, &path)?;
+                let title = if node.text.is_empty() {
+                    "(empty)".to_string()
+                } else {
+                    node.text.clone()
+                };
+                let breadcrumb = breadcrumb_for_path(self.editor.document(), &path);
+                let subtitle = format!(
+                    "{} visits{}",
+                    entry.visits,
+                    node.id
+                        .as_ref()
+                        .map(|id| format!(" · {id}"))
+                        .unwrap_or_default()
+                );
+                let preview = format!(
+                    "Jump to a frequently revisited location.\n{}\nVisited {} times in this map.",
+                    breadcrumb, entry.visits
+                );
+                let haystack = format!(
+                    "{title} {subtitle} {breadcrumb} frequent location place revisit visits"
+                );
+                palette_match_score(query, &title, &haystack).map(|score| PaletteItem {
+                    kind: PaletteItemKind::Frequent,
+                    title,
+                    subtitle,
+                    preview,
+                    score: score + 358 + entry.visits.min(20) as i64,
+                    target: PaletteTarget::RecentLocation(path),
+                })
             })
             .collect()
     }
@@ -2481,7 +3525,7 @@ impl TuiApp {
                         kind: PaletteItemKind::Help,
                         title: topic.title().to_string(),
                         subtitle: topic.summary().to_string(),
-                        preview: topic.hint().to_string(),
+                        preview: format!("Help · {}", topic.hint()),
                         score: score + 250,
                         target: PaletteTarget::HelpTopic(topic),
                     }
@@ -2560,6 +3604,25 @@ impl TuiApp {
             self.set_status(
                 StatusTone::Success,
                 format!("Filter applied with {count} matches."),
+            );
+        }
+        Ok(())
+    }
+
+    fn apply_inline_palette_filter(&mut self, query: &str) -> Result<(), AppError> {
+        self.apply_filter(query)?;
+        let count = self.active_filter_match_count();
+        if count == 0 {
+            self.set_status(
+                StatusTone::Warning,
+                format!("Applied inline filter '{query}', but no nodes matched."),
+            );
+        } else {
+            self.set_status(
+                StatusTone::Success,
+                format!(
+                    "Applied inline filter '{query}' and landed on the first of {count} matches."
+                ),
             );
         }
         Ok(())
@@ -2665,6 +3728,7 @@ impl TuiApp {
         self.palette_preview_base = None;
         self.quit_armed = false;
         self.delete_armed = false;
+        self.remember_current_location();
         Ok(())
     }
 
@@ -2880,9 +3944,7 @@ impl TuiApp {
         let len = matches.len() as isize;
         let next_index = (current_index + delta).rem_euclid(len) as usize;
         self.editor.set_focus_path(matches[next_index].clone())?;
-        self.expand_focus_chain();
-        self.persist_session()?;
-        self.trigger_motion(MotionTarget::FilterResult);
+        self.finalize_focus_change(MotionTarget::FilterResult)?;
         self.set_status(
             StatusTone::Info,
             format!("Match {}/{}.", next_index + 1, total_matches),
@@ -2896,9 +3958,7 @@ impl TuiApp {
         };
         if let Some(path) = filter.matches.first() {
             self.editor.set_focus_path(path.clone())?;
-            self.expand_focus_chain();
-            self.persist_session()?;
-            self.trigger_motion(MotionTarget::Focus);
+            self.finalize_focus_change(MotionTarget::Focus)?;
         }
         Ok(())
     }
@@ -3084,6 +4144,10 @@ impl TuiApp {
         save_checkpoints_for(&self.map_path, &self.checkpoints)
     }
 
+    fn persist_location_memory(&self) -> Result<(), AppError> {
+        save_locations_for(&self.map_path, &self.location_memory)
+    }
+
     fn persist_ui_settings(&self) -> Result<(), AppError> {
         save_ui_settings_for(&self.map_path, &self.ui_settings)
     }
@@ -3103,6 +4167,7 @@ impl TuiApp {
         match setting {
             SurfaceSetting::Motion(enabled) => baseline.motion_enabled == enabled,
             SurfaceSetting::AsciiAccents(enabled) => baseline.ascii_accents == enabled,
+            SurfaceSetting::MinimalMode(enabled) => baseline.minimal_mode == enabled,
         }
     }
 
@@ -3149,6 +4214,11 @@ impl TuiApp {
                 self.ui_settings.ascii_accents = enabled;
                 changed
             }
+            SurfaceSetting::MinimalMode(enabled) => {
+                let changed = self.ui_settings.minimal_mode != enabled;
+                self.ui_settings.minimal_mode = enabled;
+                changed
+            }
         };
 
         self.persist_ui_settings()?;
@@ -3177,6 +4247,20 @@ impl TuiApp {
             ),
             SurfaceSetting::AsciiAccents(false) => {
                 (StatusTone::Info, "ASCII accents are already disabled.")
+            }
+            SurfaceSetting::MinimalMode(true) if changed => (
+                StatusTone::Success,
+                "Minimal mode enabled. Overlays now use a quieter, lower-noise layout.",
+            ),
+            SurfaceSetting::MinimalMode(true) => {
+                (StatusTone::Info, "Minimal mode is already enabled.")
+            }
+            SurfaceSetting::MinimalMode(false) if changed => (
+                StatusTone::Success,
+                "Minimal mode disabled. Richer helper copy and fuller overlay chrome are back.",
+            ),
+            SurfaceSetting::MinimalMode(false) => {
+                (StatusTone::Info, "Minimal mode is already disabled.")
             }
         };
         self.set_status(tone, message);
@@ -3263,6 +4347,20 @@ impl TuiApp {
                     ),
                     SurfaceSetting::AsciiAccents(false) => {
                         (StatusTone::Info, "ASCII accents are already disabled.")
+                    }
+                    SurfaceSetting::MinimalMode(true) if changed => (
+                        StatusTone::Success,
+                        "Minimal mode enabled. Overlays now use a quieter, lower-noise layout.",
+                    ),
+                    SurfaceSetting::MinimalMode(true) => {
+                        (StatusTone::Info, "Minimal mode is already enabled.")
+                    }
+                    SurfaceSetting::MinimalMode(false) if changed => (
+                        StatusTone::Success,
+                        "Minimal mode disabled. Richer helper copy and fuller overlay chrome are back.",
+                    ),
+                    SurfaceSetting::MinimalMode(false) => {
+                        (StatusTone::Info, "Minimal mode is already disabled.")
                     }
                 };
                 self.set_status(tone, message);
@@ -3390,6 +4488,7 @@ pub fn run_interactive(target: &str, autosave: bool) -> Result<(), AppError> {
         ))
     };
     let saved_views = load_views_for(&loaded.target.path)?;
+    let location_memory = load_locations_for(&loaded.target.path)?;
     let checkpoints = load_checkpoints_for(&loaded.target.path)?;
     let ui_settings = load_ui_settings_for(&loaded.target.path)?;
     let mut app = TuiApp::new_with_settings(
@@ -3401,8 +4500,12 @@ pub fn run_interactive(target: &str, autosave: bool) -> Result<(), AppError> {
         saved_views,
         ui_settings,
     );
+    app.location_memory = location_memory;
+    app.recent_locations.clear();
+    app.remember_current_location();
     app.checkpoints = checkpoints;
     app.persist_session()?;
+    app.persist_location_memory()?;
 
     let mut terminal = setup_terminal()?;
     let result = run_event_loop(&mut terminal, &mut app);
@@ -3470,6 +4573,7 @@ fn render(frame: &mut Frame, app: &TuiApp) {
     let PALETTE = app.theme_colors();
     ACTIVE_PALETTE.with(|palette| palette.set(PALETTE));
     ACTIVE_ASCII_ACCENTS.with(|enabled| enabled.set(app.ui_settings.ascii_accents));
+    ACTIVE_MINIMAL_MODE.with(|enabled| enabled.set(app.ui_settings.minimal_mode));
     ACTIVE_MOTION_TARGET.with(|target| target.set(app.motion_cue.map(|cue| cue.target)));
     ACTIVE_MOTION_LEVEL
         .with(|level| level.set(app.motion_cue.map_or(0, MotionCue::emphasis_level)));
@@ -3482,20 +4586,26 @@ fn render(frame: &mut Frame, app: &TuiApp) {
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(4),
+            Constraint::Length(if app.ui_settings.minimal_mode { 3 } else { 4 }),
             Constraint::Min(16),
-            Constraint::Length(4),
-            Constraint::Length(1),
+            Constraint::Length(if app.ui_settings.minimal_mode { 3 } else { 4 }),
+            Constraint::Length(if app.ui_settings.minimal_mode { 0 } else { 1 }),
         ])
         .split(area);
 
     render_header(frame, outer[0], app);
     render_body(frame, outer[1], app);
     render_status(frame, outer[2], app);
-    render_keybar(frame, outer[3]);
+    if !app.ui_settings.minimal_mode {
+        render_keybar(frame, outer[3]);
+    }
 
     if let Some(help) = &app.help {
         render_help_overlay(frame, centered_rect(78, 80, area), app, help);
+    }
+
+    if let Some(picker) = &app.relation_picker {
+        render_relation_picker_overlay(frame, centered_rect(66, 52, area), app, picker);
     }
 
     if let Some(overlay) = &app.mindmap {
@@ -3511,13 +4621,19 @@ fn render(frame: &mut Frame, app: &TuiApp) {
     }
 
     if let Some(prompt) = &app.prompt {
-        render_prompt_overlay(frame, centered_rect(68, 30, area), prompt, app);
+        render_prompt_overlay(
+            frame,
+            prompt_overlay_rect(app.ui_settings.minimal_mode, area),
+            prompt,
+            app,
+        );
     }
 }
 
 #[allow(non_snake_case)]
 fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let PALETTE = app.theme_colors();
+    let minimal = app.ui_settings.minimal_mode;
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(PALETTE.border))
@@ -3551,6 +4667,61 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
         .filter
         .as_ref()
         .map(|filter| format!(" FILTER {} ", filter.matches.len()));
+    if minimal {
+        let map_name = app
+            .map_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(ToString::to_string)
+            .unwrap_or_else(|| app.map_path.to_string_lossy().into_owned());
+        let mut line = vec![
+            Span::styled(
+                "mdmind",
+                Style::default()
+                    .fg(PALETTE.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(map_name, Style::default().fg(PALETTE.text)),
+            Span::raw("  "),
+            status_chip("STATE", badge, badge_color, PALETTE.background),
+            Span::raw(" "),
+            status_chip(
+                "SAVE",
+                if app.autosave { "auto" } else { "manual" },
+                PALETTE.surface_alt,
+                PALETTE.text,
+            ),
+            Span::raw(" "),
+            status_chip(
+                "VIEW",
+                app.view_mode.label(),
+                PALETTE.surface_alt,
+                PALETTE.text,
+            ),
+            Span::raw(" "),
+            status_chip(
+                "THEME",
+                app.ui_settings.theme.label(),
+                PALETTE.surface_alt,
+                PALETTE.text,
+            ),
+        ];
+        if let Some(filter) = &app.filter {
+            line.push(Span::raw(" "));
+            line.push(status_chip(
+                "FILTER",
+                &filter.matches.len().to_string(),
+                PALETTE.surface_alt,
+                PALETTE.text,
+            ));
+        }
+        frame.render_widget(
+            Paragraph::new(Line::from(line)).wrap(Wrap { trim: false }),
+            inner,
+        );
+        return;
+    }
     let mut header_spans = vec![
         Span::styled(
             if ascii_accents_enabled() {
@@ -3627,7 +4798,11 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
 fn render_body(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let columns = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .constraints(if app.ui_settings.minimal_mode {
+            [Constraint::Percentage(62), Constraint::Percentage(38)]
+        } else {
+            [Constraint::Percentage(40), Constraint::Percentage(60)]
+        })
         .split(area);
 
     render_outline(frame, columns[0], app);
@@ -3637,9 +4812,11 @@ fn render_body(frame: &mut Frame, area: Rect, app: &TuiApp) {
 #[allow(non_snake_case)]
 fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let PALETTE = app.theme_colors();
+    let minimal = app.ui_settings.minimal_mode;
     let rows = app.visible_rows();
     let selected_index = app.selected_index(&rows);
     let scope_root = app.projection_focus_path();
+    let focus_path = app.editor.focus_path().to_vec();
     let scope_attention = motion_level(MotionTarget::Scope);
     let filter_attention = motion_level(MotionTarget::FilterResult);
     let selected_highlight_style = match (
@@ -3681,6 +4858,9 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
         .iter()
         .map(|row| {
             let mut spans = Vec::new();
+            let is_selected = row.path == focus_path;
+            let show_detail = !minimal || is_selected || row.matched;
+            let show_tags = !row.tags.is_empty();
             let scope_role = if scope_attention > 0 {
                 scope_handoff_role(&row.path, &scope_root, app.view_mode)
             } else {
@@ -3740,7 +4920,7 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     .add_modifier(Modifier::UNDERLINED | Modifier::BOLD);
             }
             spans.push(Span::styled(row.text.clone(), text_style));
-            if !row.tags.is_empty() {
+            if show_tags {
                 spans.push(Span::raw(" "));
                 spans.push(Span::styled(
                     row.tags.join(" "),
@@ -3751,7 +4931,7 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     }),
                 ));
             }
-            if !row.metadata.is_empty() {
+            if show_detail && !row.metadata.is_empty() {
                 spans.push(Span::raw(" "));
                 spans.push(Span::styled(
                     row.metadata.join(" "),
@@ -3762,7 +4942,18 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     }),
                 ));
             }
-            if let Some(id) = &row.id {
+            if show_detail && !row.relations.is_empty() {
+                spans.push(Span::raw(" "));
+                spans.push(Span::styled(
+                    row.relations.join(" "),
+                    Style::default().fg(if row.dimmed {
+                        PALETTE.border
+                    } else {
+                        PALETTE.sky
+                    }),
+                ));
+            }
+            if show_detail && let Some(id) = &row.id {
                 spans.push(Span::raw(" "));
                 spans.push(Span::styled(
                     format!("[id:{id}]"),
@@ -3773,7 +4964,7 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     }),
                 ));
             }
-            if row.has_children {
+            if !minimal && row.has_children {
                 spans.push(Span::raw(" "));
                 spans.push(Span::styled(
                     format!("({})", row.child_count),
@@ -3824,13 +5015,18 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
 }
 
 fn render_focus_cluster(frame: &mut Frame, area: Rect, app: &TuiApp) {
-    let focus_height = if app.filter.is_some() { 9 } else { 8 };
+    let focus_height = focus_card_height(app);
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(focus_height), Constraint::Min(8)])
         .split(area);
 
     render_focus_card(frame, sections[0], app);
+
+    if app.ui_settings.minimal_mode {
+        render_children_lane(frame, sections[1], app);
+        return;
+    }
 
     let lanes = Layout::default()
         .direction(Direction::Horizontal)
@@ -3842,13 +5038,40 @@ fn render_focus_cluster(frame: &mut Frame, area: Rect, app: &TuiApp) {
         .split(sections[1]);
 
     render_parent_lane(frame, lanes[0], app);
-    render_peer_lane(frame, lanes[1], app);
+    render_backlinks_lane(frame, lanes[1], app);
     render_children_lane(frame, lanes[2], app);
+}
+
+fn focus_card_height(app: &TuiApp) -> u16 {
+    if !app.ui_settings.minimal_mode {
+        return if app.filter.is_some() { 9 } else { 8 };
+    }
+
+    let Some(node) = app.editor.current() else {
+        return 6;
+    };
+
+    let mut height = 6_u16;
+    if !node.tags.is_empty() || !node.metadata.is_empty() {
+        height += 1;
+    }
+    if !node.relations.is_empty() {
+        height += 1;
+    }
+    if app.filter.is_some() {
+        height += 1;
+    }
+    if app.view_mode == ViewMode::SubtreeOnly && app.subtree_root_node().is_some() {
+        height += 1;
+    }
+
+    height.min(9)
 }
 
 #[allow(non_snake_case)]
 fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let PALETTE = app.theme_colors();
+    let minimal = app.ui_settings.minimal_mode;
     let scope_root_path = app.projection_focus_path();
     let filter_surface = attention_fill(
         PALETTE.surface,
@@ -3951,13 +5174,28 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     Style::default().fg(PALETTE.text),
                 ),
             ]));
-            lines.push(Line::from(vec![
-                Span::styled("mind map cue ", Style::default().fg(PALETTE.muted)),
-                Span::styled(
-                    summarize_relationships(app),
-                    Style::default().fg(PALETTE.text),
-                ),
-            ]));
+            if !node.relations.is_empty() {
+                lines.push(Line::from(vec![
+                    Span::styled("outgoing ", Style::default().fg(PALETTE.muted)),
+                    Span::styled(
+                        node.relations
+                            .iter()
+                            .map(|relation| relation.display_token())
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                        Style::default().fg(PALETTE.sky),
+                    ),
+                ]));
+            }
+            if !minimal {
+                lines.push(Line::from(vec![
+                    Span::styled("relations ", Style::default().fg(PALETTE.muted)),
+                    Span::styled(
+                        summarize_relationships(app),
+                        Style::default().fg(PALETTE.text),
+                    ),
+                ]));
+            }
             if motion_level(MotionTarget::Scope) > 0
                 && let Some(scope_root) =
                     get_node(&app.editor.document().nodes, scope_root_path.as_slice())
@@ -4003,17 +5241,19 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     Span::raw(" returns here"),
                 ]));
             }
-            lines.push(Line::from(vec![
-                Span::styled("save mode ", Style::default().fg(PALETTE.muted)),
-                Span::styled(
-                    if app.autosave {
-                        "autosave after each structural edit"
-                    } else {
-                        "manual save only"
-                    },
-                    Style::default().fg(PALETTE.text),
-                ),
-            ]));
+            if !minimal {
+                lines.push(Line::from(vec![
+                    Span::styled("save mode ", Style::default().fg(PALETTE.muted)),
+                    Span::styled(
+                        if app.autosave {
+                            "autosave after each structural edit"
+                        } else {
+                            "manual save only"
+                        },
+                        Style::default().fg(PALETTE.text),
+                    ),
+                ]));
+            }
             if let Some(filter) = &app.filter {
                 let is_direct_match = current_node_matches_filter(app);
                 lines.push(Line::from(vec![
@@ -4070,14 +5310,14 @@ fn render_parent_lane(frame: &mut Frame, area: Rect, app: &TuiApp) {
 }
 
 #[allow(non_snake_case)]
-fn render_peer_lane(frame: &mut Frame, area: Rect, app: &TuiApp) {
+fn render_backlinks_lane(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let PALETTE = app.theme_colors();
-    let title = styled_title("Peers", PALETTE.accent);
+    let title = styled_title("Backlinks", PALETTE.accent);
     render_simple_lane(
         frame,
         area,
         title,
-        peer_lines(app),
+        backlink_lines(app),
         Style::default().bg(PALETTE.surface),
     );
 }
@@ -4108,7 +5348,11 @@ fn render_simple_lane(
         .title(title)
         .borders(Borders::ALL)
         .border_style(Style::default().fg(PALETTE.border))
-        .style(style)
+        .style(if minimal_mode_enabled() {
+            style.bg(PALETTE.background)
+        } else {
+            style
+        })
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -4119,6 +5363,64 @@ fn render_simple_lane(
 fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let PALETTE = app.theme_colors();
     let status = app.status_model();
+    if app.ui_settings.minimal_mode {
+        let mut line = vec![
+            Span::styled(
+                match status.tone {
+                    StatusTone::Info => "info",
+                    StatusTone::Success => "saved",
+                    StatusTone::Warning => "warn",
+                    StatusTone::Error => "error",
+                },
+                Style::default()
+                    .fg(match status.tone {
+                        StatusTone::Info => PALETTE.sky,
+                        StatusTone::Success => PALETTE.accent,
+                        StatusTone::Warning => PALETTE.warn,
+                        StatusTone::Error => PALETTE.danger,
+                    })
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(status.message, Style::default().fg(PALETTE.text)),
+            Span::raw("  "),
+            Span::styled(
+                format!("focus {}", status.focus_label),
+                Style::default().fg(if motion_level(MotionTarget::Focus) > 0 {
+                    PALETTE.sky
+                } else {
+                    PALETTE.muted
+                }),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                compact_scope_label(&status.scope_label),
+                Style::default().fg(if motion_level(MotionTarget::Scope) > 0 {
+                    PALETTE.warn
+                } else {
+                    PALETTE.muted
+                }),
+            ),
+        ];
+        if let Some(filter) = &status.filter_summary {
+            line.push(Span::raw("  "));
+            line.push(Span::styled(
+                format!("filter {filter}"),
+                Style::default().fg(PALETTE.accent),
+            ));
+        }
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(PALETTE.border))
+            .style(Style::default().bg(PALETTE.background));
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+        frame.render_widget(
+            Paragraph::new(Line::from(line)).wrap(Wrap { trim: false }),
+            inner,
+        );
+        return;
+    }
     let (label, color) = match status.tone {
         StatusTone::Info => ("INFO", PALETTE.sky),
         StatusTone::Success => ("SAVED", PALETTE.accent),
@@ -4232,6 +5534,10 @@ fn render_keybar(frame: &mut Frame, area: Rect) {
         separator_span(),
         key_hint("n", "next"),
         separator_span(),
+        key_hint("[", "back"),
+        separator_span(),
+        key_hint("]", "out"),
+        separator_span(),
         key_hint("s", "save"),
         separator_span(),
         key_hint("r", "revert"),
@@ -4249,6 +5555,7 @@ fn render_keybar(frame: &mut Frame, area: Rect) {
 #[allow(non_snake_case)]
 fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpOverlayState) {
     let PALETTE = app.theme_colors();
+    let minimal = app.ui_settings.minimal_mode;
     frame.render_widget(Clear, area);
     let block = Block::default()
         .title(styled_title("mdmind Help", PALETTE.accent))
@@ -4289,7 +5596,11 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
                 ),
                 Span::raw("  "),
                 Span::styled(
-                    "Filter topics for navigation, search, views, mindmap behavior, syntax, and surface settings without leaving the terminal.",
+                    if minimal {
+                        "Search guides, reference, and tips."
+                    } else {
+                        "Search help articles for user-guide explanations, command reference, and practical tips without leaving the terminal."
+                    },
                     Style::default().fg(PALETTE.muted),
                 ),
             ]),
@@ -4343,17 +5654,21 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
     let topics = app.help_topics(&help.query);
     if topics.is_empty() {
         frame.render_widget(
-            Paragraph::new("No help topics match yet. Try 'views', 'search', or 'syntax'.")
-                .block(
-                    Block::default()
-                        .title(styled_title("Topics", PALETTE.sky))
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(PALETTE.border))
-                        .style(Style::default().bg(PALETTE.surface))
-                        .padding(Padding::horizontal(1)),
-                )
-                .style(Style::default().fg(PALETTE.muted))
-                .wrap(Wrap { trim: false }),
+            Paragraph::new(if minimal {
+                "No help matches."
+            } else {
+                "No help articles match yet. Try 'views', 'search', 'syntax', or 'minimal'."
+            })
+            .block(
+                Block::default()
+                    .title(styled_title("Topics", PALETTE.sky))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(PALETTE.border))
+                    .style(Style::default().bg(PALETTE.surface))
+                    .padding(Padding::horizontal(1)),
+            )
+            .style(Style::default().fg(PALETTE.muted))
+            .wrap(Wrap { trim: false }),
             columns[0],
         );
     } else {
@@ -4395,63 +5710,65 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
     }
 
     let preview_lines = if let Some(topic) = topics.get(help.selected).copied() {
-        let mut lines = vec![
-            Line::from(vec![
-                Span::styled("topic ", Style::default().fg(PALETTE.muted)),
-                Span::styled(
-                    topic.title(),
-                    Style::default()
-                        .fg(PALETTE.sky)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]),
-            Line::from(Span::styled(
-                topic.summary(),
-                Style::default().fg(PALETTE.text),
-            )),
-            Line::from(""),
-        ];
-        lines.extend(topic.body().iter().map(|line| {
-            if line.is_empty() {
-                Line::from("")
-            } else {
-                Line::from(Span::styled(*line, Style::default().fg(PALETTE.text)))
-            }
-        }));
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("context ", Style::default().fg(PALETTE.muted)),
-            Span::styled(
-                help_context_line(app, topic),
-                Style::default().fg(PALETTE.warn),
-            ),
-        ]));
-        lines
+        help_preview_lines(app, topic)
     } else {
         vec![Line::from(Span::styled(
-            "Type to search the built-in guide by topic or capability.",
+            "Type to search built-in help by topic, workflow, recipe, or command.",
             Style::default().fg(PALETTE.muted),
         ))]
     };
+    let preview_block = Block::default()
+        .title(styled_title("Preview", PALETTE.warn))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.warn))
+        .style(Style::default().bg(PALETTE.surface))
+        .padding(Padding::horizontal(1));
+    let preview_inner = preview_block.inner(columns[1]);
+    frame.render_widget(preview_block, columns[1]);
+    let (preview_content, preview_scrollbar) = if preview_inner.width > 2 {
+        let split = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(preview_inner);
+        (split[0], Some(split[1]))
+    } else {
+        (preview_inner, None)
+    };
+    let preview_visible_height = preview_content.height as usize;
+    let preview_total_height =
+        wrapped_preview_height(&preview_lines, preview_content.width).min(u16::MAX as usize);
+    let max_scroll = preview_total_height
+        .saturating_sub(preview_visible_height)
+        .min(u16::MAX as usize) as u16;
+    let scroll = help.preview_scroll.min(max_scroll);
     frame.render_widget(
         Paragraph::new(preview_lines)
-            .block(
-                Block::default()
-                    .title(styled_title("Preview", PALETTE.warn))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(PALETTE.warn))
-                    .style(Style::default().bg(PALETTE.surface))
-                    .padding(Padding::horizontal(1)),
-            )
+            .scroll((scroll, 0))
             .wrap(Wrap { trim: false }),
-        columns[1],
+        preview_content,
     );
+    if let Some(scrollbar_area) = preview_scrollbar {
+        render_preview_scrollbar(
+            frame,
+            scrollbar_area,
+            scroll,
+            preview_total_height,
+            preview_visible_height,
+            PALETTE,
+        );
+    }
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             key_hint("type", "filter"),
             separator_span(),
             key_hint("↑↓", "select"),
+            separator_span(),
+            key_hint("PgUp/Dn", "scroll"),
+            separator_span(),
+            key_hint("^U/^D", "scroll"),
+            separator_span(),
+            key_hint("Home/End", "top/bot"),
             separator_span(),
             key_hint("Esc", "close"),
             separator_span(),
@@ -4567,6 +5884,7 @@ fn render_mindmap_overlay(
 #[allow(non_snake_case)]
 fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: &PaletteState) {
     let PALETTE = app.theme_colors();
+    let minimal = app.ui_settings.minimal_mode;
     frame.render_widget(Clear, area);
     let block = Block::default()
         .title(styled_title("Command Palette", PALETTE.accent))
@@ -4602,7 +5920,11 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
                 ),
                 Span::raw("  "),
                 Span::styled(
-                    "Jump to nodes, browse recent actions, restore manual checkpoints or safety snapshots, preview themes and surface settings, open saved views, or find the right help topic.",
+                    if minimal {
+                        "Ids, filters, history, views, help."
+                    } else {
+                        "Jump to ids, apply #tag or @metadata filters, revisit frequent places and recent locations, browse recent actions, restore checkpoints, preview themes and settings, open saved views, or find the right help topic."
+                    },
                     Style::default().fg(PALETTE.muted),
                 ),
             ]),
@@ -4656,9 +5978,11 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
     let items = app.palette_items(&palette.query);
     if items.is_empty() {
         frame.render_widget(
-            Paragraph::new(
-                "No matches yet. Try 'save', 'paper', 'ascii', 'motion', or a node label like 'tasks'.",
-            )
+            Paragraph::new(if minimal {
+                "No matches yet."
+            } else {
+                "No matches yet. Try 'review todo', 'save', 'paper', '#todo', '@status:active', 'product/tasks', or a node label like 'tasks'."
+            })
             .block(
                 Block::default()
                     .title(styled_title("Results", PALETTE.sky))
@@ -4750,7 +6074,7 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
         ]
     } else {
         vec![Line::from(Span::styled(
-            "Actions appear first by default. Type to search nodes, recent actions, checkpoints, safety snapshots, saved views, and help.",
+            "Actions and recipes appear first by default. Type to search ids, #tags, @metadata, nodes, frequent places, recent locations, recent actions, checkpoints, saved views, and help.",
             Style::default().fg(PALETTE.muted),
         ))]
     };
@@ -4791,8 +6115,102 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
 }
 
 #[allow(non_snake_case)]
+fn render_relation_picker_overlay(
+    frame: &mut Frame,
+    area: Rect,
+    app: &TuiApp,
+    picker: &RelationPickerState,
+) {
+    let PALETTE = app.theme_colors();
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .title(styled_title(picker.kind.title(), PALETTE.accent))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.accent))
+        .style(Style::default().bg(PALETTE.surface_alt))
+        .padding(Padding::uniform(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Min(6),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
+    frame.render_widget(
+        Paragraph::new(match picker.kind {
+            RelationPickerKind::Outgoing => {
+                "The current node has multiple outgoing relations. Pick one target to follow."
+            }
+            RelationPickerKind::Backlink => {
+                "The current node has multiple backlinks. Pick one source branch to follow."
+            }
+        })
+        .style(Style::default().fg(PALETTE.muted))
+        .wrap(Wrap { trim: false }),
+        sections[0],
+    );
+
+    let items = picker
+        .items
+        .iter()
+        .map(|item| {
+            ListItem::new(vec![Line::from(vec![
+                Span::styled(
+                    item.title.clone(),
+                    Style::default()
+                        .fg(PALETTE.text)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw("  "),
+                Span::styled(item.subtitle.clone(), Style::default().fg(PALETTE.sky)),
+            ])])
+        })
+        .collect::<Vec<_>>();
+    let mut state = ListState::default();
+    if !picker.items.is_empty() {
+        state.select(Some(picker.selected.min(picker.items.len() - 1)));
+    }
+    frame.render_stateful_widget(
+        List::new(items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(PALETTE.sky))
+                    .style(Style::default().bg(PALETTE.surface)),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(PALETTE.surface_alt)
+                    .fg(PALETTE.text)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        sections[1],
+        &mut state,
+    );
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            key_hint("↑↓", "choose"),
+            separator_span(),
+            key_hint("Enter", "follow"),
+            separator_span(),
+            key_hint("Esc", "close"),
+        ]))
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(PALETTE.muted)),
+        sections[2],
+    );
+}
+
+#[allow(non_snake_case)]
 fn render_search_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, search: &SearchOverlayState) {
     let PALETTE = app.theme_colors();
+    let minimal = app.ui_settings.minimal_mode;
     frame.render_widget(Clear, area);
     let block = Block::default()
         .title(styled_title("Find", PALETTE.accent))
@@ -4825,7 +6243,11 @@ fn render_search_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, search: &S
                 ),
                 Span::raw("  "),
                 Span::styled(
-                    "Query, browse facets, and reopen saved working sets without leaving the map.",
+                    if minimal {
+                        "Query, facets, saved views."
+                    } else {
+                        "Query, browse facets, and reopen saved working sets without leaving the map."
+                    },
                     Style::default().fg(PALETTE.muted),
                 ),
             ]),
@@ -4843,7 +6265,25 @@ fn render_search_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, search: &S
     }
 
     frame.render_widget(
-        Paragraph::new(Line::from(vec![
+        Paragraph::new(Line::from(search_footer_hints(search.section)))
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(PALETTE.muted)),
+        sections[3],
+    );
+}
+
+fn search_footer_hints(section: SearchSection) -> Vec<Span<'static>> {
+    match section {
+        SearchSection::Query => vec![
+            key_hint("Tab", "sections"),
+            separator_span(),
+            key_hint("Enter", "apply"),
+            separator_span(),
+            key_hint("type", "query"),
+            separator_span(),
+            key_hint("Esc", "close"),
+        ],
+        SearchSection::Facets => vec![
             key_hint("Tab", "sections"),
             separator_span(),
             key_hint("↑↓", "select"),
@@ -4853,11 +6293,23 @@ fn render_search_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, search: &S
             key_hint("c", "clear"),
             separator_span(),
             key_hint("Esc", "close"),
-        ]))
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(PALETTE.muted)),
-        sections[3],
-    );
+        ],
+        SearchSection::Views => vec![
+            key_hint("Tab", "sections"),
+            separator_span(),
+            key_hint("↑↓", "select"),
+            separator_span(),
+            key_hint("Enter", "open"),
+            separator_span(),
+            key_hint("a", "save"),
+            separator_span(),
+            key_hint("x", "delete"),
+            separator_span(),
+            key_hint("c", "clear"),
+            separator_span(),
+            key_hint("Esc", "close"),
+        ],
+    }
 }
 
 #[allow(non_snake_case)]
@@ -4953,8 +6405,14 @@ fn render_search_query_section(
 
     let preview = query_preview_matches(app, &search.draft_query);
     let helper = if search.draft_query.trim().is_empty() {
-        "Type text, #tag, or @key:value. Enter applies the query. Empty input clears the filter."
-            .to_string()
+        if app.ui_settings.minimal_mode {
+            "Type text, #tag, or @key:value.".to_string()
+        } else {
+            "Type text, #tag, or @key:value. Enter applies the query. Empty input clears the filter."
+                .to_string()
+        }
+    } else if app.ui_settings.minimal_mode {
+        format!("{} match(es).", preview.len())
     } else {
         format!(
             "{} live match(es). Enter applies the query to the map.",
@@ -5124,7 +6582,11 @@ fn render_search_facets_section(
                 ),
             ]),
             Line::from(Span::styled(
-                "Enter applies this facet. Left and right switch Tags / Keys / Values.",
+                if app.ui_settings.minimal_mode {
+                    "Enter applies this facet."
+                } else {
+                    "Enter applies this facet. Left and right switch Tags / Keys / Values."
+                },
                 Style::default().fg(PALETTE.muted),
             )),
         ],
@@ -5163,17 +6625,21 @@ fn render_search_views_section(
 
     if app.saved_views.views.is_empty() {
         frame.render_widget(
-            Paragraph::new("No saved views yet. Type or apply a query, then press a to save it.")
-                .block(
-                    Block::default()
-                        .title(styled_title("Views", PALETTE.sky))
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(PALETTE.border))
-                        .style(Style::default().bg(PALETTE.surface))
-                        .padding(Padding::horizontal(1)),
-                )
-                .style(Style::default().fg(PALETTE.muted))
-                .wrap(Wrap { trim: false }),
+            Paragraph::new(if app.ui_settings.minimal_mode {
+                "No saved views yet."
+            } else {
+                "No saved views yet. Type or apply a query, then press a to save it."
+            })
+            .block(
+                Block::default()
+                    .title(styled_title("Views", PALETTE.sky))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(PALETTE.border))
+                    .style(Style::default().bg(PALETTE.surface))
+                    .padding(Padding::horizontal(1)),
+            )
+            .style(Style::default().fg(PALETTE.muted))
+            .wrap(Wrap { trim: false }),
             body[0],
         );
     } else {
@@ -5229,7 +6695,11 @@ fn render_search_views_section(
                 Span::styled(view.query.clone(), Style::default().fg(PALETTE.warn)),
             ]),
             Line::from(Span::styled(
-                "Enter opens this view. a saves the current query. x deletes the selected view.",
+                if app.ui_settings.minimal_mode {
+                    "Enter opens. a saves. x deletes."
+                } else {
+                    "Enter opens this view. a saves the current query. x deletes the selected view."
+                },
                 Style::default().fg(PALETTE.muted),
             )),
         ]
@@ -5239,7 +6709,11 @@ fn render_search_views_section(
             .unwrap_or_else(|_| "(unavailable)".to_string());
         vec![
             Line::from(Span::styled(
-                "Saved views live in a local sidecar next to the map.",
+                if app.ui_settings.minimal_mode {
+                    "Saved views sidecar."
+                } else {
+                    "Saved views live in a local sidecar next to the map."
+                },
                 Style::default().fg(PALETTE.muted),
             )),
             Line::from(Span::styled(views_path, Style::default().fg(PALETTE.sky))),
@@ -5343,7 +6817,7 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
             context
         }
         HelpTopic::Themes => format!(
-            "current theme {}, motion {}, accents {} stored next to the map",
+            "current theme {}, motion {}, accents {}, minimal {} stored next to the map",
             app.ui_settings.theme.label(),
             if app.ui_settings.motion_enabled {
                 "on"
@@ -5354,7 +6828,12 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
                 "ascii"
             } else {
                 "default"
-            }
+            },
+            if app.ui_settings.minimal_mode {
+                "on"
+            } else {
+                "off"
+            },
         ),
         HelpTopic::Mindmap => {
             if app.filter.is_some() {
@@ -5375,7 +6854,9 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
                     node.line
                 )
             })
-            .unwrap_or_else(|| "create a node first, then add inline tags or ids".to_string()),
+            .unwrap_or_else(|| {
+                "create a node first, then add inline tags, ids, or references".to_string()
+            }),
     }
 }
 
@@ -5388,17 +6869,32 @@ struct PaletteNodeEntry {
     haystack: String,
 }
 
+#[derive(Debug, Clone)]
+struct PaletteRelationEntry {
+    path: Vec<usize>,
+    title: String,
+    subtitle: String,
+    preview: String,
+    haystack: String,
+    message: String,
+}
+
 fn palette_kind_rank(kind: PaletteItemKind) -> u8 {
     match kind {
         PaletteItemKind::Action => 0,
-        PaletteItemKind::Theme => 1,
-        PaletteItemKind::Setting => 2,
-        PaletteItemKind::History => 3,
-        PaletteItemKind::Checkpoint => 4,
-        PaletteItemKind::Safety => 5,
-        PaletteItemKind::Node => 6,
-        PaletteItemKind::SavedView => 7,
-        PaletteItemKind::Help => 8,
+        PaletteItemKind::Recipe => 1,
+        PaletteItemKind::Theme => 2,
+        PaletteItemKind::Setting => 3,
+        PaletteItemKind::Relation => 4,
+        PaletteItemKind::Inline => 5,
+        PaletteItemKind::Frequent => 6,
+        PaletteItemKind::Location => 7,
+        PaletteItemKind::History => 8,
+        PaletteItemKind::Checkpoint => 9,
+        PaletteItemKind::Safety => 10,
+        PaletteItemKind::Node => 11,
+        PaletteItemKind::SavedView => 12,
+        PaletteItemKind::Help => 13,
     }
 }
 
@@ -5526,6 +7022,195 @@ fn collect_palette_nodes(document: &Document) -> Vec<PaletteNodeEntry> {
     entries
 }
 
+fn collect_relation_palette_entries(
+    document: &Document,
+    focus_path: &[usize],
+) -> Vec<PaletteRelationEntry> {
+    let Some(current) = get_node(&document.nodes, focus_path) else {
+        return Vec::new();
+    };
+
+    let current_label = node_label_for_document(document, focus_path);
+    let mut entries = Vec::new();
+
+    for relation in &current.relations {
+        let Some(path) = find_path_by_id(&document.nodes, &relation.target) else {
+            continue;
+        };
+        let target_label = node_label_for_document(document, &path);
+        let target_breadcrumb = breadcrumb_for_path(document, &path);
+        let token = relation.display_token();
+        let relation_label = relation.label();
+        let title = format!("{relation_label} → {target_label}");
+        let subtitle = format!("outgoing · {target_breadcrumb}");
+        let preview = format!(
+            "Follow an outgoing cross-link from '{current_label}'.\n{token}\nTarget: {target_breadcrumb}"
+        );
+        let haystack = format!(
+            "{title} {subtitle} {preview} relation related outgoing cross-link {} {}",
+            relation.target, relation_label
+        );
+        let message = format!("Followed relation {token} to '{target_label}'.");
+        entries.push(PaletteRelationEntry {
+            path,
+            title,
+            subtitle,
+            preview,
+            haystack,
+            message,
+        });
+    }
+
+    if let Some(current_id) = current.id.as_deref() {
+        collect_backlink_palette_entries_from(
+            &document.nodes,
+            current_id,
+            &mut entries,
+            Vec::new(),
+            &mut Vec::new(),
+        );
+    }
+
+    entries.sort_by(|left, right| {
+        left.title
+            .to_lowercase()
+            .cmp(&right.title.to_lowercase())
+            .then_with(|| {
+                left.subtitle
+                    .to_lowercase()
+                    .cmp(&right.subtitle.to_lowercase())
+            })
+    });
+    entries
+}
+
+fn collect_outgoing_relation_picker_items(
+    document: &Document,
+    focus_path: &[usize],
+) -> Vec<RelationPickerItem> {
+    let Some(current) = get_node(&document.nodes, focus_path) else {
+        return Vec::new();
+    };
+
+    current
+        .relations
+        .iter()
+        .filter_map(|relation| {
+            let path = find_path_by_id(&document.nodes, &relation.target)?;
+            let target_label = node_label_for_document(document, &path);
+            let breadcrumb = breadcrumb_for_path(document, &path);
+            Some(RelationPickerItem {
+                path,
+                title: target_label.clone(),
+                subtitle: format!("{} · {}", relation.label(), breadcrumb),
+                status_message: format!(
+                    "Followed relation {} to '{}'.",
+                    relation.label(),
+                    target_label
+                ),
+            })
+        })
+        .collect()
+}
+
+fn collect_backlink_picker_items(document: &Document, target_id: &str) -> Vec<RelationPickerItem> {
+    let mut items = Vec::new();
+    collect_backlink_picker_items_from(
+        &document.nodes,
+        target_id,
+        &mut items,
+        Vec::new(),
+        &mut Vec::new(),
+    );
+    items
+}
+
+fn collect_backlink_picker_items_from(
+    nodes: &[Node],
+    target_id: &str,
+    items: &mut Vec<RelationPickerItem>,
+    prefix: Vec<usize>,
+    breadcrumb: &mut Vec<String>,
+) {
+    for (index, node) in nodes.iter().enumerate() {
+        let mut path = prefix.clone();
+        path.push(index);
+        let label = if node.text.is_empty() {
+            "(empty)".to_string()
+        } else {
+            node.text.clone()
+        };
+        breadcrumb.push(label.clone());
+        let breadcrumb_text = breadcrumb.join(" / ");
+
+        for relation in &node.relations {
+            if relation.target == target_id {
+                items.push(RelationPickerItem {
+                    path: path.clone(),
+                    title: label.clone(),
+                    subtitle: format!("{} · {}", relation.label(), breadcrumb_text),
+                    status_message: format!(
+                        "Followed backlink {} from '{}'.",
+                        relation.label(),
+                        label
+                    ),
+                });
+            }
+        }
+
+        collect_backlink_picker_items_from(&node.children, target_id, items, path, breadcrumb);
+        breadcrumb.pop();
+    }
+}
+
+fn collect_backlink_palette_entries_from(
+    nodes: &[Node],
+    target_id: &str,
+    entries: &mut Vec<PaletteRelationEntry>,
+    prefix: Vec<usize>,
+    breadcrumb: &mut Vec<String>,
+) {
+    for (index, node) in nodes.iter().enumerate() {
+        let mut path = prefix.clone();
+        path.push(index);
+        let label = if node.text.is_empty() {
+            "(empty)".to_string()
+        } else {
+            node.text.clone()
+        };
+        breadcrumb.push(label.clone());
+        let breadcrumb_text = breadcrumb.join(" / ");
+
+        for relation in &node.relations {
+            if relation.target == target_id {
+                let token = relation.display_token();
+                let relation_label = relation.label();
+                let title = format!("{relation_label} ← {label}");
+                let subtitle = format!("backlink · {breadcrumb_text}");
+                let preview = format!(
+                    "Jump to a node that points at the current branch.\n{token}\nSource: {breadcrumb_text}"
+                );
+                let haystack = format!(
+                    "{title} {subtitle} {preview} relation related incoming backlink source {} {}",
+                    relation.target, relation_label
+                );
+                let message = format!("Jumped to backlink source '{label}' via {token}.");
+                entries.push(PaletteRelationEntry {
+                    path: path.clone(),
+                    title,
+                    subtitle,
+                    preview,
+                    haystack,
+                    message,
+                });
+            }
+        }
+
+        collect_backlink_palette_entries_from(&node.children, target_id, entries, path, breadcrumb);
+        breadcrumb.pop();
+    }
+}
+
 fn collect_palette_nodes_from(
     nodes: &[Node],
     entries: &mut Vec<PaletteNodeEntry>,
@@ -5555,12 +7240,17 @@ fn collect_palette_nodes_from(
             id.clone()
         };
         let haystack = format!(
-            "{} {} {} {} {}",
+            "{} {} {} {} {} {}",
             label,
             breadcrumb_text,
             id,
             node.tags.join(" "),
-            metadata
+            metadata,
+            node.relations
+                .iter()
+                .map(|relation| relation.display_token())
+                .collect::<Vec<_>>()
+                .join(" ")
         );
         entries.push(PaletteNodeEntry {
             path: path.clone(),
@@ -5584,6 +7274,32 @@ fn node_label_for_document(document: &Document, path: &[usize]) -> String {
             }
         })
         .unwrap_or_else(|| "(missing focus)".to_string())
+}
+
+fn breadcrumb_for_path(document: &Document, path: &[usize]) -> String {
+    if path.is_empty() {
+        return "(no focus)".to_string();
+    }
+
+    let mut labels = Vec::new();
+    let mut nodes = &document.nodes;
+    for index in path {
+        let Some(node) = nodes.get(*index) else {
+            break;
+        };
+        labels.push(if node.text.is_empty() {
+            "(empty)".to_string()
+        } else {
+            node.text.clone()
+        });
+        nodes = &node.children;
+    }
+
+    if labels.is_empty() {
+        "(missing focus)".to_string()
+    } else {
+        labels.join(" / ")
+    }
 }
 
 fn is_automatic_checkpoint(checkpoint: &Checkpoint) -> bool {
@@ -5766,6 +7482,7 @@ fn query_preview_matches(app: &TuiApp, raw: &str) -> Vec<(String, String)> {
 #[allow(non_snake_case)]
 fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState, app: &TuiApp) {
     let PALETTE = app.theme_colors();
+    let minimal = app.ui_settings.minimal_mode;
     frame.render_widget(Clear, area);
     let block = Block::default()
         .title(styled_title(prompt.mode.title(), PALETTE.warn))
@@ -5776,42 +7493,243 @@ fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState, ap
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
+    if minimal {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Length(1)])
+            .split(inner);
+        render_prompt_input(
+            frame,
+            chunks[0],
+            prompt,
+            PALETTE,
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(PALETTE.accent))
+                .style(Style::default().bg(PALETTE.surface)),
+        );
+        frame.render_widget(
+            Paragraph::new("Enter saves. Esc cancels.").style(Style::default().fg(PALETTE.muted)),
+            chunks[1],
+        );
+        return;
+    }
+
+    let assist = prompt_assist(app, prompt);
+    let assist_color = match assist.tone {
+        PromptAssistTone::Info => PALETTE.sky,
+        PromptAssistTone::Success => PALETTE.accent,
+        PromptAssistTone::Warning => PALETTE.warn,
+        PromptAssistTone::Error => PALETTE.danger,
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(2),
             Constraint::Length(3),
+            Constraint::Min(3),
             Constraint::Length(2),
-            Constraint::Min(1),
         ])
         .split(inner);
 
+    let header_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(20), Constraint::Length(28)])
+        .split(chunks[0]);
     frame.render_widget(
         Paragraph::new(prompt.mode.hint())
             .style(Style::default().fg(PALETTE.muted))
             .wrap(Wrap { trim: false }),
-        chunks[0],
+        header_chunks[0],
+    );
+    frame.render_widget(
+        Paragraph::new("Enter saves  ·  Esc cancels")
+            .alignment(Alignment::Right)
+            .style(Style::default().fg(PALETTE.sky)),
+        header_chunks[1],
     );
 
-    let input_block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(PALETTE.accent))
-        .style(Style::default().bg(PALETTE.surface));
-    let input_inner = input_block.inner(chunks[1]);
-    frame.render_widget(input_block, chunks[1]);
+    render_prompt_input(
+        frame,
+        chunks[1],
+        prompt,
+        PALETTE,
+        Block::default()
+            .title(prompt_input_title(prompt.mode))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(PALETTE.accent))
+            .style(Style::default().bg(PALETTE.surface)),
+    );
+
+    render_prompt_feedback(frame, chunks[2], &assist, assist_color, PALETTE);
+
+    if let Some(footer) = prompt_footer_text(prompt.mode) {
+        frame.render_widget(
+            Paragraph::new(footer)
+                .style(Style::default().fg(PALETTE.muted))
+                .wrap(Wrap { trim: false }),
+            chunks[3],
+        );
+    }
+}
+
+fn render_prompt_input(
+    frame: &mut Frame,
+    area: Rect,
+    prompt: &PromptState,
+    palette: Palette,
+    input_block: Block<'_>,
+) {
+    let input_inner = input_block.inner(area);
+    let (visible_value, cursor_offset) =
+        single_line_view(&prompt.value, prompt.cursor, input_inner.width as usize);
+    frame.render_widget(input_block, area);
     frame.render_widget(
-        Paragraph::new(prompt.value.clone())
-            .style(Style::default().fg(PALETTE.text))
+        Paragraph::new(highlight_prompt_input(&visible_value, prompt.mode, palette))
             .wrap(Wrap { trim: false }),
         input_inner,
     );
-    frame.set_cursor_position((input_inner.x + prompt.cursor as u16, input_inner.y));
+    if input_inner.width > 0 && input_inner.height > 0 {
+        frame.set_cursor_position((input_inner.x + cursor_offset as u16, input_inner.y));
+    }
+}
 
+fn highlight_prompt_input(value: &str, mode: PromptMode, palette: Palette) -> Line<'static> {
+    let mut spans = Vec::new();
+    let mut chars = value.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch.is_whitespace() {
+            let mut whitespace = String::from(ch);
+            while let Some(next) = chars.peek() {
+                if next.is_whitespace() {
+                    whitespace.push(chars.next().expect("peeked whitespace should exist"));
+                } else {
+                    break;
+                }
+            }
+            spans.push(Span::styled(whitespace, Style::default().fg(palette.muted)));
+            continue;
+        }
+
+        let mut token = String::from(ch);
+        while let Some(next) = chars.peek() {
+            if next.is_whitespace() {
+                break;
+            }
+            token.push(chars.next().expect("peeked token char should exist"));
+        }
+
+        let style = match prompt_token_kind(&token, mode) {
+            PromptTokenKind::Text => Style::default().fg(palette.text),
+            PromptTokenKind::Tag => Style::default().fg(palette.accent),
+            PromptTokenKind::Metadata => Style::default().fg(palette.warn),
+            PromptTokenKind::Id => Style::default().fg(palette.sky),
+        };
+        spans.push(Span::styled(token, style));
+    }
+
+    Line::from(spans)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PromptTokenKind {
+    Text,
+    Tag,
+    Metadata,
+    Id,
+}
+
+fn prompt_token_kind(token: &str, mode: PromptMode) -> PromptTokenKind {
+    match mode {
+        PromptMode::AddChild | PromptMode::AddSibling | PromptMode::AddRoot | PromptMode::Edit => {
+            if token.starts_with("#") {
+                PromptTokenKind::Tag
+            } else if token.starts_with("@") {
+                PromptTokenKind::Metadata
+            } else if token.starts_with("[id:") || token.starts_with("id:") {
+                PromptTokenKind::Id
+            } else {
+                PromptTokenKind::Text
+            }
+        }
+        PromptMode::OpenId => PromptTokenKind::Id,
+        PromptMode::SaveView | PromptMode::SaveCheckpoint => PromptTokenKind::Text,
+    }
+}
+
+fn render_prompt_feedback(
+    frame: &mut Frame,
+    area: Rect,
+    assist: &PromptAssist,
+    color: Color,
+    palette: Palette,
+) {
+    let mut lines = Vec::new();
+    if let Some(first) = assist.lines.first() {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!(" {} ", prompt_feedback_label(assist.tone)),
+                Style::default()
+                    .fg(palette.background)
+                    .bg(color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" "),
+            Span::styled(first.clone(), Style::default().fg(palette.text)),
+        ]));
+    }
+    for line in assist.lines.iter().skip(1) {
+        lines.push(Line::from(vec![
+            Span::styled("• ", Style::default().fg(color)),
+            Span::styled(line.clone(), Style::default().fg(palette.muted)),
+        ]));
+    }
     frame.render_widget(
-        Paragraph::new("Enter saves the action. Esc cancels.")
-            .style(Style::default().fg(PALETTE.sky)),
-        chunks[2],
+        Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .borders(Borders::TOP)
+                    .border_style(Style::default().fg(color))
+                    .style(Style::default().bg(palette.surface_alt)),
+            )
+            .wrap(Wrap { trim: false }),
+        area,
     );
+}
+
+fn prompt_input_title(mode: PromptMode) -> &'static str {
+    match mode {
+        PromptMode::AddChild | PromptMode::AddSibling | PromptMode::AddRoot | PromptMode::Edit => {
+            " Node line "
+        }
+        PromptMode::OpenId => " Node id ",
+        PromptMode::SaveView => " View name ",
+        PromptMode::SaveCheckpoint => " Checkpoint name ",
+    }
+}
+
+fn prompt_feedback_label(tone: PromptAssistTone) -> &'static str {
+    match tone {
+        PromptAssistTone::Info => "INFO",
+        PromptAssistTone::Success => "READY",
+        PromptAssistTone::Warning => "CHECK",
+        PromptAssistTone::Error => "ERROR",
+    }
+}
+
+fn prompt_footer_text(mode: PromptMode) -> Option<&'static str> {
+    match mode {
+        PromptMode::AddChild | PromptMode::AddSibling | PromptMode::AddRoot | PromptMode::Edit => {
+            Some("Single-line node syntax: Label #tag @key:value [id:path] [[target]].")
+        }
+        PromptMode::OpenId => Some("Ids come from [id:...] tokens on node lines."),
+        PromptMode::SaveView => Some("Saves the current active filter under a reusable name."),
+        PromptMode::SaveCheckpoint => {
+            Some("Stores a local snapshot of the current workspace state.")
+        }
+    }
 }
 
 fn resolve_initial_focus(target: &TargetRef, document: &Document) -> Result<Vec<usize>, AppError> {
@@ -5827,6 +7745,161 @@ fn resolve_initial_focus(target: &TargetRef, document: &Document) -> Result<Vec<
     }
 
     Ok(default_focus_path(document))
+}
+
+fn prompt_assist(app: &TuiApp, prompt: &PromptState) -> PromptAssist {
+    match prompt.mode {
+        PromptMode::AddChild | PromptMode::AddSibling | PromptMode::AddRoot | PromptMode::Edit => {
+            prompt_fragment_assist(app, prompt)
+        }
+        PromptMode::OpenId => prompt_open_id_assist(app, prompt.value.trim()),
+        PromptMode::SaveView => {
+            if let Some(query) = app.current_search_query_for_save() {
+                PromptAssist {
+                    tone: PromptAssistTone::Info,
+                    lines: vec![
+                        "This saves the current active filter under a short name.".to_string(),
+                        format!("Current query: {query}"),
+                    ],
+                }
+            } else {
+                PromptAssist {
+                    tone: PromptAssistTone::Warning,
+                    lines: vec![
+                        "No active filter is ready to save yet.".to_string(),
+                        "Apply a query first, then name the saved view here.".to_string(),
+                    ],
+                }
+            }
+        }
+        PromptMode::SaveCheckpoint => PromptAssist {
+            tone: PromptAssistTone::Info,
+            lines: vec![
+                "This captures the current document, focus, view mode, and filter.".to_string(),
+                current_scope_label(app, None),
+            ],
+        },
+    }
+}
+
+fn prompt_fragment_assist(app: &TuiApp, prompt: &PromptState) -> PromptAssist {
+    let value = prompt.value.trim();
+    if value.is_empty() {
+        return PromptAssist {
+            tone: PromptAssistTone::Info,
+            lines: vec![
+                "Type a node label, then optionally add #tags, @key:value, [id:path], and [[target]]."
+                    .to_string(),
+                "Example: API Design #backend @status:todo [id:product/api-design]".to_string(),
+            ],
+        };
+    }
+
+    let parsed = match parse_node_fragment(value) {
+        Ok(node) => node,
+        Err(diagnostics) => {
+            let mut lines = diagnostics
+                .into_iter()
+                .take(3)
+                .map(|diagnostic| diagnostic.message)
+                .collect::<Vec<_>>();
+            if lines.is_empty() {
+                lines.push("The inline syntax could not be parsed.".to_string());
+            }
+            return PromptAssist {
+                tone: PromptAssistTone::Error,
+                lines,
+            };
+        }
+    };
+
+    let mut lines = Vec::new();
+    let mut tone = PromptAssistTone::Success;
+    if parsed.text.is_empty() {
+        tone = PromptAssistTone::Error;
+        lines.push("Node labels cannot be empty; add visible text before saving.".to_string());
+    } else {
+        lines.push(format!("Label: {}", parsed.text));
+    }
+
+    if parsed.tags.is_empty() {
+        lines.push("Tags: none".to_string());
+    } else {
+        lines.push(format!("Tags: {}", parsed.tags.join(" ")));
+    }
+
+    if parsed.metadata.is_empty() {
+        lines.push("Metadata: none".to_string());
+    } else {
+        lines.push(format!(
+            "Metadata: {}",
+            parsed
+                .metadata
+                .iter()
+                .map(|entry| format!("@{}:{}", entry.key, entry.value))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ));
+    }
+
+    if let Some(id) = &parsed.id {
+        if let Some(existing_path) = find_path_by_id(&app.editor.document().nodes, id) {
+            let is_same_node =
+                prompt.mode == PromptMode::Edit && existing_path == app.editor.focus_path();
+            if is_same_node {
+                if tone != PromptAssistTone::Error {
+                    tone = PromptAssistTone::Info;
+                }
+                lines.push(format!("Id: {id} (unchanged on this node)"));
+            } else {
+                tone = PromptAssistTone::Error;
+                lines.push(format!(
+                    "Id: {id} is already used at {}",
+                    breadcrumb_for_path(app.editor.document(), &existing_path)
+                ));
+            }
+        } else {
+            lines.push(format!("Id: {id} is available"));
+        }
+    } else {
+        if tone == PromptAssistTone::Success {
+            tone = PromptAssistTone::Info;
+        }
+        lines.push("Id: none".to_string());
+    }
+
+    PromptAssist { tone, lines }
+}
+
+fn prompt_open_id_assist(app: &TuiApp, raw: &str) -> PromptAssist {
+    if raw.is_empty() {
+        return PromptAssist {
+            tone: PromptAssistTone::Info,
+            lines: vec![
+                "Type an inline id like product/tasks or product/api-design.".to_string(),
+                "Ids come from [id:...] tokens on node lines.".to_string(),
+            ],
+        };
+    }
+
+    if let Some(path) = find_path_by_id(&app.editor.document().nodes, raw) {
+        let breadcrumb = breadcrumb_for_path(app.editor.document(), &path);
+        PromptAssist {
+            tone: PromptAssistTone::Success,
+            lines: vec![
+                format!("Will jump to {breadcrumb}"),
+                format!("Target id: {raw}"),
+            ],
+        }
+    } else {
+        PromptAssist {
+            tone: PromptAssistTone::Warning,
+            lines: vec![
+                format!("No node id matches '{raw}' yet."),
+                "Check the [id:...] token or search the palette for nearby ids.".to_string(),
+            ],
+        }
+    }
 }
 
 fn initial_expanded_paths(document: &Document) -> HashSet<Vec<usize>> {
@@ -6010,6 +8083,11 @@ fn collect_visible_rows(
                     .iter()
                     .map(|entry| format!("@{}:{}", entry.key, entry.value))
                     .collect(),
+                relations: node
+                    .relations
+                    .iter()
+                    .map(|relation| relation.display_token())
+                    .collect(),
                 id: node.id.clone(),
                 line: node.line,
                 has_children: !node.children.is_empty(),
@@ -6025,6 +8103,7 @@ fn collect_visible_rows(
                 ViewMode::SubtreeOnly => {
                     include_children_by_expansion || path == projection.focus_path
                 }
+                ViewMode::FullMap => projection.filter.is_some() || include_children_by_expansion,
                 _ => {
                     projection.filter.is_some()
                         || include_children_by_expansion
@@ -6068,14 +8147,24 @@ fn collect_match_paths_from_nodes(
 fn styled_title(title: &'static str, color: Color) -> Line<'static> {
     let palette = active_palette();
     Line::from(Span::styled(
-        if ascii_accents_enabled() {
+        if minimal_mode_enabled() {
+            format!(" {title} ")
+        } else if ascii_accents_enabled() {
             format!(" // {title} // ")
         } else {
             format!(" {title} ")
         },
         Style::default()
-            .fg(palette.background)
-            .bg(color)
+            .fg(if minimal_mode_enabled() {
+                color
+            } else {
+                palette.background
+            })
+            .bg(if minimal_mode_enabled() {
+                palette.surface
+            } else {
+                color
+            })
             .add_modifier(Modifier::BOLD),
     ))
 }
@@ -6107,6 +8196,10 @@ fn ascii_accents_enabled() -> bool {
     ACTIVE_ASCII_ACCENTS.with(|enabled| enabled.get())
 }
 
+fn minimal_mode_enabled() -> bool {
+    ACTIVE_MINIMAL_MODE.with(|enabled| enabled.get())
+}
+
 fn motion_level(target: MotionTarget) -> u8 {
     let active_target = ACTIVE_MOTION_TARGET.with(|motion_target| motion_target.get());
     if active_target == Some(target) {
@@ -6133,29 +8226,178 @@ fn attention_fill(base: Color, soft: Color, strong: Color, target: MotionTarget)
 }
 
 fn separator_span() -> Span<'static> {
-    Span::raw(if ascii_accents_enabled() {
+    Span::raw(if minimal_mode_enabled() {
+        "  "
+    } else if ascii_accents_enabled() {
         " | "
     } else {
         " · "
     })
 }
 
+fn compact_scope_label(scope_label: &str) -> String {
+    scope_label
+        .replace("Active filter: ", "")
+        .replace("Draft query: ", "draft ")
+        .replace("Subtree rooted at ", "subtree ")
+        .replace("Whole map", "map")
+        .replace(" matching nodes", " matches")
+        .replace(" · view ", "  ")
+}
+
+fn help_section_heading(title: &'static str, color: Color) -> Line<'static> {
+    Line::from(Span::styled(
+        title,
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    ))
+}
+
+fn help_preview_lines(app: &TuiApp, topic: HelpTopic) -> Vec<Line<'static>> {
+    let palette = app.theme_colors();
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("help ", Style::default().fg(palette.muted)),
+            Span::styled(
+                topic.title(),
+                Style::default()
+                    .fg(palette.sky)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled("User Guide", Style::default().fg(palette.accent)),
+        ]),
+        Line::from(Span::styled(
+            topic.summary(),
+            Style::default().fg(palette.text),
+        )),
+        Line::from(""),
+    ];
+    lines.push(help_section_heading("User Guide", palette.accent));
+    lines.push(Line::from(Span::styled(
+        topic.guide_intro(),
+        Style::default().fg(palette.text),
+    )));
+    lines.push(Line::from(""));
+    for paragraph in topic.guide_body() {
+        lines.push(Line::from(Span::styled(
+            *paragraph,
+            Style::default().fg(palette.text),
+        )));
+        lines.push(Line::from(""));
+    }
+    lines.push(help_section_heading("Command Reference", palette.sky));
+    for (command, description) in topic.command_reference() {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{command:<18}"),
+                Style::default()
+                    .fg(palette.sky)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(*description, Style::default().fg(palette.text)),
+        ]));
+    }
+    lines.push(Line::from(""));
+    lines.push(help_section_heading("Tips", palette.warn));
+    for tip in topic.tips() {
+        lines.push(Line::from(vec![
+            Span::styled("• ", Style::default().fg(palette.warn)),
+            Span::styled(*tip, Style::default().fg(palette.text)),
+        ]));
+    }
+    if let Some(example) = topic.example() {
+        lines.push(Line::from(""));
+        lines.push(help_section_heading("Example", palette.border));
+        lines.push(Line::from(Span::styled(
+            example,
+            Style::default().fg(palette.accent),
+        )));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("context ", Style::default().fg(palette.muted)),
+        Span::styled(
+            help_context_line(app, topic),
+            Style::default().fg(palette.warn),
+        ),
+    ]));
+    lines
+}
+
+fn wrapped_preview_height(lines: &[Line<'_>], width: u16) -> usize {
+    let width = usize::from(width.max(1));
+    lines
+        .iter()
+        .map(|line| wrapped_line_height(line, width))
+        .sum()
+}
+
+fn wrapped_line_height(line: &Line<'_>, width: usize) -> usize {
+    line.to_string()
+        .split('\n')
+        .map(|segment| segment.chars().count().max(1).div_ceil(width))
+        .sum::<usize>()
+        .max(1)
+}
+
+fn render_preview_scrollbar(
+    frame: &mut Frame,
+    area: Rect,
+    scroll: u16,
+    total_height: usize,
+    visible_height: usize,
+    palette: Palette,
+) {
+    if area.height == 0 || total_height <= visible_height {
+        return;
+    }
+
+    let track_height = usize::from(area.height);
+    let thumb_height = ((visible_height * track_height) / total_height)
+        .max(1)
+        .min(track_height);
+    let max_thumb_offset = track_height.saturating_sub(thumb_height);
+    let max_scroll = total_height.saturating_sub(visible_height).max(1);
+    let thumb_offset =
+        ((usize::from(scroll) * max_thumb_offset) / max_scroll).min(max_thumb_offset);
+
+    for offset in 0..track_height {
+        let glyph = if (thumb_offset..thumb_offset + thumb_height).contains(&offset) {
+            "█"
+        } else {
+            "│"
+        };
+        let color = if glyph == "█" {
+            palette.warn
+        } else {
+            palette.border
+        };
+        frame.render_widget(
+            Paragraph::new(glyph).style(Style::default().fg(color).bg(palette.surface)),
+            Rect::new(area.x, area.y + offset as u16, 1, 1),
+        );
+    }
+}
+
 fn summarize_relationships(app: &TuiApp) -> String {
-    let parent = parent_node(app);
-    let peers = peer_nodes(app);
+    let outgoing = app
+        .editor
+        .current()
+        .map(|node| node.relations.len())
+        .unwrap_or(0);
+    let backlinks = app
+        .editor
+        .current()
+        .and_then(|node| node.id.as_deref())
+        .map(|id| backlinks_to(app.editor.document(), id).len())
+        .unwrap_or(0);
     let children = app
         .editor
         .current()
         .map(|node| node.children.len())
         .unwrap_or(0);
 
-    let parent_label = parent
-        .map(|node| node.text.clone())
-        .unwrap_or_else(|| "root".to_string());
-    format!(
-        "{parent_label} -> {} peers -> {children} children",
-        peers.len()
-    )
+    format!("{outgoing} outgoing · {backlinks} backlinks · {children} children")
 }
 
 fn current_node_matches_filter(app: &TuiApp) -> bool {
@@ -6196,37 +8438,6 @@ fn parent_node(app: &TuiApp) -> Option<&Node> {
     )
 }
 
-fn peer_nodes(app: &TuiApp) -> Vec<&Node> {
-    let path = app.editor.focus_path();
-    if path.is_empty() {
-        return Vec::new();
-    }
-
-    let siblings = if path.len() == 1 {
-        app.editor.document().nodes.as_slice()
-    } else {
-        match get_node(
-            app.editor.document().nodes.as_slice(),
-            &path[..path.len() - 1],
-        ) {
-            Some(parent) => parent.children.as_slice(),
-            None => &[],
-        }
-    };
-
-    siblings
-        .iter()
-        .enumerate()
-        .filter_map(|(index, node)| {
-            if Some(&index) == path.last() {
-                None
-            } else {
-                Some(node)
-            }
-        })
-        .collect()
-}
-
 #[allow(non_snake_case)]
 fn parent_lines(app: &TuiApp) -> Vec<Line<'static>> {
     let PALETTE = app.theme_colors();
@@ -6251,22 +8462,39 @@ fn parent_lines(app: &TuiApp) -> Vec<Line<'static>> {
 }
 
 #[allow(non_snake_case)]
-fn peer_lines(app: &TuiApp) -> Vec<Line<'static>> {
+fn backlink_lines(app: &TuiApp) -> Vec<Line<'static>> {
     let PALETTE = app.theme_colors();
-    let peers = peer_nodes(app);
-    if peers.is_empty() {
+    let Some(target_id) = app.editor.current().and_then(|node| node.id.as_deref()) else {
         return vec![Line::from(Span::styled(
-            "No peer nodes beside the current selection.",
+            "Add an [id:...] token to this node to collect backlinks.",
+            Style::default().fg(PALETTE.muted),
+        ))];
+    };
+
+    let backlinks = backlinks_to(app.editor.document(), target_id);
+    if backlinks.is_empty() {
+        return vec![Line::from(Span::styled(
+            "No backlinks point at this node yet.",
             Style::default().fg(PALETTE.muted),
         ))];
     }
 
-    peers
+    backlinks
         .into_iter()
-        .map(|node| {
+        .map(|entry| {
+            let relation = if entry.relation == "ref" {
+                "ref".to_string()
+            } else {
+                entry.relation
+            };
             Line::from(vec![
                 Span::styled("• ", Style::default().fg(PALETTE.accent)),
-                Span::styled(node.text.clone(), Style::default().fg(PALETTE.text)),
+                Span::styled(entry.breadcrumb, Style::default().fg(PALETTE.text)),
+                Span::raw(" "),
+                Span::styled(
+                    format!("[[{relation}->{}]]", entry.target),
+                    Style::default().fg(PALETTE.sky),
+                ),
             ])
         })
         .collect()
@@ -6334,6 +8562,29 @@ fn centered_rect(horizontal_percent: u16, vertical_percent: u16, area: Rect) -> 
         .split(vertical[1])[1]
 }
 
+fn centered_rect_with_min(
+    horizontal_percent: u16,
+    vertical_percent: u16,
+    min_width: u16,
+    min_height: u16,
+    area: Rect,
+) -> Rect {
+    let mut rect = centered_rect(horizontal_percent, vertical_percent, area);
+    rect.width = rect.width.max(min_width.min(area.width));
+    rect.height = rect.height.max(min_height.min(area.height));
+    rect.x = area.x + area.width.saturating_sub(rect.width) / 2;
+    rect.y = area.y + area.height.saturating_sub(rect.height) / 2;
+    rect
+}
+
+fn prompt_overlay_rect(minimal: bool, area: Rect) -> Rect {
+    if minimal {
+        centered_rect_with_min(60, 18, 48, 8, area)
+    } else {
+        centered_rect_with_min(68, 40, 56, 17, area)
+    }
+}
+
 fn previous_boundary(value: &str, index: usize) -> usize {
     value[..index]
         .char_indices()
@@ -6353,6 +8604,40 @@ fn next_boundary(value: &str, index: usize) -> usize {
         .unwrap_or(value.len())
 }
 
+fn single_line_view(value: &str, cursor: usize, width: usize) -> (String, usize) {
+    if width == 0 {
+        return (String::new(), 0);
+    }
+    if value.is_empty() {
+        return (String::new(), 0);
+    }
+    if value.len() <= width {
+        return (value.to_string(), cursor.min(value.len()));
+    }
+
+    let clamped_cursor = cursor.min(value.len());
+    let mut start = clamped_cursor.saturating_sub(width.saturating_sub(1));
+    while start > 0 && !value.is_char_boundary(start) {
+        start -= 1;
+    }
+    let mut end = start;
+    while end < value.len() {
+        let next = next_boundary(value, end);
+        if next - start > width {
+            break;
+        }
+        end = next;
+    }
+    if end == start {
+        end = next_boundary(value, start);
+    }
+
+    (
+        value[start..end].to_string(),
+        clamped_cursor.saturating_sub(start).min(width),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -6363,6 +8648,13 @@ mod tests {
     fn sample_document() -> Document {
         parse_document(
             "- Product Idea [id:product]\n  - Direction #idea [id:product/direction]\n    - CLI-first MVP\n  - Tasks #todo @status:active [id:product/tasks]\n    - Build parser\n    - Ship tests\n",
+        )
+        .document
+    }
+
+    fn sample_document_with_relations() -> Document {
+        parse_document(
+            "- Product Idea [id:product]\n  - MVP Scope [id:product/mvp] [[prompts/library]] [[rel:supports->product/requirements]]\n  - Requirements [id:product/requirements]\n  - Prompt Library [id:prompts/library] [[rel:informs->product/mvp]]\n",
         )
         .document
     }
@@ -6390,6 +8682,11 @@ mod tests {
             .expect("checkpoints path should be derivable");
         if checkpoints_path.exists() {
             std::fs::remove_file(checkpoints_path).ok();
+        }
+        let locations_path = crate::locations::locations_path_for(map_path)
+            .expect("locations path should be derivable");
+        if locations_path.exists() {
+            std::fs::remove_file(locations_path).ok();
         }
     }
 
@@ -6582,6 +8879,132 @@ mod tests {
     }
 
     #[test]
+    fn command_palette_surfaces_recipe_results() {
+        let map_path = temp_map_path("palette-recipes.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let items = app.palette_items("review todo");
+        let recipe = items
+            .iter()
+            .find(|item| item.kind == PaletteItemKind::Recipe)
+            .expect("recipe result should appear for review todo");
+        assert_eq!(recipe.title, "Review Todo Work");
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn command_palette_can_run_a_recipe() {
+        let map_path = temp_map_path("palette-recipe-run.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char(':'), KeyModifiers::NONE))
+            .expect("colon should open the command palette");
+        for character in "review todo".chars() {
+            app.handle_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE))
+                .expect("typing should update the palette query");
+        }
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should run the selected recipe");
+
+        assert_eq!(app.view_mode, ViewMode::FilteredFocus);
+        assert_eq!(
+            app.filter.as_ref().map(|filter| filter.query.raw()),
+            Some("#todo")
+        );
+        assert_eq!(app.editor.focus_path(), &[0, 1]);
+        assert_eq!(
+            app.status.text,
+            "Recipe applied: reviewing #todo work in Filtered Focus."
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn command_palette_surfaces_contextual_owner_recipes() {
+        let map_path = temp_map_path("palette-owner-recipe.md");
+        let document = parse_document(
+            "- Studio [id:studio]\n  - Product @owner:mira @status:planned\n  - Launch @owner:mira @status:blocked\n  - Ops @owner:theo @status:active\n",
+        )
+        .document;
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let items = app.palette_items("owner mira");
+        let recipe = items
+            .iter()
+            .find(|item| {
+                item.kind == PaletteItemKind::Recipe && item.title == "Review Owner · mira"
+            })
+            .expect("owner recipe should appear when owner metadata exists");
+        assert!(recipe.subtitle.contains("2 nodes"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn command_palette_can_run_a_contextual_status_recipe() {
+        let map_path = temp_map_path("palette-status-recipe-run.md");
+        let document = parse_document(
+            "- Studio [id:studio]\n  - Product @owner:mira @status:planned\n  - Launch @owner:mira @status:blocked\n  - Ops @owner:theo @status:active\n",
+        )
+        .document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char(':'), KeyModifiers::NONE))
+            .expect("colon should open the command palette");
+        for character in "status planned".chars() {
+            app.handle_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE))
+                .expect("typing should update the palette query");
+        }
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should run the contextual recipe");
+
+        assert_eq!(app.view_mode, ViewMode::FilteredFocus);
+        assert_eq!(
+            app.filter.as_ref().map(|filter| filter.query.raw()),
+            Some("@status:planned")
+        );
+        assert_eq!(app.editor.focus_path(), &[0, 0]);
+        assert_eq!(
+            app.status.text,
+            "Recipe applied: reviewing @status:planned work in Filtered Focus."
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
     fn searchable_help_filters_to_matching_topic() {
         let map_path = temp_map_path("help-search.md");
         let document = sample_document();
@@ -6616,6 +9039,83 @@ mod tests {
     }
 
     #[test]
+    fn searchable_help_supports_article_scroll_without_changing_topic_selection() {
+        let map_path = temp_map_path("help-scroll.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.open_help(Some(HelpTopic::Themes));
+        let initial_selected = app.help.as_ref().expect("help should open").selected;
+        assert_eq!(
+            app.help.as_ref().expect("help should open").preview_scroll,
+            0
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE))
+            .expect("page down should scroll the article");
+        assert_eq!(
+            app.help.as_ref().expect("help should stay open").selected,
+            initial_selected
+        );
+        assert!(
+            app.help
+                .as_ref()
+                .expect("help should stay open")
+                .preview_scroll
+                > 0,
+            "page down should move the article preview"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("down should move to the next topic");
+        assert_eq!(
+            app.help
+                .as_ref()
+                .expect("help should stay open")
+                .preview_scroll,
+            0,
+            "changing topics should reset article scroll"
+        );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn help_preview_height_grows_when_the_pane_gets_narrower() {
+        let map_path = temp_map_path("help-wrap-height.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let lines = help_preview_lines(&app, HelpTopic::Themes);
+        let wide_height = wrapped_preview_height(&lines, 60);
+        let narrow_height = wrapped_preview_height(&lines, 20);
+        assert!(
+            narrow_height > wide_height,
+            "narrower preview panes should require more wrapped rows"
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
     fn searchable_help_indexes_body_text_for_key_value_queries() {
         let map_path = temp_map_path("help-key-value.md");
         let document = sample_document();
@@ -6638,6 +9138,38 @@ mod tests {
         assert!(
             value_topics.contains(&HelpTopic::Syntax),
             "searching for 'value' should find the syntax topic"
+        );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn searchable_help_indexes_guide_and_tip_text() {
+        let map_path = temp_map_path("help-guide-tip.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let noisy_topics = app.help_topics("noisy");
+        assert!(
+            noisy_topics.contains(&HelpTopic::Navigation),
+            "searching for a tip-only term should still find the navigation help article"
+        );
+
+        let rooted_topics = app.help_topics("temporary workspace");
+        assert!(
+            rooted_topics.contains(&HelpTopic::Views),
+            "searching for guide prose should find the views help article"
         );
 
         let session_path =
@@ -6686,6 +9218,41 @@ mod tests {
         assert_eq!(
             reloaded.theme_colors().background,
             ThemeId::Paper.theme().background
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn command_palette_can_apply_and_persist_the_violet_theme() {
+        let map_path = temp_map_path("palette-violet-theme.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char(':'), KeyModifiers::NONE))
+            .expect("colon should open the command palette");
+        for character in "violet".chars() {
+            app.handle_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE))
+                .expect("typing should search violet theme");
+        }
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should apply the selected violet theme");
+
+        assert_eq!(app.ui_settings.theme, ThemeId::Violet);
+
+        let loaded_settings =
+            load_ui_settings_for(&map_path).expect("ui settings should load after theme apply");
+        assert_eq!(loaded_settings.theme, ThemeId::Violet);
+        assert_eq!(
+            app.theme_colors().background,
+            ThemeId::Violet.theme().background
         );
 
         cleanup_sidecars(&map_path);
@@ -6792,6 +9359,41 @@ mod tests {
             app.motion_cue.is_none(),
             "view changes should stay static when motion is disabled"
         );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn command_palette_can_toggle_minimal_mode_and_persist_it() {
+        let map_path = temp_map_path("palette-minimal.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char(':'), KeyModifiers::NONE))
+            .expect("colon should open the command palette");
+        for character in "minimal".chars() {
+            app.handle_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE))
+                .expect("typing should search minimal mode");
+        }
+        assert!(
+            app.ui_settings.minimal_mode,
+            "selection should preview minimal mode"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should commit minimal mode");
+        assert!(app.ui_settings.minimal_mode);
+
+        let loaded_settings =
+            load_ui_settings_for(&map_path).expect("ui settings should load after minimal mode");
+        assert!(loaded_settings.minimal_mode);
 
         cleanup_sidecars(&map_path);
     }
@@ -7065,6 +9667,84 @@ mod tests {
         app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
             .expect("escape should return to full map before clearing filters");
         assert_eq!(app.view_mode, ViewMode::FullMap);
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn collapsing_a_branch_in_full_map_hides_children_immediately() {
+        let map_path = temp_map_path("full-collapse.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let initial_rows = app.visible_rows();
+        assert!(initial_rows.iter().any(|row| row.text == "Direction"));
+        assert!(initial_rows.iter().any(|row| row.text == "Tasks"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should collapse the focused branch");
+
+        let collapsed_rows = app.visible_rows();
+        assert_eq!(
+            collapsed_rows
+                .iter()
+                .map(|row| row.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Product Idea"]
+        );
+        assert_eq!(app.editor.focus_path(), &[0]);
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn moving_focus_in_full_map_does_not_auto_expand_collapsed_branches() {
+        let map_path = temp_map_path("full-preserve-collapse.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should collapse the focused branch");
+        assert_eq!(
+            app.visible_rows()
+                .iter()
+                .map(|row| row.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Product Idea"]
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("moving on a collapsed full-map outline should stay calm");
+        assert_eq!(
+            app.visible_rows()
+                .iter()
+                .map(|row| row.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Product Idea"]
+        );
+        assert_eq!(app.editor.focus_path(), &[0]);
 
         let session_path =
             crate::session::session_path_for(&map_path).expect("session path should be derivable");
@@ -7433,6 +10113,537 @@ mod tests {
     }
 
     #[test]
+    fn recent_locations_collect_focus_changes_for_palette_results() {
+        let map_path = temp_map_path("recent-locations.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.editor
+            .set_focus_path(vec![0, 1])
+            .expect("tasks path should exist");
+        app.finalize_focus_change(MotionTarget::Focus)
+            .expect("focus change should record tasks");
+
+        app.editor
+            .set_focus_path(vec![0])
+            .expect("root path should exist");
+        app.finalize_focus_change(MotionTarget::Focus)
+            .expect("focus change should record the root");
+
+        let items = app.palette_recent_location_items("recent");
+        assert!(
+            items
+                .iter()
+                .any(|item| item.kind == PaletteItemKind::Location && item.title == "Product Idea")
+        );
+        assert!(
+            items
+                .iter()
+                .any(|item| item.kind == PaletteItemKind::Location && item.title == "Tasks")
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn palette_can_jump_to_a_recent_location() {
+        let map_path = temp_map_path("recent-location-jump.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.editor
+            .set_focus_path(vec![0, 1])
+            .expect("tasks path should exist");
+        app.finalize_focus_change(MotionTarget::Focus)
+            .expect("focus change should record tasks");
+
+        app.editor
+            .set_focus_path(vec![0])
+            .expect("root path should exist");
+        app.finalize_focus_change(MotionTarget::Focus)
+            .expect("focus change should record the root");
+
+        let task_path = app
+            .palette_recent_location_items("tasks")
+            .into_iter()
+            .find_map(|item| match item.target {
+                PaletteTarget::RecentLocation(path) if item.title == "Tasks" => Some(path),
+                _ => None,
+            })
+            .expect("tasks should appear as a recent location");
+
+        app.execute_palette_target(PaletteTarget::RecentLocation(task_path))
+            .expect("recent location jump should succeed");
+
+        assert_eq!(
+            app.editor.current().expect("focus should exist").text,
+            "Tasks"
+        );
+        assert_eq!(app.status.text, "Returned to recent location 'Tasks'.");
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn palette_surfaces_inline_tag_filters() {
+        let map_path = temp_map_path("palette-inline-tag.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let item = app
+            .palette_items("#todo")
+            .into_iter()
+            .find(|item| item.kind == PaletteItemKind::Inline && item.title == "#todo")
+            .expect("inline tag filter should appear in the palette");
+
+        assert!(matches!(item.target, PaletteTarget::InlineFilter(ref query) if query == "#todo"));
+        assert!(item.preview.contains("Filter to nodes tagged #todo."));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn palette_can_apply_an_inline_metadata_filter() {
+        let map_path = temp_map_path("palette-inline-metadata.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.execute_palette_target(PaletteTarget::InlineFilter("@status:active".to_string()))
+            .expect("inline metadata filter should apply");
+
+        assert_eq!(
+            app.filter.as_ref().map(|filter| filter.query.raw()),
+            Some("@status:active")
+        );
+        assert_eq!(app.editor.focus_path(), &[0, 1]);
+        assert_eq!(
+            app.status.text,
+            "Applied inline filter '@status:active' and landed on the first of 1 matches."
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn palette_can_jump_to_an_inline_id_target() {
+        let map_path = temp_map_path("palette-inline-id.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let item = app
+            .palette_items("product/tasks")
+            .into_iter()
+            .find(|item| item.kind == PaletteItemKind::Inline && item.title == "[id:product/tasks]")
+            .expect("inline id target should appear in the palette");
+
+        let PaletteTarget::InlineId(id) = item.target else {
+            panic!("inline id result should target the inline id jump");
+        };
+        app.execute_palette_target(PaletteTarget::InlineId(id))
+            .expect("inline id jump should succeed");
+
+        assert_eq!(app.editor.focus_path(), &[0, 1]);
+        assert_eq!(app.status.text, "Jumped to inline id 'product/tasks'.");
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn palette_surfaces_outgoing_relation_jumps() {
+        let map_path = temp_map_path("palette-relations.md");
+        let document = sample_document_with_relations();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let item = app
+            .palette_items("supports")
+            .into_iter()
+            .find(|item| {
+                item.kind == PaletteItemKind::Relation && item.title == "supports → Requirements"
+            })
+            .expect("typed outgoing relation should appear in the palette");
+
+        assert!(matches!(item.target, PaletteTarget::RelationPath { .. }));
+        assert!(
+            item.preview
+                .contains("[[rel:supports->product/requirements]]")
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn palette_can_follow_a_relation_target() {
+        let map_path = temp_map_path("palette-relation-jump.md");
+        let document = sample_document_with_relations();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let relation_target = app
+            .palette_items("requirements")
+            .into_iter()
+            .find_map(|item| match item.target {
+                PaletteTarget::RelationPath { path, message }
+                    if item.kind == PaletteItemKind::Relation
+                        && item.title == "supports → Requirements" =>
+                {
+                    Some((path, message))
+                }
+                _ => None,
+            })
+            .expect("relation jump should appear in the palette");
+
+        app.execute_palette_target(PaletteTarget::RelationPath {
+            path: relation_target.0,
+            message: relation_target.1,
+        })
+        .expect("relation jump should succeed");
+
+        assert_eq!(
+            app.editor.current().expect("focus should exist").text,
+            "Requirements"
+        );
+        assert_eq!(
+            app.status.text,
+            "Followed relation [[rel:supports->product/requirements]] to 'Requirements'."
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn palette_surfaces_backlink_jumps_for_current_node() {
+        let map_path = temp_map_path("palette-backlinks.md");
+        let document = sample_document_with_relations();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let item = app
+            .palette_items("backlink")
+            .into_iter()
+            .find(|item| {
+                item.kind == PaletteItemKind::Relation && item.title == "informs ← Prompt Library"
+            })
+            .expect("incoming backlink should appear in the palette");
+
+        assert!(item.preview.contains("[[rel:informs->product/mvp]]"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn relation_keys_follow_outgoing_relations() {
+        let map_path = temp_map_path("relation-follow-keys.md");
+        let document = sample_document_with_relations();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 2],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char(']'), KeyModifiers::NONE))
+            .expect("] should follow the single outgoing relation");
+        assert_eq!(
+            app.editor.current().expect("focus should exist").text,
+            "MVP Scope"
+        );
+        assert_eq!(app.status.text, "Followed relation informs to 'MVP Scope'.");
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn relation_key_can_follow_backlinks() {
+        let map_path = temp_map_path("relation-follow-backlink-key.md");
+        let document = sample_document_with_relations();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE))
+            .expect("[ should follow the first backlink");
+        assert_eq!(
+            app.editor.current().expect("focus should exist").text,
+            "Prompt Library"
+        );
+        assert_eq!(
+            app.status.text,
+            "Followed backlink informs from 'Prompt Library'."
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn relation_key_opens_a_picker_when_multiple_outgoing_relations_exist() {
+        let map_path = temp_map_path("relation-follow-picker.md");
+        let document = sample_document_with_relations();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char(']'), KeyModifiers::NONE))
+            .expect("] should open the relation picker");
+
+        let picker = app
+            .relation_picker
+            .as_ref()
+            .expect("multiple outgoing relations should open a picker");
+        assert_eq!(picker.kind, RelationPickerKind::Outgoing);
+        assert_eq!(picker.items.len(), 2);
+        assert_eq!(
+            app.editor.current().expect("focus should stay put").text,
+            "MVP Scope"
+        );
+        assert_eq!(app.status.text, "Choose an outgoing relation to follow.");
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn prompt_assist_flags_duplicate_ids_before_submit() {
+        let map_path = temp_map_path("prompt-duplicate-id.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let prompt = PromptState::new(
+            PromptMode::AddChild,
+            "New Branch [id:product/tasks]".to_string(),
+        );
+
+        let assist = prompt_assist(&app, &prompt);
+        assert_eq!(assist.tone, PromptAssistTone::Error);
+        assert!(
+            assist
+                .lines
+                .iter()
+                .any(|line| line.contains("Id: product/tasks is already used"))
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn prompt_assist_allows_unchanged_id_when_editing_current_node() {
+        let map_path = temp_map_path("prompt-same-id.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 1],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let prompt = PromptState::new(
+            PromptMode::Edit,
+            "Tasks #todo @status:active [id:product/tasks]".to_string(),
+        );
+
+        let assist = prompt_assist(&app, &prompt);
+        assert_ne!(assist.tone, PromptAssistTone::Error);
+        assert!(
+            assist
+                .lines
+                .iter()
+                .any(|line| line.contains("Id: product/tasks (unchanged on this node)"))
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn prompt_assist_previews_jump_to_id_targets() {
+        let map_path = temp_map_path("prompt-open-id.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let assist = prompt_open_id_assist(&app, "product/tasks");
+        assert_eq!(assist.tone, PromptAssistTone::Success);
+        assert!(
+            assist
+                .lines
+                .iter()
+                .any(|line| line.contains("Will jump to Product Idea / Tasks"))
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn single_line_view_keeps_the_cursor_visible_near_the_end() {
+        let (visible, cursor) =
+            single_line_view("Tasks #todo @status:active [id:product/tasks]", 43, 16);
+
+        assert!(visible.contains("product/tasks"));
+        assert!(cursor <= 16);
+        assert!(!visible.is_empty());
+    }
+
+    #[test]
+    fn prompt_token_kind_detects_inline_node_syntax() {
+        assert_eq!(
+            prompt_token_kind("#todo", PromptMode::Edit),
+            PromptTokenKind::Tag
+        );
+        assert_eq!(
+            prompt_token_kind("@status:active", PromptMode::Edit),
+            PromptTokenKind::Metadata
+        );
+        assert_eq!(
+            prompt_token_kind("[id:product/tasks]", PromptMode::Edit),
+            PromptTokenKind::Id
+        );
+        assert_eq!(
+            prompt_token_kind("Tasks", PromptMode::Edit),
+            PromptTokenKind::Text
+        );
+    }
+
+    #[test]
+    fn prompt_open_id_highlights_the_entire_value_as_an_id() {
+        assert_eq!(
+            prompt_token_kind("product/tasks", PromptMode::OpenId),
+            PromptTokenKind::Id
+        );
+    }
+
+    #[test]
+    fn prompt_overlay_rect_uses_a_safe_minimum_height() {
+        let frame_area = Rect::new(0, 0, 100, 24);
+
+        let full = prompt_overlay_rect(false, frame_area);
+        let minimal = prompt_overlay_rect(true, frame_area);
+
+        assert!(full.height >= 17);
+        assert!(minimal.height >= 8);
+        assert!(full.height > minimal.height);
+    }
+
+    #[test]
+    fn centered_rect_with_min_clamps_to_available_space() {
+        let frame_area = Rect::new(0, 0, 40, 10);
+        let rect = centered_rect_with_min(10, 10, 56, 17, frame_area);
+
+        assert_eq!(rect.width, 40);
+        assert_eq!(rect.height, 10);
+        assert_eq!(rect.x, 0);
+        assert_eq!(rect.y, 0);
+    }
+
+    #[test]
+    fn frequent_locations_collect_revisited_nodes_for_palette_results() {
+        let map_path = temp_map_path("frequent-locations.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        for path in [vec![0, 1], vec![0], vec![0, 1], vec![0], vec![0, 1]] {
+            app.editor
+                .set_focus_path(path)
+                .expect("path should exist for frequency test");
+            app.finalize_focus_change(MotionTarget::Focus)
+                .expect("focus change should update frequent locations");
+        }
+
+        let items = app.palette_frequent_location_items("tasks");
+        assert!(
+            items
+                .iter()
+                .any(|item| item.kind == PaletteItemKind::Frequent
+                    && item.title == "Tasks"
+                    && item.subtitle.contains("3 visits"))
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
     fn palette_group_headers_start_when_result_kind_changes() {
         let items = vec![
             PaletteItem {
@@ -7752,6 +10963,34 @@ mod tests {
         if session_path.exists() {
             std::fs::remove_file(session_path).ok();
         }
+    }
+
+    #[test]
+    fn search_query_mode_allows_typing_c_without_clearing() {
+        let map_path = temp_map_path("search-type-c.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.open_search_overlay(SearchSection::Query);
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE))
+            .expect("typing c should update the query");
+
+        let search = app.search.as_ref().expect("search should stay open");
+        assert_eq!(search.draft_query, "c");
+        assert_eq!(search.cursor, 1);
+        assert_eq!(
+            app.status.text,
+            "Search open. Tab switches sections. Enter applies the current selection."
+        );
+
+        cleanup_sidecars(&map_path);
     }
 
     #[test]

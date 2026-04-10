@@ -6,6 +6,7 @@ pub mod cli;
 pub mod editor;
 pub mod export;
 pub mod interactive;
+pub mod locations;
 pub mod mindmap;
 pub mod model;
 pub mod parser;

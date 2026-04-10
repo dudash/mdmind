@@ -1,0 +1,5 @@
+- Product Idea #idea [id:product]
+  - MVP Scope #todo @status:active [id:product/mvp] [[prompts/library]] [[rel:supports->product/requirements]]
+    - File format [id:product/format]
+  - Requirements #spec [id:product/requirements]
+  - Prompt Library #prompt @owner:jason [id:prompts/library] [[rel:informs->product/mvp]]

@@ -6,6 +6,10 @@ fn fixture(name: &str) -> String {
     format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"))
 }
 
+fn example(name: &str) -> String {
+    format!("{}/examples/{name}", env!("CARGO_MANIFEST_DIR"))
+}
+
 fn run_mdm(args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_mdm"))
         .args(args)
@@ -45,6 +49,75 @@ fn find_supports_plain_output() {
     let stdout = stdout(&output);
     assert!(stdout.contains("Prompt Library"));
     assert!(stdout.contains("prompts/library"));
+}
+
+#[test]
+fn find_can_inspect_example_metadata_workflows() {
+    let output = run_mdm(&[
+        "find",
+        &example("lantern-studio-map.md"),
+        "@owner:mira",
+        "--plain",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("make volunteer briefing cards feel elegant under low light"));
+    assert!(stdout.contains("lantern/team/mira"));
+}
+
+#[test]
+fn kv_can_inspect_example_owner_and_region_metadata() {
+    let output = run_mdm(&[
+        "kv",
+        &example("game-world-moonwake.md"),
+        "--keys",
+        "owner,region",
+        "--plain",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("moonwake/world/glass-marsh"));
+    assert!(stdout.contains("\towner\tnora\t"));
+}
+
+#[test]
+fn tags_can_summarize_the_writing_example() {
+    let output = run_mdm(&["tags", &example("novel-research-writing-map.md"), "--plain"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("#chapter"));
+    assert!(stdout.contains("#quote"));
+    assert!(stdout.contains("#theme"));
+}
+
+#[test]
+fn links_can_list_deep_link_targets_for_examples() {
+    let output = run_mdm(&["links", &example("lantern-studio-map.md"), "--plain"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("lantern/execution/now"));
+    assert!(stdout.contains("lantern/team/leah"));
+}
+
+#[test]
+fn relations_can_list_outgoing_links_and_backlinks() {
+    let output = run_mdm(&["relations", &fixture("relations.md"), "--plain"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let plain_output = stdout(&output);
+    assert!(plain_output.contains("out\t"));
+    assert!(plain_output.contains("prompts/library"));
+    assert!(plain_output.contains("supports"));
+
+    let focused = run_mdm(&[
+        "relations",
+        &format!("{}#product/mvp", fixture("relations.md")),
+        "--plain",
+    ]);
+    assert!(focused.status.success(), "stderr: {}", stderr(&focused));
+    let focused_stdout = stdout(&focused);
+    assert!(focused_stdout.contains("in\t"));
+    assert!(focused_stdout.contains("out\t"));
+    assert!(focused_stdout.contains("Prompt Library"));
 }
 
 #[test]

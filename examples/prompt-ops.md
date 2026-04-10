@@ -1,0 +1,46 @@
+- Prompt Operations Map #guide @surface:prompting [id:example/prompts]
+  - Goals #guide [id:example/prompts/goals]
+    - Reliable prompt drafts #prompt @status:active
+    - Fast iteration with visible failures #prompt @status:active
+    - Clear evaluation notes tied to variants #prompt @status:active
+  - Prompt Library #guide [id:example/prompts/library]
+    - System prompts #prompt [id:example/prompts/system]
+      - Planning assistant
+      - Refactoring assistant
+    - User prompts #prompt [id:example/prompts/user]
+      - Draft a roadmap
+      - Summarize a branch
+      - Turn notes into tasks
+    - Few-shot examples #prompt [id:example/prompts/examples]
+      - Good extraction example
+      - Bad extraction example
+  - Experiments #guide [id:example/prompts/experiments]
+    - Active variants #todo @status:active [id:example/prompts/variants]
+      - Shorter system framing @owner:jason
+      - Stronger formatting constraints @owner:jason
+      - Better failure examples @owner:jason
+    - Observed failures #blocked [id:example/prompts/failures]
+      - Over-explains simple answers @severity:medium
+      - Misses stable ids in extracted output @severity:high
+      - Makes generic UI suggestions @severity:medium
+  - Evaluation Notes #guide [id:example/prompts/evals]
+    - What to score
+      - structure retention
+      - concise output
+      - correct inline syntax
+    - Useful metadata #reference
+      - Example: @score:good
+      - Example: @score:risky
+      - Example: @failure:format
+      - Example: @failure:hallucination
+  - Example Filters #reference [id:example/prompts/filters]
+    - active prompt work
+      - query #todo @status:active
+    - only failures
+      - query @failure:format
+    - only variant work
+      - jump to example/prompts/variants
+  - Tips #tip [id:example/prompts/tips]
+    - keep prompt variants as sibling branches so comparison is easy
+    - add ids to reusable prompts you expect to deep-link or export
+    - use metadata for evaluation state instead of rewriting labels

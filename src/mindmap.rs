@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -43,6 +43,13 @@ pub struct Bubble {
 pub struct Connector {
     pub from: (i32, i32),
     pub to: (i32, i32),
+    pub kind: ConnectorKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectorKind {
+    Tree,
+    Relation,
 }
 
 #[derive(Debug, Clone)]
@@ -197,6 +204,7 @@ impl Scene {
             place_node(node, 4, cursor_y, &mut bubbles, &mut connectors);
             cursor_y += node.subtree_height + ROOT_GAP;
         }
+        connectors.extend(build_relation_connectors(document, &bubbles));
 
         let mut min_x = i32::MAX;
         let mut min_y = i32::MAX;
@@ -271,10 +279,21 @@ impl Scene {
     }
 
     pub fn describe(&self) -> String {
+        let tree_connectors = self
+            .connectors
+            .iter()
+            .filter(|connector| connector.kind == ConnectorKind::Tree)
+            .count();
+        let relation_connectors = self
+            .connectors
+            .iter()
+            .filter(|connector| connector.kind == ConnectorKind::Relation)
+            .count();
         format!(
-            "{} bubbles, {} connectors, canvas {}x{}",
+            "{} bubbles, {} tree connectors, {} relation edges, canvas {}x{}",
             self.bubbles.len(),
-            self.connectors.len(),
+            tree_connectors,
+            relation_connectors,
             self.width(),
             self.height()
         )
@@ -585,10 +604,89 @@ fn place_node(
         connectors.push(Connector {
             from: (x + node.width as i32, parent_mid),
             to: (child_x - 1, child_mid),
+            kind: ConnectorKind::Tree,
         });
         place_node(child, child_x, cursor_y, bubbles, connectors);
         cursor_y += child.subtree_height + CHILD_GAP;
     }
+}
+
+fn build_relation_connectors(document: &Document, bubbles: &[Bubble]) -> Vec<Connector> {
+    let mut id_to_anchor = HashMap::new();
+    let mut visible_paths = HashSet::new();
+    for bubble in bubbles {
+        visible_paths.insert(bubble.path.clone());
+        if let Some(node) = get_node_by_path(&document.nodes, &bubble.path)
+            && let Some(id) = &node.id
+        {
+            id_to_anchor.insert(id.clone(), bubble_relation_anchor(bubble));
+        }
+    }
+
+    let mut connectors = Vec::new();
+    collect_relation_connectors_from(
+        &document.nodes,
+        &visible_paths,
+        &id_to_anchor,
+        &mut connectors,
+        Vec::new(),
+    );
+    connectors
+}
+
+fn collect_relation_connectors_from(
+    nodes: &[Node],
+    visible_paths: &HashSet<Vec<usize>>,
+    id_to_anchor: &HashMap<String, (i32, i32)>,
+    connectors: &mut Vec<Connector>,
+    prefix: Vec<usize>,
+) {
+    for (index, node) in nodes.iter().enumerate() {
+        let mut path = prefix.clone();
+        path.push(index);
+
+        if visible_paths.contains(&path)
+            && let Some(node_id) = &node.id
+            && let Some(from) = id_to_anchor.get(node_id).copied()
+        {
+            for relation in &node.relations {
+                if let Some(to) = id_to_anchor.get(&relation.target).copied()
+                    && from != to
+                {
+                    connectors.push(Connector {
+                        from,
+                        to,
+                        kind: ConnectorKind::Relation,
+                    });
+                }
+            }
+        }
+
+        collect_relation_connectors_from(
+            &node.children,
+            visible_paths,
+            id_to_anchor,
+            connectors,
+            path,
+        );
+    }
+}
+
+fn bubble_relation_anchor(bubble: &Bubble) -> (i32, i32) {
+    (
+        bubble.x + bubble.width as i32 / 2,
+        bubble.y + bubble.height as i32 / 2,
+    )
+}
+
+fn get_node_by_path<'a>(nodes: &'a [Node], path: &[usize]) -> Option<&'a Node> {
+    let mut current = nodes;
+    let mut node = None;
+    for index in path {
+        node = current.get(*index);
+        current = &node?.children;
+    }
+    node
 }
 
 fn build_bubble_lines(node: &VisibleNode) -> Vec<String> {
@@ -618,8 +716,6 @@ fn build_bubble_lines(node: &VisibleNode) -> Vec<String> {
         ));
     } else if let Some(id) = &node.id {
         lines.push(truncate(id, INNER_WRAP_WIDTH));
-    } else if node.matched {
-        lines.push("matched in current filter".to_string());
     }
 
     lines.truncate(3);
@@ -678,20 +774,37 @@ fn render_surface(scene: &Scene, camera: Camera, theme: Theme) -> CellSurface {
         height: camera.height.max(1),
     };
     let mut surface = CellSurface::new(size, theme.background);
-    let mut line_masks = vec![0_u8; size.width as usize * size.height as usize];
+    let mut tree_masks = vec![0_u8; size.width as usize * size.height as usize];
+    let mut relation_masks = vec![0_u8; size.width as usize * size.height as usize];
 
     for connector in &scene.connectors {
-        draw_connector(&mut line_masks, size, camera, connector);
+        match connector.kind {
+            ConnectorKind::Tree => draw_connector(&mut tree_masks, size, camera, connector),
+            ConnectorKind::Relation => draw_connector(&mut relation_masks, size, camera, connector),
+        }
     }
     for y in 0..size.height as usize {
         for x in 0..size.width as usize {
-            let mask = line_masks[y * size.width as usize + x];
+            let mask = tree_masks[y * size.width as usize + x];
             if mask != 0 {
                 let symbol = line_symbol(mask);
                 let cell = surface.get_mut(x as i32, y as i32);
                 cell.symbol = symbol;
                 cell.fg = theme.muted;
                 cell.bg = theme.background;
+            }
+        }
+    }
+    for y in 0..size.height as usize {
+        for x in 0..size.width as usize {
+            let mask = relation_masks[y * size.width as usize + x];
+            if mask != 0 {
+                let symbol = line_symbol(mask);
+                let cell = surface.get_mut(x as i32, y as i32);
+                cell.symbol = symbol;
+                cell.fg = theme.accent;
+                cell.bg = theme.background;
+                cell.bold = true;
             }
         }
     }
@@ -1145,6 +1258,41 @@ mod tests {
         let scene = Scene::build(&document, &[0, 0], &expanded, None, None);
         assert!(scene.focus_center.0 > 0);
         assert!(scene.focus_center.1 > 0);
+    }
+
+    #[test]
+    fn scene_builds_relation_edges_for_visible_cross_links() {
+        let document = parse_document(
+            "- Product [id:product]\n  - MVP [id:product/mvp] [[prompts/library]]\n  - Prompt Library [id:prompts/library]\n",
+        )
+        .document;
+        let expanded = HashSet::from([vec![0]]);
+        let scene = Scene::build(&document, &[0, 0], &expanded, None, None);
+
+        assert!(
+            scene
+                .connectors
+                .iter()
+                .any(|connector| connector.kind == ConnectorKind::Relation)
+        );
+    }
+
+    #[test]
+    fn scene_omits_relation_edges_when_target_is_not_visible() {
+        let document = parse_document(
+            "- Product [id:product]\n  - MVP [id:product/mvp] [[prompts/library]]\n  - Prompt Library [id:prompts/library]\n",
+        )
+        .document;
+        let expanded = HashSet::new();
+        let visible_paths = HashSet::from([vec![0], vec![0, 0]]);
+        let scene = Scene::build(&document, &[0, 0], &expanded, None, Some(&visible_paths));
+
+        assert!(
+            scene
+                .connectors
+                .iter()
+                .all(|connector| connector.kind != ConnectorKind::Relation)
+        );
     }
 
     #[test]

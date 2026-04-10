@@ -13,6 +13,8 @@ pub struct Node {
     pub tags: Vec<String>,
     pub metadata: Vec<MetadataEntry>,
     pub id: Option<String>,
+    #[serde(default)]
+    pub relations: Vec<Relation>,
     pub children: Vec<Node>,
     pub line: usize,
 }
@@ -21,6 +23,12 @@ pub struct Node {
 pub struct MetadataEntry {
     pub key: String,
     pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Relation {
+    pub kind: Option<String>,
+    pub target: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -84,6 +92,25 @@ pub struct LinkEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RelationDirection {
+    Outgoing,
+    Incoming,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RelationRow {
+    pub direction: RelationDirection,
+    pub line: usize,
+    pub breadcrumb: String,
+    pub text: String,
+    pub id: Option<String>,
+    pub relation: String,
+    pub target: String,
+    pub resolved_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ExportDocument {
     pub nodes: Vec<ExportNode>,
 }
@@ -94,7 +121,14 @@ pub struct ExportNode {
     pub tags: Vec<String>,
     pub kv: BTreeMap<String, String>,
     pub id: Option<String>,
+    pub relations: Vec<ExportRelation>,
     pub children: Vec<ExportNode>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ExportRelation {
+    pub kind: Option<String>,
+    pub target: String,
 }
 
 impl Document {
@@ -118,6 +152,14 @@ impl Node {
             tags: self.tags.clone(),
             kv,
             id: self.id.clone(),
+            relations: self
+                .relations
+                .iter()
+                .map(|relation| ExportRelation {
+                    kind: relation.kind.clone(),
+                    target: relation.target.clone(),
+                })
+                .collect(),
             children: self.children.iter().map(Node::export).collect(),
         }
     }
@@ -136,12 +178,26 @@ impl Node {
         if let Some(id) = &self.id {
             parts.push(format!("[id:{id}]"));
         }
+        parts.extend(self.relations.iter().map(Relation::display_token));
 
         if parts.is_empty() {
             "(empty)".to_string()
         } else {
             parts.join(" ")
         }
+    }
+}
+
+impl Relation {
+    pub fn display_token(&self) -> String {
+        match &self.kind {
+            Some(kind) => format!("[[rel:{kind}->{}]]", self.target),
+            None => format!("[[{}]]", self.target),
+        }
+    }
+
+    pub fn label(&self) -> String {
+        self.kind.clone().unwrap_or_else(|| "ref".to_string())
     }
 }
 

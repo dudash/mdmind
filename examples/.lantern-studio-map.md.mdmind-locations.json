@@ -1,0 +1,204 @@
+{
+  "frequent": [
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          0,
+          0
+        ],
+        "id": "lantern/roadmap/help"
+      },
+      "visits": 50,
+      "last_seen": 447
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3
+        ],
+        "id": "lantern/roadmap"
+      },
+      "visits": 39,
+      "last_seen": 445
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          2
+        ],
+        "id": "lantern/product"
+      },
+      "visits": 35,
+      "last_seen": 437
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          0
+        ],
+        "id": "lantern/roadmap/now"
+      },
+      "visits": 29,
+      "last_seen": 446
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0
+        ],
+        "id": "lantern/start"
+      },
+      "visits": 28,
+      "last_seen": 436
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          0,
+          1
+        ],
+        "id": "lantern/roadmap/examples"
+      },
+      "visits": 17,
+      "last_seen": 448
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4,
+          0
+        ],
+        "id": "lantern/execution/now"
+      },
+      "visits": 14,
+      "last_seen": 397
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4,
+          1,
+          1
+        ],
+        "id": null
+      },
+      "visits": 10,
+      "last_seen": 402
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "id": null
+      },
+      "visits": 9,
+      "last_seen": 337
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "id": null
+      },
+      "visits": 9,
+      "last_seen": 336
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          2,
+          1
+        ],
+        "id": null
+      },
+      "visits": 9,
+      "last_seen": 274
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 8,
+      "last_seen": 401
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          2,
+          2
+        ],
+        "id": null
+      },
+      "visits": 7,
+      "last_seen": 273
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4,
+          0,
+          2
+        ],
+        "id": null
+      },
+      "visits": 6,
+      "last_seen": 400
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4,
+          0,
+          0
+        ],
+        "id": null
+      },
+      "visits": 4,
+      "last_seen": 398
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          2,
+          0
+        ],
+        "id": null
+      },
+      "visits": 4,
+      "last_seen": 275
+    }
+  ]
+}

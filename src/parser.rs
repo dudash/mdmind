@@ -1,4 +1,4 @@
-use crate::model::{Diagnostic, Document, MetadataEntry, Node, Severity};
+use crate::model::{Diagnostic, Document, MetadataEntry, Node, Relation, Severity};
 
 #[derive(Debug, Clone)]
 pub struct ParseOutput {
@@ -135,6 +135,7 @@ fn parse_node_content(content: &str, line: usize, diagnostics: &mut Vec<Diagnost
     let mut tags = Vec::new();
     let mut metadata = Vec::new();
     let mut id = None;
+    let mut relations = Vec::new();
 
     for token in content.split_whitespace() {
         if token.starts_with('#') {
@@ -207,6 +208,21 @@ fn parse_node_content(content: &str, line: usize, diagnostics: &mut Vec<Diagnost
             continue;
         }
 
+        if token.starts_with("[[") {
+            match parse_relation_token(token) {
+                Ok(relation) => relations.push(relation),
+                Err(message) => {
+                    diagnostics.push(Diagnostic {
+                        severity: Severity::Error,
+                        line,
+                        message,
+                    });
+                    text_parts.push(token.to_string());
+                }
+            }
+            continue;
+        }
+
         text_parts.push(token.to_string());
     }
 
@@ -215,7 +231,37 @@ fn parse_node_content(content: &str, line: usize, diagnostics: &mut Vec<Diagnost
         tags,
         metadata,
         id,
+        relations,
         children: Vec::new(),
         line,
     }
+}
+
+fn parse_relation_token(token: &str) -> Result<Relation, String> {
+    if !token.ends_with("]]") || token.len() <= 4 {
+        return Err(format!("Invalid relation token '{token}'."));
+    }
+
+    let inner = &token[2..token.len() - 2];
+    if inner.is_empty() {
+        return Err(format!("Invalid relation token '{token}'."));
+    }
+
+    if let Some(rest) = inner.strip_prefix("rel:") {
+        let Some((kind, target)) = rest.split_once("->") else {
+            return Err(format!("Invalid relation token '{token}'."));
+        };
+        if kind.is_empty() || target.is_empty() {
+            return Err(format!("Invalid relation token '{token}'."));
+        }
+        return Ok(Relation {
+            kind: Some(kind.to_string()),
+            target: target.to_string(),
+        });
+    }
+
+    Ok(Relation {
+        kind: None,
+        target: inner.to_string(),
+    })
 }

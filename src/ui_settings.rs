@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::app::AppError;
 use crate::mindmap::Theme;
@@ -15,15 +15,19 @@ pub enum ThemeId {
     Paper,
     Blueprint,
     Calm,
+    Violet,
+    Monograph,
     TerminalNeon,
 }
 
 impl ThemeId {
-    pub const ALL: [ThemeId; 5] = [
+    pub const ALL: [ThemeId; 7] = [
         ThemeId::Workbench,
         ThemeId::Paper,
         ThemeId::Blueprint,
         ThemeId::Calm,
+        ThemeId::Violet,
+        ThemeId::Monograph,
         ThemeId::TerminalNeon,
     ];
 
@@ -33,6 +37,8 @@ impl ThemeId {
             Self::Paper => "Paper",
             Self::Blueprint => "Blueprint",
             Self::Calm => "Calm",
+            Self::Violet => "Violet",
+            Self::Monograph => "Monograph",
             Self::TerminalNeon => "Terminal Neon",
         }
     }
@@ -43,6 +49,12 @@ impl ThemeId {
             Self::Paper => "Light drafting surface with ink-blue structure and warm markers.",
             Self::Blueprint => "Cool blueprint grid feel with bright technical highlights.",
             Self::Calm => "Soft sage and sand palette for low-friction planning sessions.",
+            Self::Violet => {
+                "Lavender-on-violet surface with orchid borders and warm gold highlights."
+            }
+            Self::Monograph => {
+                "Restrained graphite surface with quiet silver structure and cool focus cues."
+            }
             Self::TerminalNeon => "Dark terminal glass with vivid green and electric cyan edges.",
         }
     }
@@ -53,6 +65,8 @@ impl ThemeId {
             Self::Paper => "theme paper light cream ink warm",
             Self::Blueprint => "theme blueprint blue technical grid",
             Self::Calm => "theme calm sage sand gentle",
+            Self::Violet => "theme violet purple lavender orchid gold dusk",
+            Self::Monograph => "theme monograph graphite minimal monochrome slate quiet",
             Self::TerminalNeon => "theme terminal neon green cyan dark",
         }
     }
@@ -107,6 +121,30 @@ impl ThemeId {
                 text: Color::Rgb(233, 238, 230),
                 muted: Color::Rgb(157, 173, 162),
             },
+            Self::Violet => Theme {
+                background: Color::Rgb(67, 36, 104),
+                surface: Color::Rgb(89, 48, 134),
+                surface_alt: Color::Rgb(106, 61, 156),
+                border: Color::Rgb(166, 124, 214),
+                accent: Color::Rgb(226, 191, 255),
+                sky: Color::Rgb(203, 168, 255),
+                warn: Color::Rgb(246, 201, 112),
+                danger: Color::Rgb(255, 132, 178),
+                text: Color::Rgb(245, 230, 255),
+                muted: Color::Rgb(205, 181, 228),
+            },
+            Self::Monograph => Theme {
+                background: Color::Rgb(14, 16, 20),
+                surface: Color::Rgb(20, 23, 28),
+                surface_alt: Color::Rgb(29, 33, 39),
+                border: Color::Rgb(76, 84, 94),
+                accent: Color::Rgb(191, 198, 206),
+                sky: Color::Rgb(143, 175, 201),
+                warn: Color::Rgb(202, 173, 124),
+                danger: Color::Rgb(196, 121, 121),
+                text: Color::Rgb(231, 235, 240),
+                muted: Color::Rgb(132, 141, 151),
+            },
             Self::TerminalNeon => Theme {
                 background: Color::Rgb(6, 11, 10),
                 surface: Color::Rgb(11, 20, 18),
@@ -123,11 +161,38 @@ impl ThemeId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UiSettings {
     pub theme: ThemeId,
     pub motion_enabled: bool,
     pub ascii_accents: bool,
+    pub minimal_mode: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawUiSettings {
+    theme: Option<ThemeId>,
+    motion_enabled: Option<bool>,
+    reduced_motion: Option<bool>,
+    ascii_accents: Option<bool>,
+    minimal_mode: Option<bool>,
+}
+
+impl<'de> Deserialize<'de> for UiSettings {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawUiSettings::deserialize(deserializer)?;
+        Ok(Self {
+            theme: raw.theme.unwrap_or(ThemeId::Workbench),
+            motion_enabled: raw
+                .motion_enabled
+                .unwrap_or_else(|| raw.reduced_motion.map(|reduced| !reduced).unwrap_or(true)),
+            ascii_accents: raw.ascii_accents.unwrap_or(false),
+            minimal_mode: raw.minimal_mode.unwrap_or(false),
+        })
+    }
 }
 
 impl Default for UiSettings {
@@ -136,6 +201,7 @@ impl Default for UiSettings {
             theme: ThemeId::Workbench,
             motion_enabled: true,
             ascii_accents: false,
+            minimal_mode: false,
         }
     }
 }

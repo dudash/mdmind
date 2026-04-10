@@ -41,6 +41,23 @@ pub fn validate_document(document: &Document) -> Vec<Diagnostic> {
         }
     });
 
+    let id_counts = seen_ids;
+    walk_nodes(&document.nodes, &mut |node| {
+        for relation in &node.relations {
+            match id_counts.get(&relation.target) {
+                Some(_) => {}
+                None => diagnostics.push(Diagnostic {
+                    severity: Severity::Warning,
+                    line: node.line,
+                    message: format!(
+                        "Relation target '{}' does not match any node id.",
+                        relation.target
+                    ),
+                }),
+            }
+        }
+    });
+
     diagnostics
 }
 

@@ -1,4 +1,7 @@
-use crate::model::{Diagnostic, Document, LinkEntry, MetadataRow, SearchMatch, TagCount};
+use crate::model::{
+    Diagnostic, Document, LinkEntry, MetadataRow, RelationDirection, RelationRow, SearchMatch,
+    TagCount,
+};
 
 pub fn render_tree(document: &Document, max_depth: Option<usize>) -> String {
     let mut lines = Vec::new();
@@ -158,6 +161,51 @@ pub fn render_validate_plain(diagnostics: &[Diagnostic]) -> String {
             format!("{:?}", entry.severity).to_lowercase(),
             entry.line.to_string(),
             entry.message.clone(),
+        ]
+    }))
+}
+
+pub fn render_relations(rows: &[RelationRow]) -> String {
+    if rows.is_empty() {
+        return "No relations found.".to_string();
+    }
+
+    render_table(
+        &["dir", "line", "path", "relation", "target", "resolved"],
+        &rows
+            .iter()
+            .map(|entry| {
+                vec![
+                    match entry.direction {
+                        RelationDirection::Outgoing => "out".to_string(),
+                        RelationDirection::Incoming => "in".to_string(),
+                    },
+                    entry.line.to_string(),
+                    entry.breadcrumb.clone(),
+                    entry.relation.clone(),
+                    entry.target.clone(),
+                    entry
+                        .resolved_path
+                        .clone()
+                        .unwrap_or_else(|| "-".to_string()),
+                ]
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
+pub fn render_relations_plain(rows: &[RelationRow]) -> String {
+    render_plain_rows(rows.iter().map(|entry| {
+        vec![
+            match entry.direction {
+                RelationDirection::Outgoing => "out".to_string(),
+                RelationDirection::Incoming => "in".to_string(),
+            },
+            entry.line.to_string(),
+            entry.breadcrumb.clone(),
+            entry.relation.clone(),
+            entry.target.clone(),
+            entry.resolved_path.clone().unwrap_or_default(),
         ]
     }))
 }

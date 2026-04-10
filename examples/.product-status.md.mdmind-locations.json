@@ -1,0 +1,205 @@
+{
+  "frequent": [
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "id": "example/product/palette"
+      },
+      "visits": 4,
+      "last_seen": 64
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1,
+          2
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 70
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1,
+          1
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 69
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 68
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1
+        ],
+        "id": "example/product/roadmap/next"
+      },
+      "visits": 3,
+      "last_seen": 67
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          0,
+          2
+        ],
+        "id": "example/product/docs"
+      },
+      "visits": 3,
+      "last_seen": 66
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          0,
+          1
+        ],
+        "id": "example/product/help"
+      },
+      "visits": 3,
+      "last_seen": 65
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3
+        ],
+        "id": "example/product/assignments"
+      },
+      "visits": 2,
+      "last_seen": 54
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          2,
+          1,
+          1
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 82
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          2,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 81
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          2,
+          1
+        ],
+        "id": "example/product/features/discovery"
+      },
+      "visits": 1,
+      "last_seen": 80
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          2,
+          0,
+          2
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 79
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          2,
+          0,
+          1
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 78
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          2,
+          0,
+          0
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 77
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          2,
+          0
+        ],
+        "id": "example/product/features/editor"
+      },
+      "visits": 1,
+      "last_seen": 76
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          2
+        ],
+        "id": "example/product/features"
+      },
+      "visits": 1,
+      "last_seen": 75
+    }
+  ]
+}

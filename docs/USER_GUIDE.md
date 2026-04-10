@@ -1,0 +1,250 @@
+- mdmind User Guide #guide @surface:tui @audience:all [id:guide]
+  - Start Here #guide #beginner @section:start [id:guide/start]
+    - What mdmind is #guide [id:guide/start/what-is]
+      - mdmind is a local-first mind mapping tool for structured thinking in plain text
+      - the same map file works in both the mdm CLI and the mdmind TUI
+      - the goal is keyboard-first thinking, not whiteboard-style diagramming
+    - What a map line can hold #guide [id:guide/start/map-line]
+      - a visible label for people
+      - #tags for grouping and workflow markers #reference
+      - @key:value metadata for structured attributes #reference
+      - [id:path/to/node] for stable deep links #reference
+      - [[target]] or [[rel:kind->target]] for cross-links across branches #reference
+    - First five minutes #recipe [id:guide/start/first-five]
+      - run mdmind on a small map file
+      - move with the arrow keys
+      - press a to add a child node
+      - press : to open the command palette
+      - press ? to open built-in help
+      - press m to open the visual mindmap
+    - Good first habit #tip [id:guide/start/first-habit]
+      - keep node labels short and readable
+      - use ids on important branches you want to revisit later
+      - use a few consistent tags and metadata keys across the whole map
+  - Core Mental Model #guide @section:model [id:guide/model]
+    - Focus is the center of the interface #guide [id:guide/model/focus]
+      - the outline, focus card, and mindmap follow the current node
+      - most actions happen relative to the focused node
+      - if you understand focus, the rest of the TUI becomes easier to predict
+    - Views change projection, not data #guide [id:guide/model/views]
+      - Full Map, Focus Branch, Subtree Only, and Filtered Focus only change what is visible
+      - they do not rewrite or move the underlying document
+      - this is why they are safe to use as thinking tools during editing
+    - Search narrows the working set #guide [id:guide/model/search]
+      - queries, facets, and saved views all feed the same filter model
+      - filters help you work inside a smaller visible surface without losing the original map
+    - Safety is part of the product #guide [id:guide/model/safety]
+      - undo and redo restore structural edits
+      - checkpoints let you capture and restore named snapshots
+      - autosave and manual save are both supported depending on your workflow
+  - Navigation #guide @section:navigation [id:guide/navigation]
+    - How to move #reference [id:guide/navigation/keys]
+      - ↑ / ↓ moves through visible nodes
+      - ← collapses a branch or moves to the parent
+      - → expands a branch or enters the first child
+      - Enter or Space toggles branch expansion
+      - g jumps to the root, or to the subtree root in Subtree Only
+    - When to use the palette #guide [id:guide/navigation/palette]
+      - use : or Ctrl+P when you know what branch, id, action, or help topic you want
+      - the palette is faster than drilling manually through a large map
+      - it is especially good for recent locations, frequent places, ids, filters, help, and cross-link jumps
+    - Direct id jumps #reference [id:guide/navigation/ids]
+      - o opens the jump-to-id prompt
+      - the palette also understands product/tasks and [id:product/tasks]
+      - ids are the most reliable deep-link target for large or long-lived maps
+    - Large map navigation tips #tip [id:guide/navigation/tips]
+      - if scrolling starts to feel noisy, try a focused view before you keep navigating
+      - if you bounce between two branches often, use the palette instead of retracing the tree
+      - if a branch matters long term, give it an id
+  - Editing #guide @section:editing [id:guide/editing]
+    - Everyday editing #reference [id:guide/editing/keys]
+      - a adds a child
+      - A adds a sibling
+      - Shift+R adds a root branch
+      - e edits the current node
+      - x deletes after confirmation
+    - Reshaping the tree #reference [id:guide/editing/reshape]
+      - Alt+↑ and Alt+↓ reorder a node among siblings
+      - Alt+← moves a node out one level
+      - Alt+→ indents a node into the previous sibling
+    - Prompt behavior #guide [id:guide/editing/prompts]
+      - add and edit prompts keep one logical node line
+      - inline syntax is previewed while you type
+      - duplicate ids are flagged before you commit
+      - minimal mode uses a quieter prompt surface with less chrome
+    - Editing tips #tip [id:guide/editing/tips]
+      - treat node labels as concise map lines, not long-form notes
+      - if a change feels risky, create a checkpoint first
+      - use consistent metadata keys such as status and owner instead of near-duplicates
+  - Search And Filters #guide @section:search [id:guide/search]
+    - Query search #reference [id:guide/search/query]
+      - / opens unified search on the Query tab
+      - plain text, #tags, and @key:value are supported
+      - Enter applies the current query and lands on the first useful match
+    - Facets and saved views #reference [id:guide/search/facets]
+      - f opens unified search on facets
+      - F opens unified search on saved views
+      - Tab switches Query, Facets, and Saved Views
+      - saved views persist common filters next to the map in a local sidecar
+    - Match navigation #reference [id:guide/search/matches]
+      - n and N move between matches
+      - c clears the active filter
+      - filter-aware motion highlights where the next useful result is
+    - Example queries #example [id:guide/search/examples]
+      - Example: #todo
+      - Example: @status:active
+      - Example: rate limit #backend
+      - Example: #todo @owner:jason
+    - Search tips #tip [id:guide/search/tips]
+      - start broad with text, then tighten with tags or metadata
+      - saved views are best for recurring workflows, not one-off searches
+      - facet browsing is the fastest way to learn what metadata already exists in a map
+  - CLI Inspection #guide @section:cli [id:guide/cli]
+    - Why use mdm on example maps #guide [id:guide/cli/why]
+      - mdm is useful when you want read-only inspection without opening the full TUI
+      - it is a good way to learn the query language and deep-link model from realistic maps
+      - the example maps are large enough that tags, metadata, and ids become worth inspecting directly
+    - Useful commands #reference [id:guide/cli/commands]
+      - mdm find examples/lantern-studio-map.md "@owner:mira" --plain
+      - mdm kv examples/game-world-moonwake.md --keys owner,region --plain
+      - mdm tags examples/novel-research-writing-map.md --plain
+      - mdm links examples/lantern-studio-map.md --plain
+    - How to think about the output #guide [id:guide/cli/output]
+      - use find when you want matching work items or branches in context
+      - use kv when you want to audit structured fields like owner, status, region, or priority
+      - use tags when you want a quick summary of a map's vocabulary
+      - use links when you want stable ids for deep-linking into view, open, or export
+    - CLI tips #tip [id:guide/cli/tips]
+      - add --plain when you want grep-friendly output
+      - use deep links after links output to inspect one branch with mdm view map.md#branch/id
+      - the example maps are intentionally tagged and annotated so they double as CLI query demos
+  - View Modes #guide @section:views [id:guide/views]
+    - Why view modes exist #guide [id:guide/views/why]
+      - they let you reduce visual noise without manually collapsing half the tree
+      - they help you pick the right balance between orientation and local focus
+    - Full Map #reference [id:guide/views/full-map]
+      - best for orientation and broad review
+      - keeps the whole visible tree available
+    - Focus Branch #reference [id:guide/views/focus-branch]
+      - best when you want local context plus nearby structure
+      - keeps ancestors and sibling context visible
+    - Subtree Only #reference [id:guide/views/subtree]
+      - best when one branch should become a temporary workspace
+      - entering it captures a stable subtree root
+      - g returns to that root
+      - ← does not climb above that root
+    - Filtered Focus #reference [id:guide/views/filtered-focus]
+      - best when search results matter more than the full tree
+      - combines filter results with enough local structure to stay oriented
+    - Which mode should I use #recipe [id:guide/views/which-one]
+      - use Full Map when you need orientation
+      - use Focus Branch when you still care about nearby context
+      - use Subtree Only when the rest of the map should disappear
+      - use Filtered Focus when search is driving the work
+    - View tips #tip [id:guide/views/tips]
+      - the mindmap follows the current view mode too
+      - Esc exits a focused projection before it clears filters
+      - Subtree Only is for local work, not for changing the document itself
+  - Inline Syntax #guide @section:syntax [id:guide/syntax]
+    - Tags #reference [id:guide/syntax/tags]
+      - #tag adds a topic or workflow marker
+      - use tags for fast grouping such as #todo, #idea, or #blocked
+    - Metadata #reference [id:guide/syntax/metadata]
+      - @key:value adds structured metadata
+      - use metadata for attributes like @status:active or @owner:jason
+    - Ids and deep links #reference [id:guide/syntax/ids]
+      - Example token: [id:your/path] adds a stable deep-link target
+      - ids are ideal for palette jumps, deep links, and export targets
+    - Cross-links and backlinks #reference [id:guide/syntax/cross-links]
+      - Example token: [[product/api-design]] points to a node id from another branch
+      - Example token: [[rel:blocks->product/api-design]] adds meaning to that reference
+      - use cross-links when two branches are meaningfully connected but should still live in different parts of the tree
+      - backlinks are derived from incoming cross-links, not stored as extra tree structure
+      - the palette can surface outgoing relations and backlinks for the current node, then jump directly to the related branch
+    - Markdown compatibility #guide [id:guide/syntax/markdown]
+      - mdmind keeps these tokens inline in ordinary plain-text Markdown files
+      - most normal Markdown renderers will just show [id:...] and [[...]] as literal text
+      - tools with wiki-link support may also interpret [[target]] as a link, which is usually close to the intended meaning
+    - Example node lines #example [id:guide/syntax/examples]
+      - API Design #backend @status:todo [id:product/api-design]
+      - Sprint Review #meeting @owner:jason @status:planned [id:team/sprint-review]
+      - Launch Readiness #release [[rel:blocked-by->product/api-design]]
+    - Syntax tips #tip [id:guide/syntax/tips]
+      - keep labels human-readable first, then add structure
+      - reuse the same metadata keys across the map
+      - reserve ids for branches you expect to revisit or link to directly
+      - use plain [[target]] as the normal cross-link and typed [[rel:kind->target]] only when the relationship meaning is worth preserving
+  - Themes And Minimal Mode #guide @section:themes [id:guide/themes]
+    - What themes affect #guide [id:guide/themes/what]
+      - themes change the header, outline, overlays, status surfaces, and mindmap together
+      - the goal is comfort and hierarchy, not decoration
+    - How to change themes #reference [id:guide/themes/controls]
+      - open the palette with : or Ctrl+P
+      - type theme or a theme name like paper, monograph, or blueprint
+      - Enter commits the previewed theme
+      - Esc restores the previous surface
+    - Minimal mode #reference [id:guide/themes/minimal]
+      - type minimal in the palette to toggle the quieter pro layout
+      - minimal mode condenses the shell, hides the keybar, reduces overlay chrome, and gives more room to the main tree by trimming the right-side context lanes
+    - Theme tips #tip [id:guide/themes/tips]
+      - Monograph plus minimal mode is the calmest current working surface
+      - motion helps guide attention, while minimal mode reduces explanatory noise
+  - Mindmap Mode #guide @section:mindmap [id:guide/mindmap]
+    - What the visual map is for #guide [id:guide/mindmap/why]
+      - it is a second lens on the current working set
+      - it is useful for cluster recognition, branch shape, and presentation
+      - it is less about direct editing and more about seeing structure clearly
+    - Mindmap controls #reference [id:guide/mindmap/controls]
+      - m opens or closes the visual mindmap
+      - arrow keys pan the canvas
+      - 0 recenters the camera
+      - p exports a PNG of the current rendered view
+      - visible cross-links also render as relation edges when both linked nodes are on-screen
+    - Mindmap tips #tip [id:guide/mindmap/tips]
+      - open the map after tightening a view or filter, not before
+      - if the map feels busy, reduce the working set in the tree first
+      - because the mindmap follows view modes, it is especially useful after isolating a branch
+  - Safety And History #guide @section:safety [id:guide/safety]
+    - Undo and redo #reference [id:guide/safety/history]
+      - u undoes the last structural change
+      - U redoes the last undone change
+      - focus, filter, and view state are restored with the edit state
+    - Checkpoints #reference [id:guide/safety/checkpoints]
+      - the palette can create manual checkpoints
+      - larger structural edits also create automatic safety snapshots
+      - checkpoints live in a local sidecar next to the map
+    - Safety tips #tip [id:guide/safety/tips]
+      - take a manual checkpoint before major restructuring if you expect to compare outcomes
+      - use recent action history in the palette when you want to jump back more than one step
+  - Recipes #recipe @section:recipes [id:guide/recipes]
+    - Review all todo work #recipe [id:guide/recipes/review-todo]
+      - open search
+      - query for #todo or combine it with @status:active
+      - step through matches with n and N
+      - save the filter if you will revisit it often
+    - Work inside one branch #recipe [id:guide/recipes/one-branch]
+      - move focus to the branch you care about
+      - switch to Subtree Only
+      - use g to return to the subtree root as you edit
+      - open the mindmap for a visual review of that branch only
+    - Set up reliable deep links #recipe [id:guide/recipes/deep-links]
+      - assign ids to important branches
+      - use those ids in palette jumps and CLI deep links
+      - prefer stable id names over label-dependent navigation for long-lived maps
+    - Export one subtree #recipe [id:guide/recipes/export-subtree]
+      - use a stable id on the branch you want to export
+      - run mdm export map.md#branch/id --format mermaid
+      - use JSON for machines, Mermaid for docs, and OPML for outliners
+  - Suggested Filters #reference @section:filters [id:guide/filters]
+    - Beginner guide content #reference [id:guide/filters/beginner]
+      - query #beginner
+    - Recipes only #reference [id:guide/filters/recipes]
+      - query #recipe
+    - Tips only #reference [id:guide/filters/tips]
+      - query #tip
+    - Reference only #reference [id:guide/filters/reference]
+      - query #reference
+  - Explore This Guide In mdmind #tip @section:tour [id:guide/tour]
+    - open this file directly in mdmind
+    - try the palette with guide/views/subtree or #recipe
+    - switch to Focus Branch or Subtree Only to experience the guide as a real map

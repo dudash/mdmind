@@ -1,0 +1,206 @@
+{
+  "frequent": [
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          2,
+          3
+        ],
+        "id": null
+      },
+      "visits": 6,
+      "last_seen": 108
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3
+        ],
+        "id": "moonwake/factions"
+      },
+      "visits": 5,
+      "last_seen": 109
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          1
+        ],
+        "id": "moonwake/factions/choir"
+      },
+      "visits": 5,
+      "last_seen": 100
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          0,
+          0
+        ],
+        "id": null
+      },
+      "visits": 5,
+      "last_seen": 97
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          0
+        ],
+        "id": "moonwake/factions/tidecart"
+      },
+      "visits": 5,
+      "last_seen": 96
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          2,
+          2
+        ],
+        "id": null
+      },
+      "visits": 4,
+      "last_seen": 107
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          0,
+          2
+        ],
+        "id": null
+      },
+      "visits": 4,
+      "last_seen": 99
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          0,
+          1
+        ],
+        "id": null
+      },
+      "visits": 4,
+      "last_seen": 98
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1,
+          2
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 36
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1,
+          1
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 35
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 34
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 101
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          2
+        ],
+        "id": "moonwake/pitch/tone"
+      },
+      "visits": 2,
+      "last_seen": 37
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1
+        ],
+        "id": "moonwake/pitch/fantasy"
+      },
+      "visits": 2,
+      "last_seen": 33
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          1,
+          2
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 12
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 11
+    }
+  ]
+}

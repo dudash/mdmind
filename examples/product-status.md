@@ -1,0 +1,60 @@
+- Product Delivery Map #guide @surface:planning [id:example/product]
+  - Product Overview #guide [id:example/product/overview]
+    - Product Goal #idea @status:active
+      - Help teams shape structured work without losing the speed of plain text
+    - Current Release @release:0.2 [id:example/product/release]
+      - Theme and help polish
+      - Safer editing and checkpoints
+      - Better example maps and docs
+    - Success Signals #metrics
+      - New users can start from a template in under five minutes
+      - Power users can manage large trees without feeling lost
+  - Roadmap #guide [id:example/product/roadmap]
+    - Now #todo @status:active [id:example/product/roadmap/now]
+      - Command palette polish @owner:jason @priority:high [id:example/product/palette]
+      - Built-in help articles @owner:jason @priority:high [id:example/product/help]
+      - Example maps and user guide @owner:jason @priority:high [id:example/product/docs]
+    - Next #todo [id:example/product/roadmap/next]
+      - Search recipes and smarter saved views @owner:jason
+      - Visual mindmap refinements @owner:jason
+      - CLI completions and richer help @owner:jason
+    - Later #idea [id:example/product/roadmap/later]
+      - Relations and backlinks
+      - Long-form notes as a separate feature
+      - Public docs site
+  - Feature Areas #guide [id:example/product/features]
+    - Core Editing #feature @area:editor [id:example/product/features/editor]
+      - Inline prompts #done @status:done
+      - Undo and redo #done @status:done
+      - Checkpoints #done @status:done
+    - Discovery #feature @area:navigation [id:example/product/features/discovery]
+      - Command palette #done @status:done
+      - Searchable help #doing @status:active
+      - Recent and frequent locations #done @status:done
+    - Visual UX #feature @area:surface [id:example/product/features/ux]
+      - Theme previews #done @status:done
+      - Minimal mode #doing @status:active
+      - Prompt syntax tinting #done @status:done
+    - Documentation #feature @area:docs [id:example/product/features/docs]
+      - User guide map #doing @status:active [id:example/product/features/docs/guide]
+      - Example maps #doing @status:active [id:example/product/features/docs/examples]
+      - Public docs site plan #todo @status:todo
+  - Assignments #guide [id:example/product/assignments]
+    - Jason @owner:jason
+      - Own command palette flow #todo @status:active [id:example/product/assignments/jason/palette]
+      - Tighten help writing and examples #todo @status:active
+      - Keep example maps valid and useful #todo @status:active
+    - Future Collaborator @owner:team
+      - Add CLI completions #todo @status:todo
+      - Expand export and import coverage #todo @status:todo
+  - Status Lenses #reference [id:example/product/lenses]
+    - Filter by owner
+      - Example query: @owner:jason
+    - Filter by current work
+      - Example query: #todo @status:active
+    - Jump to a feature area by id
+      - Example target: example/product/features/docs
+  - Risks And Questions #question [id:example/product/questions]
+    - Which help actions should open real product surfaces first? @status:todo
+    - How much docs content should be generated from repo markdown later? @status:todo
+    - Where should long-form notes live without weakening the map format? @status:todo
