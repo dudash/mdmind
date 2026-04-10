@@ -36,7 +36,7 @@
       - they do not rewrite or move the underlying document
       - this is why they are safe to use as thinking tools during editing
     - Search narrows the working set #guide [id:guide/model/search]
-      - queries, facets, and saved views all feed the same filter model
+      - queries, browse, and saved views all feed the same filter model
       - filters help you work inside a smaller visible surface without losing the original map
     - Safety is part of the product #guide [id:guide/model/safety]
       - undo and redo restore structural edits
@@ -87,7 +87,13 @@
       - A adds a sibling
       - Shift+R adds a root branch
       - e edits the current node
+      - d edits longer attached details for the current node
       - x deletes after confirmation
+    - Node details #guide [id:guide/editing/details]
+      - use details for longer notes, quotes, rationale, or research context
+      - details stay attached to a node without bloating the main tree label
+      - in raw files, detail lines use | ... directly under the node
+      - in mdmind, d opens the detail editor and Ctrl+S saves it
     - Reshaping the tree #reference [id:guide/editing/reshape]
       - Alt+↑ and Alt+↓ reorder a node among siblings
       - Alt+← moves a node out one level
@@ -98,7 +104,7 @@
       - duplicate ids are flagged before you commit
       - minimal mode uses a quieter prompt surface with less chrome
     - Editing tips #tip [id:guide/editing/tips]
-      - treat node labels as concise map lines, not long-form notes
+      - treat node labels as concise map lines and use details when one branch needs more prose
       - if a change feels risky, create a checkpoint first
       - use consistent metadata keys such as status and owner instead of near-duplicates
   - Search And Filters #guide @section:search [id:guide/search]
@@ -110,10 +116,10 @@
       - / opens unified search on the Query tab
       - plain text, #tags, and @key:value are supported
       - Enter applies the current query and lands on the first useful match
-    - Facets and saved views #reference [id:guide/search/facets]
-      - f opens unified search on facets
-      - F opens unified search on saved views
-      - Tab switches Query, Facets, and Saved Views
+    - Browse and saved views #reference [id:guide/search/browse]
+      - b opens browse for tags, metadata, and ids
+      - w opens unified search on saved views
+      - Tab switches Query, Browse, and Saved Views
       - saved views persist common filters next to the map in a local sidecar
     - Match navigation #reference [id:guide/search/matches]
       - n and N move between matches
@@ -126,9 +132,9 @@
       - Example: #todo @owner:jason
     - Search tips #tip [id:guide/search/tips]
       - start broad with text, then tighten with tags or metadata
-      - if you do not know the map's vocabulary yet, use facets before you guess metadata values
+      - if you do not know the map's vocabulary yet, use browse before you guess metadata values
       - saved views are best for recurring workflows, not one-off searches
-      - facet browsing is the fastest way to learn what metadata already exists in a map
+      - browse is the fastest way to learn what tags, metadata, and ids already exist in a map
   - CLI Inspection #guide @section:cli [id:guide/cli]
     - Why use mdm on example maps #guide [id:guide/cli/why]
       - mdm is useful when you want read-only inspection without opening the full TUI
@@ -178,7 +184,7 @@
   - Tags And Metadata #guide @section:syntax [id:guide/syntax]
     - Why start here #guide [id:guide/syntax/why]
       - tags and metadata are the easiest structured layer to adopt
-      - they unlock search, facets, and saved views without asking you to model every branch deeply
+      - they unlock search, browse, and saved views without asking you to model every branch deeply
       - if you only add one kind of structure beyond the label, make it this one
     - Tags #reference [id:guide/syntax/tags]
       - #tag adds a topic or workflow marker

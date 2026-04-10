@@ -1,6 +1,6 @@
 {
-  "theme": "violet",
+  "theme": "paper",
   "motion_enabled": true,
   "ascii_accents": false,
-  "minimal_mode": false
+  "minimal_mode": true
 }

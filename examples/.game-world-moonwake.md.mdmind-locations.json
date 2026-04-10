@@ -4,6 +4,17 @@
       "anchor": {
         "path": [
           0,
+          3
+        ],
+        "id": "moonwake/factions"
+      },
+      "visits": 10,
+      "last_seen": 119
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
           0,
           2,
           3
@@ -12,17 +23,6 @@
       },
       "visits": 6,
       "last_seen": 108
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          3
-        ],
-        "id": "moonwake/factions"
-      },
-      "visits": 5,
-      "last_seen": 109
     },
     {
       "anchor": {
@@ -60,6 +60,45 @@
       },
       "visits": 5,
       "last_seen": 96
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1,
+          2
+        ],
+        "id": null
+      },
+      "visits": 4,
+      "last_seen": 114
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1,
+          1
+        ],
+        "id": null
+      },
+      "visits": 4,
+      "last_seen": 113
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 4,
+      "last_seen": 112
     },
     {
       "anchor": {
@@ -105,39 +144,24 @@
         "path": [
           0,
           1,
-          1,
           2
         ],
-        "id": null
+        "id": "moonwake/pitch/tone"
       },
       "visits": 3,
-      "last_seen": 36
+      "last_seen": 115
     },
     {
       "anchor": {
         "path": [
           0,
-          1,
           1,
           1
         ],
-        "id": null
+        "id": "moonwake/pitch/fantasy"
       },
       "visits": 3,
-      "last_seen": 35
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          1,
-          0
-        ],
-        "id": null
-      },
-      "visits": 3,
-      "last_seen": 34
+      "last_seen": 111
     },
     {
       "anchor": {
@@ -151,30 +175,6 @@
       },
       "visits": 2,
       "last_seen": 101
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          2
-        ],
-        "id": "moonwake/pitch/tone"
-      },
-      "visits": 2,
-      "last_seen": 37
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          1
-        ],
-        "id": "moonwake/pitch/fantasy"
-      },
-      "visits": 2,
-      "last_seen": 33
     },
     {
       "anchor": {

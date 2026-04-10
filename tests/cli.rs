@@ -177,7 +177,20 @@ fn init_writes_selected_template() {
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     assert!(Path::new(&destination).exists());
     let contents = std::fs::read_to_string(&destination).expect("template should be written");
-    assert!(contents.contains("- Product Idea [id:product]"));
+    assert!(contents.contains("- Product Roadmap [id:product]"));
+    assert!(contents.contains("[[rel:supports->product/requirements]]"));
+    std::fs::remove_file(destination).expect("temp file should be removable");
+}
+
+#[test]
+fn init_supports_the_writing_template() {
+    let destination = temp_file("writing.md");
+    let destination_str = destination.to_string_lossy().into_owned();
+    let output = run_mdm(&["init", &destination_str, "--template", "writing"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let contents = std::fs::read_to_string(&destination).expect("template should be written");
+    assert!(contents.contains("- Story Map [id:story]"));
+    assert!(contents.contains("[[story/characters/lead]]"));
     std::fs::remove_file(destination).expect("temp file should be removable");
 }
 

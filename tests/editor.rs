@@ -38,6 +38,36 @@ fn editor_can_add_and_edit_nodes() {
 }
 
 #[test]
+fn editor_can_edit_node_details_and_round_trip_them() {
+    let parsed = parse_document(&fixture("sample.md"));
+    let mut editor = Editor::new(parsed.document, vec![0, 0]);
+
+    editor
+        .edit_current_detail(
+            "We need one stable auth flow before launch.\n\nOpen question: workspace-scoped tokens?",
+        )
+        .expect("should edit current detail");
+
+    let current = editor.current().expect("focus should exist");
+    assert_eq!(
+        current.detail,
+        vec![
+            "We need one stable auth flow before launch.".to_string(),
+            String::new(),
+            "Open question: workspace-scoped tokens?".to_string(),
+        ]
+    );
+
+    let source = serialize_document(editor.document());
+    let reparsed = parse_document(&source);
+    assert!(reparsed.diagnostics.is_empty());
+    assert_eq!(
+        reparsed.document.nodes[0].children[0].detail,
+        current.detail
+    );
+}
+
+#[test]
 fn editor_rejects_duplicate_ids() {
     let parsed = parse_document(&fixture("sample.md"));
     let mut editor = Editor::new(parsed.document, vec![0]);

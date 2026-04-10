@@ -58,9 +58,11 @@ Recommended structure:
 - `README.md`: product pitch, install, quickstart, screenshots, and primary links
 - `docs/USER_GUIDE.md`: task-first user guide written as a real map that also works inside `mdmind`
 - `docs/TUI_WORKFLOWS.md`: day-to-day guide to navigating, editing, narrowing, and reviewing work in `mdmind`
+- `docs/NODE_DETAILS.md`: user-facing guide to attached long-form detail lines and the `d` editor
 - `docs/PALETTE_AND_HELP.md`: user-facing guide to the command palette and built-in help
 - `docs/SAFETY_AND_HISTORY.md`: user-facing guide to undo, redo, checkpoints, save modes, and restore history
-- `docs/QUERY_LANGUAGE.md`: user-facing guide to search, filters, facets, and query examples
+- `docs/TEMPLATES.md`: user-facing guide to the real `mdm init` starter templates
+- `docs/QUERY_LANGUAGE.md`: user-facing guide to search, browse, filters, and query examples
 - `docs/IDS_AND_DEEP_LINKS.md`: user-facing guide to stable ids, deep links, and CLI/TUI usage
 - `docs/CROSS_LINKS_AND_BACKLINKS.md`: user-facing guide to cross-links, typed relations, and backlinks
 - `docs/format.md`: file format, ids, tags, metadata, and deep links

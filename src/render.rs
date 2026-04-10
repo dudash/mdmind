@@ -22,7 +22,7 @@ pub fn render_find(matches: &[SearchMatch]) -> String {
     }
 
     render_table(
-        &["line", "path", "id", "text"],
+        &["line", "path", "id", "text", "detail"],
         &matches
             .iter()
             .map(|entry| {
@@ -31,6 +31,10 @@ pub fn render_find(matches: &[SearchMatch]) -> String {
                     entry.breadcrumb.clone(),
                     entry.id.clone().unwrap_or_else(|| "-".to_string()),
                     entry.text.clone(),
+                    entry
+                        .detail_snippet
+                        .clone()
+                        .unwrap_or_else(|| "-".to_string()),
                 ]
             })
             .collect::<Vec<_>>(),
@@ -44,6 +48,7 @@ pub fn render_find_plain(matches: &[SearchMatch]) -> String {
             entry.breadcrumb.clone(),
             entry.id.clone().unwrap_or_default(),
             entry.text.clone(),
+            entry.detail_snippet.clone().unwrap_or_default(),
         ]
     }))
 }
@@ -226,6 +231,21 @@ fn render_node(
         "├── ".to_string()
     };
     lines.push(format!("{prefix}{branch}{}", node.display_line()));
+    let detail_prefix = if depth == 0 {
+        "│ ".to_string()
+    } else if is_last {
+        format!("{prefix}    │ ")
+    } else {
+        format!("{prefix}│   │ ")
+    };
+    for detail_line in &node.detail {
+        let rendered = if detail_line.is_empty() {
+            " ".to_string()
+        } else {
+            detail_line.clone()
+        };
+        lines.push(format!("{detail_prefix}{rendered}"));
+    }
 
     if max_depth.is_some_and(|limit| depth >= limit) {
         return;

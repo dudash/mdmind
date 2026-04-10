@@ -10,6 +10,8 @@ pub struct Document {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Node {
     pub text: String,
+    #[serde(default)]
+    pub detail: Vec<String>,
     pub tags: Vec<String>,
     pub metadata: Vec<MetadataEntry>,
     pub id: Option<String>,
@@ -50,6 +52,7 @@ pub struct SearchMatch {
     pub line: usize,
     pub breadcrumb: String,
     pub text: String,
+    pub detail_snippet: Option<String>,
     pub id: Option<String>,
     pub tags: Vec<String>,
     pub metadata: Vec<MetadataEntry>,
@@ -118,6 +121,7 @@ pub struct ExportDocument {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ExportNode {
     pub text: String,
+    pub detail: Vec<String>,
     pub tags: Vec<String>,
     pub kv: BTreeMap<String, String>,
     pub id: Option<String>,
@@ -149,6 +153,7 @@ impl Node {
 
         ExportNode {
             text: self.text.clone(),
+            detail: self.detail.clone(),
             tags: self.tags.clone(),
             kv,
             id: self.id.clone(),
@@ -185,6 +190,18 @@ impl Node {
         } else {
             parts.join(" ")
         }
+    }
+
+    pub fn detail_text(&self) -> String {
+        self.detail.join("\n")
+    }
+
+    pub fn detail_preview(&self) -> Option<String> {
+        self.detail
+            .iter()
+            .find(|line| !line.trim().is_empty())
+            .cloned()
+            .or_else(|| (!self.detail.is_empty()).then(String::new))
     }
 }
 

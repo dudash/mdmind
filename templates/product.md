@@ -1,13 +1,17 @@
-- Product Idea [id:product]
-  - Problem #idea @status:active
-    - Who feels the pain?
-    - What friction happens today?
-  - Users #research
-    - Developers
-    - Product builders
-  - MVP Scope #todo @priority:high [id:product/mvp]
-    - CLI commands
-    - File format
-    - Templates
-  - Open Questions #blocked
-    - What belongs in the first TUI milestone?
+- Product Roadmap [id:product]
+  - Direction #strategy @status:active [id:product/direction]
+    - What change should this product create?
+    - Why does it matter right now?
+  - Users #research [id:product/users]
+    - Primary user
+    - Secondary user
+  - Requirements #spec [id:product/requirements]
+    - What must feel obviously better than the current workaround?
+    - What must stay simple on day one?
+  - MVP Scope #todo @priority:high [id:product/mvp] [[rel:supports->product/requirements]]
+    - First workflow
+    - Core commands
+    - Export or share path
+  - Open Questions #blocked [id:product/questions]
+    - What still feels risky?
+    - What would make launch easier?

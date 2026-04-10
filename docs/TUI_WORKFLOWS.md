@@ -63,11 +63,26 @@ Use:
 - `A` to add a sibling
 - `Shift+R` to add a root branch
 - `e` to edit the current node
+- `d` to edit longer details for the current node
 - `x` to delete after confirmation
 - `Alt+↑ / Alt+↓` to reorder among siblings
 - `Alt+← / Alt+→` to move out or indent into the previous sibling
 
 The important part is that edits happen relative to the current focus. You are shaping a branch, not switching into a different editing application.
+
+### When To Use Details
+
+Node labels should stay short enough to scan quickly in the tree.
+
+Use details when one branch needs:
+
+- a paragraph of rationale
+- a quote
+- meeting notes
+- a scene note
+- a short research excerpt
+
+In the raw file, details are stored as `| ...` lines directly under the node. In the TUI, press `d` to open the detail editor, use `Enter` for new lines, and `Ctrl+S` to save.
 
 ## Narrowing The Working Set
 
@@ -77,7 +92,7 @@ You have three main tools:
 
 ### Search
 
-Use `/` for queries, `f` for facets, and `F` for saved views.
+Use `/` for queries, `b` for browse, and `w` for saved views.
 
 Good beginner progression:
 
@@ -223,6 +238,7 @@ That setup gives you:
 ## Related Docs
 
 - [USER_GUIDE.md](USER_GUIDE.md)
+- [NODE_DETAILS.md](NODE_DETAILS.md)
 - [QUERY_LANGUAGE.md](QUERY_LANGUAGE.md)
 - [IDS_AND_DEEP_LINKS.md](IDS_AND_DEEP_LINKS.md)
 - [CROSS_LINKS_AND_BACKLINKS.md](CROSS_LINKS_AND_BACKLINKS.md)

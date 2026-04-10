@@ -19,6 +19,7 @@ Maps are plain-text tree files with lightweight inline structure:
 - `@key:value` for structured metadata
 - `[id:path/to/node]` for stable deep links
 - `[[target/id]]` or `[[rel:kind->target/id]]` for cross-branch references
+- `| detail text` on indented lines for longer notes attached to a node
 
 Compatibility notes:
 
@@ -34,6 +35,7 @@ Example:
 
 ```text
 - Product Idea #idea [id:product]
+  | Keep the tree label short. Put longer rationale here.
   - Direction #strategy [id:product/direction]
     - CLI-first MVP
   - Tasks #todo @status:active [id:product/tasks] [[prompts/library]]
@@ -97,7 +99,7 @@ View a map:
 
 ```bash
 mdm view roadmap.md
-mdm view roadmap.md#product/tasks
+mdm view roadmap.md#product/mvp
 ```
 
 Search by text, tag, or metadata:
@@ -119,7 +121,7 @@ mdm relations roadmap.md
 mdm validate roadmap.md
 mdm export roadmap.md --format json
 mdm export roadmap.md --format mermaid
-mdm export roadmap.md#product/tasks --format opml
+mdm export roadmap.md#product/mvp --format opml
 ```
 
 Inspect the bundled example maps from the CLI:
@@ -143,7 +145,7 @@ Open the interactive TUI:
 
 ```bash
 mdm open roadmap.md
-mdm open roadmap.md#product/tasks --autosave
+mdm open roadmap.md#product/mvp --autosave
 ```
 
 ## TUI Quick Start
@@ -167,7 +169,9 @@ Editing:
 - `A`: add sibling
 - `Shift+R`: add root
 - `e`: edit selected node
+- `d`: edit longer details for the selected node
 - add/edit prompts now preview parsed `#tags`, `@key:value`, `[id:...]`, and duplicate-id issues before `Enter`
+- detail editing uses a larger text area; `Enter` adds a new line and `Ctrl+S` saves
 - `x`: delete selected node, confirmed on second press
 - `u` / `U`: undo or redo the last structural change
 
@@ -186,8 +190,8 @@ Search and large-map workflows:
 - type `minimal` in the palette to switch to a quieter pro layout with a condensed shell, no keybar, a wider main tree, and fewer right-side context lanes
 - `?`: open searchable built-in help with user guides, command reference, and tips
 - `/`: open unified search
-- `f`: open unified search on facets
-- `F`: open unified search on saved views
+- `b`: open browse for tags, metadata, and ids
+- `w`: open saved views
 - `v` / `V`: cycle focused view modes forward or backward
 - `g`: jump to the map root, or back to the subtree root while `Subtree Only` is active
 - `m`: open the visual mindmap overlay
@@ -195,8 +199,8 @@ Search and large-map workflows:
 - `0` inside the overlay: recenter on the focused node
 - `p` inside the overlay: export the current rendered view to `map-name.mindmap.png`
 - when both endpoints are visible, the mindmap also draws cross-link relation edges between related branches
-- `Tab`: switch between `Query`, `Facets`, and `Saved Views`
-- `←` / `→` inside facets: switch `Tags`, `Keys`, `Values`
+- `Tab`: switch between `Query`, `Browse`, and `Saved Views`
+- `←` / `→` inside browse: switch `Tags`, `Keys`, `Values`, `Ids`
 - `n` / `N`: move to next or previous match
 - `c`: clear active filter
 
@@ -222,17 +226,21 @@ These keep editor state local without changing the map format itself. The UI set
 
 ## Project Templates
 
-Starter templates live in `templates/` and include:
+Starter templates live in `templates/` and are the actual files used by `mdm init`:
 
 - `product`
 - `feature`
 - `prompts`
 - `backlog`
+- `writing`
+
+Each starter is intentionally small but not empty. They already include ids, tags, metadata, and at least one example cross-link so the map language is visible from the first edit.
 
 Example:
 
 ```bash
 mdm init prompts.md --template prompts
+mdm init novel.md --template writing
 ```
 
 ## Repo Docs
@@ -243,6 +251,8 @@ User-facing and product docs:
 - [docs/TUI_WORKFLOWS.md](docs/TUI_WORKFLOWS.md)
 - [docs/PALETTE_AND_HELP.md](docs/PALETTE_AND_HELP.md)
 - [docs/SAFETY_AND_HISTORY.md](docs/SAFETY_AND_HISTORY.md)
+- [docs/TEMPLATES.md](docs/TEMPLATES.md)
+- [docs/NODE_DETAILS.md](docs/NODE_DETAILS.md)
 - [docs/QUERY_LANGUAGE.md](docs/QUERY_LANGUAGE.md)
 - [docs/IDS_AND_DEEP_LINKS.md](docs/IDS_AND_DEEP_LINKS.md)
 - [docs/CROSS_LINKS_AND_BACKLINKS.md](docs/CROSS_LINKS_AND_BACKLINKS.md)

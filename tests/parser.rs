@@ -35,6 +35,29 @@ fn parser_extracts_tree_annotations_and_ids() {
 }
 
 #[test]
+fn parser_attaches_detail_lines_to_the_previous_node() {
+    let parsed = parse_document(
+        "- API Design #backend [id:product/api-design]\n  | We need one stable auth flow before launch.\n  |\n  | Open question: should refresh tokens be per workspace?\n  - Auth Flow\n",
+    );
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "parser diagnostics: {:?}",
+        parsed.diagnostics
+    );
+
+    let node = &parsed.document.nodes[0];
+    assert_eq!(
+        node.detail,
+        vec![
+            "We need one stable auth flow before launch.".to_string(),
+            String::new(),
+            "Open question: should refresh tokens be per workspace?".to_string(),
+        ]
+    );
+    assert_eq!(node.children[0].text, "Auth Flow");
+}
+
+#[test]
 fn query_helpers_cover_tags_metadata_links_and_text() {
     let parsed = parse_document(&fixture("sample.md"));
     let document = parsed.document;
@@ -133,4 +156,14 @@ fn validate_reports_unresolved_relation_targets() {
         "expected unresolved relation diagnostic, got: {:?}",
         diagnostics
     );
+}
+
+#[test]
+fn parser_rejects_misaligned_detail_lines() {
+    let parsed = parse_document("- Root\n  - Child\n  | This detail is too late.\n");
+    assert!(parsed.diagnostics.iter().any(|diagnostic| {
+        diagnostic
+            .message
+            .contains("Detail lines must appear directly under their node")
+    }));
 }

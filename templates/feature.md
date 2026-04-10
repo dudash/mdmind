@@ -1,14 +1,17 @@
-- Feature Requirements [id:feature]
-  - Goal #idea @status:active
-    - What user outcome should change?
+- Feature Plan [id:feature]
+  - Outcome #idea @status:active [id:feature/outcome]
+    - What should feel easier for the user?
   - User Flow #todo [id:feature/flow]
     - Trigger
     - Main path
     - Failure path
-  - Constraints @owner:team
+  - Acceptance Criteria #todo @priority:high [id:feature/acceptance]
+    - Happy path is testable
+    - Edge cases are explicit
+  - Rollout #ship @owner:team [id:feature/rollout] [[rel:validates->feature/acceptance]]
+    - Instrument the happy path
+    - Add a rollback note
+  - Risks #blocked [id:feature/risks]
     - Performance
     - Reliability
     - Accessibility
-  - Acceptance Criteria #todo @priority:high
-    - Happy path is testable
-    - Edge cases are explicit

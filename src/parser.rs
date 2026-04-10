@@ -14,7 +14,7 @@ struct FlatNode {
 
 pub fn parse_document(source: &str) -> ParseOutput {
     let mut diagnostics = Vec::new();
-    let mut flat_nodes = Vec::new();
+    let mut flat_nodes: Vec<FlatNode> = Vec::new();
     let mut previous_level = 0usize;
     let mut saw_node = false;
 
@@ -50,11 +50,38 @@ pub fn parse_document(source: &str) -> ParseOutput {
         }
 
         let trimmed = raw_line.trim_start();
+        if trimmed.starts_with('|') {
+            let Some(last_node) = flat_nodes.last_mut() else {
+                diagnostics.push(Diagnostic {
+                    severity: Severity::Error,
+                    line: line_number,
+                    message: "Detail lines must follow a node.".to_string(),
+                });
+                continue;
+            };
+
+            let expected_level = last_node.level + 1;
+            let actual_level = indent / 2;
+            if actual_level != expected_level {
+                diagnostics.push(Diagnostic {
+                    severity: Severity::Error,
+                    line: line_number,
+                    message:
+                        "Detail lines must appear directly under their node before any children."
+                            .to_string(),
+                });
+                continue;
+            }
+
+            last_node.node.detail.push(parse_detail_content(trimmed));
+            continue;
+        }
+
         let Some(content) = trimmed.strip_prefix("- ") else {
             diagnostics.push(Diagnostic {
                 severity: Severity::Error,
                 line: line_number,
-                message: "Each non-empty line must begin with '- '.".to_string(),
+                message: "Each non-empty line must begin with '- ' or '| '.".to_string(),
             });
             continue;
         };
@@ -228,6 +255,7 @@ fn parse_node_content(content: &str, line: usize, diagnostics: &mut Vec<Diagnost
 
     Node {
         text: text_parts.join(" ").trim().to_string(),
+        detail: Vec::new(),
         tags,
         metadata,
         id,
@@ -235,6 +263,11 @@ fn parse_node_content(content: &str, line: usize, diagnostics: &mut Vec<Diagnost
         children: Vec::new(),
         line,
     }
+}
+
+fn parse_detail_content(content: &str) -> String {
+    let after_bar = content.strip_prefix('|').unwrap_or(content);
+    after_bar.strip_prefix(' ').unwrap_or(after_bar).to_string()
 }
 
 fn parse_relation_token(token: &str) -> Result<Relation, String> {

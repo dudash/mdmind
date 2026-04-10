@@ -1,9 +1,11 @@
-- Backlog [id:backlog]
-  - Now #todo @status:active
-    - Highest leverage item
-  - Next #todo
+- Team Backlog [id:backlog]
+  - Now #todo @status:active [id:backlog/now]
+    - Highest leverage item @owner:me
+  - Next #todo @status:next [id:backlog/next]
     - Candidate follow-up
-  - Blocked #blocked @status:blocked
+  - Context #note [id:backlog/context]
+    - Links, notes, or constraints worth keeping nearby
+  - Blocked #blocked @status:blocked [id:backlog/blocked] [[rel:needs->backlog/context]]
     - Waiting on dependency
-  - Done @status:done
+  - Done @status:done [id:backlog/done]
     - Recently shipped work

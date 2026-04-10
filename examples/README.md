@@ -196,6 +196,7 @@ What it demonstrates:
 - writing projects as structured maps instead of loose notes
 - `#theme`, `#quote`, `#chapter`, and location-based metadata
 - cross-links between characters, locations, themes, plot lines, and current chapters
+- attached detail lines for character and location notes that are longer than a one-line label
 - how research, drafting, and revision can live in one file
 
 Good first jumps:

@@ -1,15 +1,19 @@
-- Prompt Exploration [id:prompts]
-  - Objective #prompt @status:active
+- Prompt Library [id:prompts]
+  - Objective #prompt @status:active [id:prompts/objective]
     - What should the model do?
-  - Constraints #prompt
-    - Tone
-    - Format
-    - Safety
+    - What should it avoid doing?
+  - Inputs And Context #prompt [id:prompts/inputs]
+    - Source material
+    - User constraints
+    - Output shape
   - Variants #todo [id:prompts/variants]
     - System prompt
     - User prompt
     - Few-shot examples
-  - Review Loop #todo
-    - Evaluate outputs
-    - Refine wording
-    - Capture failures
+  - Eval Loop #review [id:prompts/evals] [[rel:tests->prompts/variants]]
+    - Golden examples
+    - Failure cases
+    - Revision notes
+  - Open Issues #blocked [id:prompts/issues]
+    - Hallucinations
+    - Format drift

@@ -210,10 +210,27 @@ impl Editor {
             let node = get_node_mut(&mut document.nodes, &focus_path)
                 .expect("focus path should be valid before mutation");
             node.text = replacement.text;
+            node.detail = current.detail;
             node.tags = replacement.tags;
             node.metadata = replacement.metadata;
             node.id = replacement.id;
+            node.relations = replacement.relations;
             node.children = current.children;
+            focus_path
+        })
+    }
+
+    pub fn edit_current_detail(&mut self, detail: &str) -> Result<(), AppError> {
+        if self.current().is_none() {
+            return Err(AppError::new("The document has no focused node."));
+        }
+
+        let focus_path = self.focus_path.clone();
+        let detail_lines = normalize_detail(detail);
+        self.apply_change(move |document| {
+            let node = get_node_mut(&mut document.nodes, &focus_path)
+                .expect("focus path should be valid before mutation");
+            node.detail = detail_lines;
             focus_path
         })
     }
@@ -521,6 +538,16 @@ fn insert_node_at(
 fn parse_fragment(fragment: &str) -> Result<Node, AppError> {
     parse_node_fragment(fragment)
         .map_err(|diagnostics| AppError::new(join_diagnostics(&diagnostics)))
+}
+
+fn normalize_detail(detail: &str) -> Vec<String> {
+    let normalized = detail.replace("\r\n", "\n");
+    let trimmed = normalized.trim_matches('\n');
+    if trimmed.trim().is_empty() {
+        Vec::new()
+    } else {
+        trimmed.split('\n').map(str::to_string).collect()
+    }
 }
 
 fn reparse_and_validate(

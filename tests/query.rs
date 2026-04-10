@@ -29,6 +29,23 @@ fn find_matches_uses_the_shared_query_language() {
 }
 
 #[test]
+fn find_matches_and_filter_queries_can_match_node_details() {
+    let parsed = parse_document(
+        "- Launch Readiness [id:launch]\n  | Partner auth still depends on the same token model.\n  - Notes\n",
+    );
+    let matches = find_matches(&parsed.document, "token model");
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].text, "Launch Readiness");
+    assert_eq!(
+        matches[0].detail_snippet.as_deref(),
+        Some("Partner auth still depends on the same token model.")
+    );
+
+    let query = FilterQuery::parse("token model").expect("query should parse");
+    assert!(query.matches(&parsed.document.nodes[0]));
+}
+
+#[test]
 fn facet_counts_can_be_scoped_by_the_active_filter() {
     let parsed = parse_document(&fixture("sample.md"));
     let filter = FilterQuery::parse("#prompt").expect("query should parse");

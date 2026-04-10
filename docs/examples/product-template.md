@@ -1,9 +1,0 @@
-- Product Idea [id:product]
-  - Vision #idea
-  - Users
-  - Problem
-  - Why now
-  - MVP Scope @status:todo
-  - Risks @status:todo
-  - Open Questions #question
-  - Launch Path

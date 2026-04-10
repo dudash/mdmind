@@ -57,8 +57,15 @@ fn mermaid_node_ref(path: &[usize]) -> String {
 
 fn mermaid_label(node: &ExportNode) -> String {
     let mut parts = Vec::new();
-    if !node.text.is_empty() {
-        parts.push(node.text.clone());
+    let mut primary = node.text.clone();
+    if !node.detail.is_empty() {
+        if !primary.is_empty() {
+            primary.push_str("\\n");
+        }
+        primary.push_str(&node.detail.join("\\n"));
+    }
+    if !primary.is_empty() {
+        parts.push(primary);
     }
     parts.extend(node.tags.iter().cloned());
     parts.extend(node.kv.iter().map(|(key, value)| format!("@{key}:{value}")));
@@ -121,6 +128,12 @@ fn opml_attributes(node: &ExportNode) -> String {
         attributes.push(format!(
             r#" mdm_tags="{}""#,
             escape_xml_attr(&node.tags.join(" "))
+        ));
+    }
+    if !node.detail.is_empty() {
+        attributes.push(format!(
+            r#" mdm_detail="{}""#,
+            escape_xml_attr(&node.detail.join("\n"))
         ));
     }
     for (key, value) in &node.kv {
@@ -198,12 +211,14 @@ mod tests {
     #[test]
     fn mermaid_export_preserves_hierarchy_and_metadata() {
         let parsed = parse_document(
-            "- Product Idea #idea [id:product]\n  - MVP Scope #todo @status:active [id:product/mvp]\n",
+            "- Product Idea #idea [id:product]\n  | North star for the release.\n  - MVP Scope #todo @status:active [id:product/mvp]\n",
         );
         let rendered = export_document(&parsed.document, "mermaid").expect("export should work");
 
         assert!(rendered.starts_with("flowchart LR"));
-        assert!(rendered.contains(r#"node_0["Product Idea #idea [id:product]"]"#));
+        assert!(rendered.contains(
+            r#"node_0["Product Idea\\nNorth star for the release. #idea [id:product]"]"#
+        ));
         assert!(
             rendered.contains(r#"node_0_0["MVP Scope #todo @status:active [id:product/mvp]"]"#)
         );
@@ -212,12 +227,15 @@ mod tests {
 
     #[test]
     fn opml_export_escapes_attributes_and_preserves_structure() {
-        let parsed =
-            parse_document("- Root @status:ready [id:root]\n  - Child #todo @owner:me&you\n");
+        let parsed = parse_document(
+            "- Root @status:ready [id:root]\n  | Ready for partner review.\n  - Child #todo @owner:me&you\n",
+        );
         let rendered = export_document(&parsed.document, "opml").expect("export should work");
 
         assert!(rendered.starts_with(r#"<?xml version="1.0" encoding="UTF-8"?>"#));
-        assert!(rendered.contains(r#"<outline text="Root" mdm_id="root" status="ready">"#));
+        assert!(rendered.contains(r#"<outline text="Root" mdm_id="root""#));
+        assert!(rendered.contains(r#"mdm_detail="Ready for partner review.""#));
+        assert!(rendered.contains(r#"status="ready">"#));
         assert!(
             rendered.contains(r##"<outline text="Child" mdm_tags="#todo" owner="me&amp;you" />"##)
         );

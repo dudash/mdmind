@@ -16,6 +16,7 @@ pub fn find_matches(document: &Document, query: &str) -> Vec<SearchMatch> {
                 line: node.line,
                 breadcrumb: breadcrumb.join(" / "),
                 text: node.text.clone(),
+                detail_snippet: matching_detail_snippet(&query, node),
                 id: node.id.clone(),
                 tags: node.tags.clone(),
                 metadata: node.metadata.clone(),
@@ -316,6 +317,10 @@ fn term_matches(term: &QueryTerm, node: &Node) -> bool {
         QueryTerm::Text(lowered) => {
             node.text.to_lowercase().contains(lowered)
                 || node
+                    .detail
+                    .iter()
+                    .any(|line| line.to_lowercase().contains(lowered))
+                || node
                     .id
                     .as_ref()
                     .is_some_and(|id| id.to_lowercase().contains(lowered))
@@ -337,6 +342,25 @@ fn term_matches(term: &QueryTerm, node: &Node) -> bool {
                 })
         }
     }
+}
+
+fn matching_detail_snippet(query: &FilterQuery, node: &Node) -> Option<String> {
+    let text_terms = query
+        .terms
+        .iter()
+        .filter_map(|term| match term {
+            QueryTerm::Text(lowered) => Some(lowered.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    node.detail
+        .iter()
+        .find(|line| {
+            let lowered = line.to_lowercase();
+            text_terms.iter().any(|term| lowered.contains(term))
+        })
+        .cloned()
 }
 
 fn find_relation_target_breadcrumb(document: &Document, target: &str) -> Option<String> {

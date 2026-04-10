@@ -406,6 +406,7 @@ fn template_name(template: TemplateKind) -> &'static str {
         TemplateKind::Feature => "feature",
         TemplateKind::Prompts => "prompts",
         TemplateKind::Backlog => "backlog",
+        TemplateKind::Writing => "writing",
     }
 }
 

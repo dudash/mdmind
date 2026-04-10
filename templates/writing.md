@@ -1,0 +1,18 @@
+- Story Map [id:story]
+  - Premise #story @status:active [id:story/premise]
+    - What changed in the world before page one?
+    - What pressure drives the first chapter?
+  - Characters #cast [id:story/characters]
+    - Lead #character [id:story/characters/lead]
+    - Foil #character [id:story/characters/foil]
+  - Places #setting [id:story/places]
+    - Core location #location [id:story/places/core]
+    - Hidden place #location [id:story/places/hidden]
+  - Plot Lines #plot [id:story/plot]
+    - Main thread #plotline [id:story/plot/main]
+    - Secondary thread #plotline [id:story/plot/secondary]
+  - Themes #theme [id:story/themes]
+    - Central question [id:story/themes/core]
+  - Chapters #chapter [id:story/chapters]
+    - Opening scene #draft @owner:me [id:story/chapters/opening] [[story/characters/lead]] [[story/places/core]] [[rel:echoes->story/themes/core]]
+    - Midpoint turn #draft @status:next [id:story/chapters/midpoint] [[story/plot/main]] [[story/characters/foil]]

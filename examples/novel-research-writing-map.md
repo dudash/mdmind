@@ -34,6 +34,8 @@
       - family reckoning hidden inside an impossible institution
   - Core Cast #guide @section:characters [id:glass-archive/characters]
     - Lia Voss #character @pov:lia [id:glass-archive/characters/lia] [[rel:embodies->glass-archive/themes/preservation]] [[rel:haunted-by->glass-archive/places/archive]]
+      | Keep Lia observant before eloquent. Her strongest scenes should feel like careful noticing turning into unwilling action.
+      | Private note: She repairs damage for a living, so her emotional blind spot is believing care can stay technical
       - paper conservator, thirty-two, very good at repairing damage she cannot prevent
       - wants to find her father without becoming him
       - fears that preserving the past may only trap it
@@ -59,6 +61,7 @@
       - Lia and Mara: truth for one family versus truth for a city
   - Places #guide @section:places [id:glass-archive/places]
     - The Glass Archive #location @location:archive [id:glass-archive/places/archive] [[rel:embodies->glass-archive/themes/record]]
+      | The building should feel curated, costly, and exact. Avoid generic haunted-house language.
       - a private collection hidden behind a repurposed observatory
       - catalog rooms shift when certain names are restored
       - the building should feel exact, not haunted-for-show
@@ -150,9 +153,9 @@
       - chapel bells carried names the river had refused to keep
   - Chapter Board #guide @section:chapters [id:glass-archive/chapters]
     - Drafting now #chapter @status:active [id:glass-archive/chapters/current]
-      - Chapter 3 - First entrance to the Archive @pov:lia #chapter [id:glass-archive/chapters/chapter-3] [[glass-archive/characters/elian]] [[glass-archive/places/archive]]
-      - Chapter 6 - Mara brings the labor strike photos @pov:lia #chapter [id:glass-archive/chapters/chapter-6] [[glass-archive/characters/mara]] [[glass-archive/plot/secondary/mara-investigation]]
-      - Chapter 9 - Bell ritual at the chapel @pov:lia #chapter [id:glass-archive/chapters/chapter-9] [[glass-archive/characters/iven]] [[glass-archive/places/chapel]] [[glass-archive/themes/public-memory]]
+      - Chapter 3 - First entrance to the Archive #chapter @pov:lia [id:glass-archive/chapters/chapter-3] [[glass-archive/characters/elian]] [[glass-archive/places/archive]]
+      - Chapter 6 - Mara brings the labor strike photos #chapter @pov:lia [id:glass-archive/chapters/chapter-6] [[glass-archive/characters/mara]] [[glass-archive/plot/secondary/mara-investigation]]
+      - Chapter 9 - Bell ritual at the chapel #chapter @pov:lia [id:glass-archive/chapters/chapter-9] [[glass-archive/characters/iven]] [[glass-archive/places/chapel]] [[glass-archive/themes/public-memory]]
     - Outline spine #chapter [id:glass-archive/chapters/spine]
       - opening letter and impossible date #chapter
       - apartment repair scene to establish craft and restraint #chapter

@@ -33,7 +33,7 @@ use crate::locations::{
 use crate::mindmap::{
     MindmapWidget, Scene as MindmapScene, Theme as MindmapTheme, default_export_path, export_png,
 };
-use crate::model::{Document, Node};
+use crate::model::{Document, LinkEntry, Node};
 use crate::parser::parse_node_fragment;
 use crate::query::{
     FilterQuery, backlinks_to, find_matches, link_entries, metadata_key_counts_for_filter,
@@ -214,6 +214,7 @@ enum PromptMode {
     AddSibling,
     AddRoot,
     Edit,
+    EditDetail,
     SaveView,
     SaveCheckpoint,
     OpenId,
@@ -226,6 +227,7 @@ impl PromptMode {
             Self::AddSibling => "Add Sibling",
             Self::AddRoot => "Add Root",
             Self::Edit => "Edit Node",
+            Self::EditDetail => "Edit Details",
             Self::SaveView => "Save Filter View",
             Self::SaveCheckpoint => "Save Checkpoint",
             Self::OpenId => "Jump To Id",
@@ -237,6 +239,9 @@ impl PromptMode {
             Self::SaveView => "Give the current active filter a short name.",
             Self::SaveCheckpoint => "Name a local snapshot of the current map state.",
             Self::OpenId => "Type a node id, then press Enter.",
+            Self::EditDetail => {
+                "Write longer notes for the selected node. Enter adds lines. Ctrl+S saves."
+            }
             _ => "Use full node syntax: Label #tag @key:value [id:path/to/node] [[target]]",
         }
     }
@@ -259,7 +264,7 @@ impl SearchSection {
     fn title(self) -> &'static str {
         match self {
             Self::Query => "Query",
-            Self::Facets => "Facets",
+            Self::Facets => "Browse",
             Self::Views => "Saved Views",
         }
     }
@@ -286,6 +291,7 @@ enum FacetTab {
     Tags,
     Keys,
     Values,
+    Ids,
 }
 
 impl FacetTab {
@@ -294,6 +300,7 @@ impl FacetTab {
             Self::Tags => "Tags",
             Self::Keys => "Keys",
             Self::Values => "Values",
+            Self::Ids => "Ids",
         }
     }
 
@@ -301,15 +308,17 @@ impl FacetTab {
         match self {
             Self::Tags => Self::Keys,
             Self::Keys => Self::Values,
-            Self::Values => Self::Tags,
+            Self::Values => Self::Ids,
+            Self::Ids => Self::Tags,
         }
     }
 
     fn previous(self) -> Self {
         match self {
-            Self::Tags => Self::Values,
+            Self::Tags => Self::Ids,
             Self::Keys => Self::Tags,
             Self::Values => Self::Keys,
+            Self::Ids => Self::Values,
         }
     }
 
@@ -318,6 +327,7 @@ impl FacetTab {
             Self::Tags => "No tags exist in the current scope.",
             Self::Keys => "No metadata keys exist in the current scope.",
             Self::Values => "No metadata values exist in the current scope.",
+            Self::Ids => "No deep-link ids exist in the current scope.",
         }
     }
 }
@@ -432,6 +442,7 @@ enum HelpTopic {
     StartHere,
     Navigation,
     Editing,
+    Details,
     Search,
     Views,
     Palette,
@@ -449,7 +460,8 @@ impl HelpTopic {
             Self::StartHere => "Start Here",
             Self::Navigation => "Navigation",
             Self::Editing => "Editing",
-            Self::Search => "Search And Filters",
+            Self::Details => "Node Details",
+            Self::Search => "Search And Browse",
             Self::Views => "View Modes",
             Self::Palette => "Command Palette",
             Self::Safety => "Safety And History",
@@ -466,8 +478,9 @@ impl HelpTopic {
             Self::StartHere => "Learn the core mental model and the first few things worth trying.",
             Self::Navigation => "Move through the tree, jump quickly, and open major overlays.",
             Self::Editing => "Add, rename, delete, and reshape branches without leaving the map.",
+            Self::Details => "Keep node titles short while storing longer notes under a branch.",
             Self::Search => {
-                "Filter by text, tags, metadata, and saved views from one search surface."
+                "Filter by text, browse tags, metadata, and ids, and reopen saved views."
             }
             Self::Views => "Switch between full-map and focused working modes.",
             Self::Palette => {
@@ -493,7 +506,10 @@ impl HelpTopic {
             }
             Self::Navigation => "User guide plus movement keys and large-map wayfinding tips.",
             Self::Editing => "User guide plus editing keys, undo safety, and restructuring tips.",
-            Self::Search => "User guide plus query keys, facet controls, and filtering tips.",
+            Self::Details => {
+                "User guide plus detail-line syntax, the d editor, and note-taking tips."
+            }
+            Self::Search => "User guide plus query keys, browse controls, ids, and filtering tips.",
             Self::Views => "User guide plus view-mode keys and focused-workflow tips.",
             Self::Palette => "User guide plus jump patterns, previews, and help recipes.",
             Self::Safety => "User guide plus undo, checkpoints, autosave, and restore habits.",
@@ -518,8 +534,11 @@ impl HelpTopic {
             Self::Editing => {
                 "edit add delete reshape move indent outdent sibling child root write undo redo checkpoint history"
             }
+            Self::Details => {
+                "details notes note detail prose quote rationale description long form longer text multiline d editor"
+            }
             Self::Search => {
-                "search filter query facets saved views tags metadata matches key keys value values"
+                "search filter query browse fields saved views tags metadata ids deep links matches key keys value values"
             }
             Self::Views => "views focus branch subtree filtered focus isolate branch presentation",
             Self::Palette => {
@@ -547,40 +566,43 @@ impl HelpTopic {
     fn guide_intro(self) -> &'static str {
         match self {
             Self::StartHere => {
-                "If you are new to mdmind, start with the smallest useful mental model: one line is one node, focus is the center of the UI, and view or search can reduce noise when the tree gets large."
+                "If you are new to mdmind, keep the mental model small: one line is one node, focus is the center of the UI, and view or search can calm things down when the tree gets large."
             }
             Self::Navigation => {
-                "Navigation in mdmind is tree-first. Stay in the outline while exploring, then use the palette and direct id jumps when the map gets too large to scroll comfortably."
+                "Navigation in mdmind is tree-first. Stay in the outline while exploring, then use the palette or id jumps when the map gets too large to scroll comfortably."
             }
             Self::Editing => {
-                "Editing is designed to stay inline and reversible. You reshape the tree in place, keep your cursor on the branch you care about, and use undo or checkpoints when a structural change feels risky."
+                "Editing stays inline and reversible. You reshape the tree in place, keep your cursor on the branch you care about, and lean on undo or checkpoints when a structural change feels risky."
+            }
+            Self::Details => {
+                "Node details are for the moments when one line is not enough. They let you keep the tree scannable while still attaching real prose, quotes, rationale, or research context to a branch."
             }
             Self::Search => {
-                "Search is the fastest way to reduce noise without losing your place. The beginner path is simple: start with plain text, then add #tags, then add @key:value metadata when the map grows more structured."
+                "Search is the fastest way to cut noise without losing your place. The beginner path is simple: plain text first, then #tags, then @key:value metadata when the map grows more structured."
             }
             Self::Views => {
-                "View modes are not cosmetic. They change how much of the map stays visible so you can choose between orientation, local focus, and filtered work without manually collapsing half the tree."
+                "View modes are not just cosmetic. They change how much of the map stays visible so you can switch between orientation, local focus, and filtered work without manually collapsing half the tree."
             }
             Self::Palette => {
-                "The command palette is the fastest way to act when you already know your intent. It pulls actions, jumps, saved views, recipes, relations, history, and help into one place so you do not have to remember which surface owns what."
+                "The command palette is the fastest way to act when you already know what you want. It pulls actions, jumps, saved views, recipes, relations, history, and help into one place."
             }
             Self::Safety => {
-                "Safety should make you bolder, not slower. Undo, redo, checkpoints, and recent restore history exist so you can reshape real maps without treating every edit like a risk you only get one shot at."
+                "Safety should make you bolder, not slower. Undo, redo, checkpoints, and restore history are there so you can reshape real maps without treating every edit like a one-shot risk."
             }
             Self::Themes => {
-                "Themes and surface settings are there to support different working styles. Use them to make the interface calmer, denser, brighter, or more terminal-native without changing how the map behaves."
+                "Themes and surface settings support different working styles. Use them to make the interface calmer, denser, brighter, or more terminal-native without changing how the map behaves."
             }
             Self::Mindmap => {
-                "The visual mindmap is best used as a second lens on the current working set, not as a separate mode with a different truth. It follows your active view and filter so the tree and the map stay aligned."
+                "The visual mindmap works best as a second lens on the current working set, not as a separate mode with a different truth. It follows your active view and filter so the tree and the map stay aligned."
             }
             Self::Syntax => {
-                "Tags and metadata are the easiest structured layer to adopt. They give you fast grouping and reliable filtering without forcing you to decide every branch's long-term address or relationship model."
+                "Tags and metadata are the easiest structured layer to adopt. They give you fast grouping and reliable filtering without forcing you to decide every branch's long-term address or relationship model up front."
             }
             Self::Ids => {
                 "Ids are how a branch becomes reliably addressable. They matter when you want to jump by id, deep-link from the CLI, export one subtree, or create a stable target for cross-links."
             }
             Self::Relations => {
-                "Relations are for the cases where the tree alone is not enough. They let one branch point to another without changing ownership or turning the whole map into a graph-first document."
+                "Relations are for the moments when the tree alone is not enough. They let one branch point to another without changing ownership or turning the whole map into a graph-first document."
             }
         }
     }
@@ -588,24 +610,26 @@ impl HelpTopic {
     fn guide_body(self) -> &'static [&'static str] {
         match self {
             Self::StartHere => &[
-                "You do not need every feature on day one. A beginner can ignore ids, relations, exports, and even the mindmap at first. The core loop is simpler: move, add or edit a node, search when the map gets noisy, and use the palette when you know what you want.",
-                "A good first map is small and concrete: one project, one trip, one feature area, one story outline. Once that feels natural, tags, metadata, ids, and cross-links start paying off because they make larger maps easier to search and revisit.",
-                "If the interface ever feels dense, press ? and read the short guide first, or turn on minimal mode later when you know the basics and want less chrome.",
+                "You do not need every feature on day one. Start with the core loop: move, add or edit a node, search when the map gets noisy, and use the palette when you know what you want.",
+                "A good first map is small and concrete. One project, one trip, one feature area, one story outline. Add ids and relations later, once the shape starts to matter.",
+                "If you do not want a blank file, start from mdm init and one of the built-in templates.",
             ],
             Self::Navigation => &[
-                "The current focus is the center of the interface: the outline, focus card, and visual map all follow it. That means simple arrow movement is enough for most work until the map becomes large.",
-                "When you already know the branch or id you want, use the palette instead of drilling manually. It is faster and it preserves your mental model because recent locations, frequent places, inline ids, and guided recipes all meet in one jump surface.",
-                "That same palette can also surface outgoing relations and incoming backlinks for the current node, so cross-branch navigation still feels like normal focus movement instead of a separate graph mode.",
+                "The current focus is the center of the interface. The outline, focus card, and visual map all follow it, so plain arrow movement is enough for a lot of work.",
+                "When you already know the branch or id you want, use the palette instead of drilling manually. It is faster and keeps navigation feeling like one surface instead of several.",
             ],
             Self::Editing => &[
                 "Most edits should feel like shaping a branch rather than opening a separate editor. Add, rename, move, indent, and delete all happen from the current focus, so your attention stays on structure instead of mode switching.",
                 "The safety layer matters here. Undo and checkpoints mean you can move quickly through structural edits without treating every change as dangerous, especially in larger maps where a reparent or delete can have bigger consequences.",
             ],
+            Self::Details => &[
+                "Details live under a node instead of inside its main label. That means the visible tree can stay compact even when a branch needs a paragraph, quote, scene note, meeting rationale, or a few lines of research context.",
+                "In the raw file, detail lines use | ... directly under the node they belong to. In the TUI, press d to edit them in a larger text area, then save with Ctrl+S.",
+            ],
             Self::Search => &[
-                "If search feels abstract, start with the easiest version: press /, type a normal word or phrase, and press Enter. Once that feels natural, move on to #tags and then @key:value metadata filters.",
-                "Use query search when you know the words, tags, or metadata you want. Use facets when you want to browse what is available in the current scope. Use saved views when a filter is worth coming back to repeatedly.",
-                "Filters are designed to land you on a useful result immediately. That is why applying a query, view, or recipe moves focus to the first match and keeps local context visible instead of dropping you into a dead-end result list.",
-                "When a map has shared metadata like @owner or custom @status values, the palette can surface owner-specific and status-specific review recipes automatically. That makes recurring workflows easier to discover than remembering every exact filter string.",
+                "Start with the simplest version: press /, type a normal word or phrase, and press Enter. Once that feels natural, move on to #tags and then @key:value filters.",
+                "Use query search when you know what you want. Use browse when you want to inspect tags, metadata, or ids that already exist in the current scope. Use saved views when a filter is worth coming back to.",
+                "Applying a query, view, or recipe lands you on the first useful match so search still feels like navigation, not a detached result list.",
             ],
             Self::Views => &[
                 "Full Map is for orientation. Focus Branch is for working with context. Subtree Only is for treating one branch as a temporary workspace. Filtered Focus is for mixing search results with enough structure to stay oriented.",
@@ -616,17 +640,16 @@ impl HelpTopic {
                 "The palette also makes advanced features feel casual. You do not have to remember a special relation mode, history mode, or settings panel. Typing a few words is often enough to reach the right thing.",
             ],
             Self::Safety => &[
-                "Undo and redo restore more than text. They bring back structural state, focus, and working context so the result feels like returning to a known workspace instead of just reversing a single primitive change.",
-                "Checkpoints are for the moments when you want a named restore point before restructuring something large. Recent action history is for quick short-range recovery when you only need to step back through the last few changes.",
+                "Undo and redo restore more than text. They bring back structure, focus, and working context, so it feels like returning to a known workspace instead of just reversing one tiny edit.",
+                "Checkpoints are for the moments when you want a named restore point before a bigger restructure. Recent action history is for quick short-range recovery when you only need to step back through the last few changes.",
             ],
             Self::Themes => &[
-                "A good theme should reduce fatigue and make hierarchy easier to read. It should not feel like decoration layered on top. That is why themes apply across the header, outline, overlays, status surfaces, and mindmap together.",
-                "Minimal mode belongs here too: it is the pro layout choice when you want less instructional chrome and more working space. It condenses the shell, widens the main outline, and trims the right-side context lanes down to the essentials.",
+                "A good theme should reduce fatigue and make hierarchy easier to read. It should not feel like decoration pasted on top. That is why themes apply across the header, outline, overlays, status surfaces, and mindmap together.",
+                "Minimal mode belongs here too. It is the pro layout choice when you want less instructional chrome and more working room. It condenses the shell, widens the main outline, and trims the right-side context lanes down to the essentials.",
             ],
             Self::Mindmap => &[
-                "The mindmap is most useful for cluster recognition, branch shape, and presentation. It is less about editing directly and more about seeing the current scope as a visual structure when the outline stops being enough.",
-                "Because it follows filters and view modes, the map becomes especially useful after you isolate a subtree or apply a focused query. The visual surface then reinforces the exact working set you are already using in the tree.",
-                "When visible nodes carry cross-links, the mindmap also draws relation edges between them. That lets you see lateral structure without turning the main document into a graph-first model.",
+                "The mindmap is most useful for cluster recognition, branch shape, and presentation. It is less about direct editing and more about seeing the current scope when the outline stops being enough.",
+                "Because it follows filters and view modes, it works best after you isolate a branch or apply a focused query. Visible cross-links also draw relation edges there, so lateral structure stays visible without taking over the whole document.",
             ],
             Self::Syntax => &[
                 "Use tags for quick grouping and metadata for fields you expect to query repeatedly. A few stable patterns like #todo, @status:active, and @owner:mira are usually more valuable than lots of one-off annotations.",
@@ -634,11 +657,11 @@ impl HelpTopic {
             ],
             Self::Ids => &[
                 "Not every node needs an id. Add ids to branches you expect to revisit, deep-link, export, or reference from somewhere else. That usually means major branches, durable work items, named sections, or cross-map anchors.",
-                "The payoff is consistency: palette jumps, mdmind and mdm deep-link opens, export targets, saved references, and cross-links all become more reliable when the branch has a stable id instead of depending on its visible label.",
+                "The payoff is consistency. Palette jumps, mdmind and mdm deep-link opens, export targets, saved references, and cross-links all get more reliable when a branch has a stable id instead of depending on its visible label.",
             ],
             Self::Relations => &[
-                "A plain relation like [[target/id]] says two branches are connected. A typed relation like [[rel:blocks->target/id]] says why they are connected. The plain form should be the default; the typed form is for cases where the meaning is worth preserving.",
-                "Backlinks are derived from incoming relations. That means you do not maintain them manually. If one branch points at another, the target can surface that incoming reference in the palette, focus area, CLI, and relation navigation.",
+                "A plain relation like [[target/id]] says two branches are connected. A typed relation like [[rel:blocks->target/id]] says why they are connected. Start with the plain form most of the time.",
+                "Backlinks are derived from incoming relations, so you do not maintain them manually. If one branch points at another, the target can surface that incoming reference for you.",
             ],
         }
     }
@@ -647,8 +670,8 @@ impl HelpTopic {
         match self {
             Self::StartHere => &[
                 ("↑ / ↓", "Move through visible nodes"),
-                ("a / e", "Add a child or edit the selected node"),
-                ("/", "Search for text, tags, and metadata"),
+                ("a / e", "Add a child or edit the current node"),
+                ("/", "Search by text, tags, or metadata"),
                 (": / Ctrl+P", "Open the command palette"),
                 ("?", "Open built-in help"),
                 ("m", "Open the visual mindmap"),
@@ -659,7 +682,7 @@ impl HelpTopic {
                     "← / →",
                     "Collapse or expand, or move to parent / first child",
                 ),
-                ("Enter / Space", "Toggle expanded and collapsed state"),
+                ("Enter / Space", "Toggle expanded or collapsed state"),
                 ("g", "Jump to the map root, or subtree root in Subtree Only"),
                 (": / Ctrl+P", "Open the command palette"),
                 (
@@ -668,12 +691,12 @@ impl HelpTopic {
                 ),
                 (
                     "relation query",
-                    "Use the palette to jump across outgoing relations and backlinks",
+                    "Use the palette to jump across relations and backlinks",
                 ),
                 ("[", "Follow the next backlink into this node"),
                 ("]", "Follow the next outgoing relation"),
-                ("o", "Jump directly to a node id"),
-                ("m", "Open the visual mindmap overlay"),
+                ("o", "Jump straight to a node id"),
+                ("m", "Open the visual mindmap"),
             ],
             Self::Editing => &[
                 ("a / A / Shift+R", "Add a child, sibling, or root branch"),
@@ -686,14 +709,21 @@ impl HelpTopic {
                     "Move out one level or indent into the previous sibling",
                 ),
             ],
+            Self::Details => &[
+                ("d", "Open the node detail editor"),
+                ("Enter", "Add a new line while editing details"),
+                ("Ctrl+S", "Save detail edits"),
+                ("Esc", "Cancel detail editing"),
+                ("| detail text", "Raw file syntax for attached details"),
+            ],
             Self::Search => &[
                 ("/", "Open query search"),
                 ("text query", "Start with a normal word or phrase"),
                 ("#tag query", "Filter by a tag like #todo or #blocked"),
                 ("@key:value", "Filter by metadata like @status:active"),
-                ("f / F", "Open facets or saved views"),
-                ("Tab", "Switch Query, Facets, and Saved Views"),
-                ("Enter", "Apply the current query or selection"),
+                ("b / w", "Open browse or saved views"),
+                ("Tab", "Switch Query, Browse, and Saved Views"),
+                ("Enter", "Apply the current query or pick"),
                 ("n / N", "Move between matches in the tree"),
                 ("c", "Clear the active filter"),
             ],
@@ -709,7 +739,7 @@ impl HelpTopic {
             ],
             Self::Palette => &[
                 (": / Ctrl+P", "Open the command palette"),
-                ("branch or id", "Jump directly to a place in the map"),
+                ("branch or id", "Jump straight to a place in the map"),
                 ("recipe query", "Run built-in or contextual workflows"),
                 ("checkpoint / undo / redo", "Browse recovery targets"),
                 ("theme / minimal", "Preview surface settings"),
@@ -737,7 +767,7 @@ impl HelpTopic {
                 ("minimal", "Toggle the quieter pro layout"),
                 ("ascii", "Toggle terminal-style accents"),
                 ("motion", "Toggle attention-guiding motion"),
-                ("Enter / Esc", "Commit or revert a previewed surface change"),
+                ("Enter / Esc", "Keep or cancel a previewed surface change"),
             ],
             Self::Mindmap => &[
                 ("m", "Open or close the visual mindmap"),
@@ -764,7 +794,7 @@ impl HelpTopic {
                 ("product/tasks", "Jump by id through the palette"),
                 (
                     "mdmind map.md#id",
-                    "Open the TUI directly to a deep-linked branch",
+                    "Open the TUI straight to a deep-linked branch",
                 ),
                 ("mdm links map.md", "List ids available in a map"),
                 (
@@ -803,11 +833,15 @@ impl HelpTopic {
             ],
             Self::Editing => &[
                 "Take a manual checkpoint before a large reparent or delete if you expect to compare two structures.",
-                "Treat node labels as concise map lines; keep long-form detail for a later dedicated notes feature.",
+                "Treat node labels as concise map lines and structural anchors, not mini paragraphs.",
+            ],
+            Self::Details => &[
+                "Use details for content that belongs to one branch but would make the main tree harder to scan.",
+                "Quotes, rationale, meeting notes, scene notes, and research excerpts all fit here well.",
             ],
             Self::Search => &[
                 "Start broad with text, then tighten with #tags or @metadata once you see the pattern you need.",
-                "If you are learning a new map, use facets before you try to guess every available metadata value.",
+                "If you are learning a new map, use browse before you try to guess every available metadata value or id path.",
                 "Saved views are best for recurring workflows, not one-off ad hoc filters.",
                 "Use palette recipes when you know the workflow you want but do not want to remember the exact filter.",
                 "If your map uses @owner or several @status values, try typing 'owner' or 'status' in the palette to see contextual review recipes.",
@@ -837,7 +871,7 @@ impl HelpTopic {
             ],
             Self::Syntax => &[
                 "Prefer consistent metadata keys like @status or @owner across the whole map instead of inventing near-duplicates.",
-                "A few shared tags and metadata fields are usually enough to unlock search, facets, and saved views.",
+                "A few shared tags and metadata fields are usually enough to unlock search, browse, and saved views.",
             ],
             Self::Ids => &[
                 "Prefer short, stable id paths like product/api-design over visible labels with spaces.",
@@ -858,6 +892,7 @@ impl HelpTopic {
             Self::Search => Some("#todo @status:active"),
             Self::Palette => Some("review todo"),
             Self::Safety => Some("checkpoint"),
+            Self::Details => Some("| This branch still depends on partner auth."),
             Self::Syntax => Some("API Design #backend @status:todo @owner:mira"),
             Self::Ids => Some("API Design #backend [id:product/api-design]"),
             Self::Relations => Some("Launch Readiness [[rel:blocked-by->product/api-design]]"),
@@ -870,24 +905,28 @@ impl HelpTopic {
             Self::StartHere => 0,
             Self::Navigation => 1,
             Self::Editing => 2,
-            Self::Search => 3,
-            Self::Views => 4,
-            Self::Palette => 5,
-            Self::Safety => 6,
-            Self::Syntax => 7,
-            Self::Ids => 8,
-            Self::Relations => 9,
-            Self::Themes => 10,
-            Self::Mindmap => 11,
+            Self::Details => 3,
+            Self::Search => 4,
+            Self::Views => 5,
+            Self::Palette => 6,
+            Self::Safety => 7,
+            Self::Syntax => 8,
+            Self::Ids => 9,
+            Self::Relations => 10,
+            Self::Themes => 11,
+            Self::Mindmap => 12,
         }
     }
 
     fn track_label(self) -> &'static str {
         match self {
             Self::StartHere => "Basics",
-            Self::Navigation | Self::Editing | Self::Search | Self::Views | Self::Palette => {
-                "Workflow"
-            }
+            Self::Navigation
+            | Self::Editing
+            | Self::Details
+            | Self::Search
+            | Self::Views
+            | Self::Palette => "Workflow",
             Self::Safety => "Safety",
             Self::Syntax | Self::Ids | Self::Relations => "Structure",
             Self::Themes | Self::Mindmap => "Surfaces",
@@ -924,6 +963,7 @@ enum PaletteAction {
     AddSibling,
     AddRoot,
     EditNode,
+    EditDetails,
     JumpToId,
     JumpToRoot,
     OpenSearch,
@@ -970,7 +1010,7 @@ impl PaletteRecipe {
             Self::ReviewActive => "Filter to @status:active work and focus the working set",
             Self::ReviewBlocked => "Filter to @status:blocked work and review what is stuck",
             Self::WorkInsideBranch => "Isolate the current branch as a rooted workspace",
-            Self::BrowseFacets => "Open the facet browser for tags, keys, and values",
+            Self::BrowseFacets => "Browse tags, metadata, and deep-link ids",
             Self::SaveWorkingSet => "Name the current filter as a reusable saved view",
             Self::VisualizeCurrentView => "Open the mindmap on the current visible working set",
         }
@@ -988,7 +1028,7 @@ impl PaletteRecipe {
             Self::WorkInsideBranch => {
                 "recipe workflow subtree branch isolate focus local workspace"
             }
-            Self::BrowseFacets => "recipe workflow browse facets tags metadata values keys",
+            Self::BrowseFacets => "recipe workflow browse tags metadata values keys ids deep links",
             Self::SaveWorkingSet => {
                 "recipe workflow save current filter working set saved view reuse"
             }
@@ -1387,6 +1427,42 @@ impl PromptState {
         let next = next_boundary(&self.value, self.cursor);
         self.value.replace_range(self.cursor..next, "");
     }
+
+    fn move_line_start(&mut self) {
+        self.cursor = line_start(&self.value, self.cursor);
+    }
+
+    fn move_line_end(&mut self) {
+        self.cursor = line_end(&self.value, self.cursor);
+    }
+
+    fn move_up(&mut self) {
+        let current_start = line_start(&self.value, self.cursor);
+        if current_start == 0 {
+            self.cursor = 0;
+            return;
+        }
+
+        let current_column = line_column(&self.value, current_start, self.cursor);
+        let previous_end = current_start.saturating_sub(1);
+        let previous_start = line_start(&self.value, previous_end);
+        self.cursor =
+            line_index_for_column(&self.value, previous_start, previous_end, current_column);
+    }
+
+    fn move_down(&mut self) {
+        let current_start = line_start(&self.value, self.cursor);
+        let current_end = line_end(&self.value, self.cursor);
+        if current_end >= self.value.len() {
+            self.cursor = self.value.len();
+            return;
+        }
+
+        let current_column = line_column(&self.value, current_start, self.cursor);
+        let next_start = current_end + 1;
+        let next_end = line_end(&self.value, next_start);
+        self.cursor = line_index_for_column(&self.value, next_start, next_end, current_column);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1653,11 +1729,11 @@ impl TuiApp {
                 self.delete_armed = false;
                 self.open_palette();
             }
-            KeyCode::Char('f') => {
+            KeyCode::Char('b') => {
                 self.delete_armed = false;
                 self.open_search_overlay(SearchSection::Facets);
             }
-            KeyCode::Char('F') => {
+            KeyCode::Char('w') => {
                 self.delete_armed = false;
                 self.open_search_overlay(SearchSection::Views);
             }
@@ -1701,6 +1777,15 @@ impl TuiApp {
                     .map(Node::display_line)
                     .unwrap_or_default();
                 self.begin_prompt(PromptMode::Edit, initial);
+            }
+            KeyCode::Char('d') => {
+                self.delete_armed = false;
+                let initial = self
+                    .editor
+                    .current()
+                    .map(Node::detail_text)
+                    .unwrap_or_default();
+                self.begin_prompt(PromptMode::EditDetail, initial);
             }
             KeyCode::Char('/') => {
                 self.delete_armed = false;
@@ -1915,11 +2000,19 @@ impl TuiApp {
             }
             KeyCode::BackTab => {
                 let items = self.palette_items(&palette.query);
-                palette.selected = previous_palette_group_index(&items, palette.selected);
+                palette.selected = previous_palette_group_index_with_mode(
+                    &items,
+                    palette.selected,
+                    palette.query.trim().is_empty(),
+                );
             }
             KeyCode::Tab => {
                 let items = self.palette_items(&palette.query);
-                palette.selected = next_palette_group_index(&items, palette.selected);
+                palette.selected = next_palette_group_index_with_mode(
+                    &items,
+                    palette.selected,
+                    palette.query.trim().is_empty(),
+                );
             }
             KeyCode::Up => {
                 palette.selected = palette.selected.saturating_sub(1);
@@ -2140,9 +2233,19 @@ impl TuiApp {
             KeyCode::Enter => {
                 let items = self.facet_items_for_query(search.facet_tab, search.query());
                 if let Some(item) = items.get(search.facet_selected) {
-                    search.draft_query = compose_query_with_token(&search.draft_query, &item.token);
-                    search.cursor = search.draft_query.len();
-                    self.apply_search_facet(&item.label, &search.draft_query)?;
+                    if search.facet_tab == FacetTab::Ids {
+                        self.editor.open_id(&item.label)?;
+                        self.finalize_focus_change(MotionTarget::Focus)?;
+                        self.set_status(
+                            StatusTone::Success,
+                            format!("Jumped to deep link '{}'.", item.label),
+                        );
+                    } else {
+                        search.draft_query =
+                            compose_query_with_token(&search.draft_query, &item.token);
+                        search.cursor = search.draft_query.len();
+                        self.apply_search_facet(&item.label, &search.draft_query)?;
+                    }
                 } else {
                     self.set_status(StatusTone::Warning, search.facet_tab.empty_message());
                     self.search = Some(search.clone());
@@ -2252,17 +2355,26 @@ impl TuiApp {
         };
 
         let mut submit = None;
+        let multiline = prompt.mode == PromptMode::EditDetail;
         match key.code {
             KeyCode::Esc => {
                 self.set_status(StatusTone::Info, "Cancelled input.");
             }
             KeyCode::Enter => {
-                submit = Some((prompt.mode, prompt.value.trim().to_string()));
+                if multiline {
+                    prompt.insert('\n');
+                } else {
+                    submit = Some((prompt.mode, prompt.value.trim().to_string()));
+                }
             }
             KeyCode::Backspace => prompt.backspace(),
             KeyCode::Delete => prompt.delete(),
             KeyCode::Left => prompt.move_left(),
             KeyCode::Right => prompt.move_right(),
+            KeyCode::Up if multiline => prompt.move_up(),
+            KeyCode::Down if multiline => prompt.move_down(),
+            KeyCode::Home if multiline => prompt.move_line_start(),
+            KeyCode::End if multiline => prompt.move_line_end(),
             KeyCode::Home => prompt.cursor = 0,
             KeyCode::End => prompt.cursor = prompt.value.len(),
             KeyCode::Char(character)
@@ -2270,6 +2382,13 @@ impl TuiApp {
                     && !key.modifiers.contains(KeyModifiers::ALT) =>
             {
                 prompt.insert(character);
+            }
+            KeyCode::Tab if multiline => {
+                prompt.insert(' ');
+                prompt.insert(' ');
+            }
+            KeyCode::Char('s') if multiline && key.modifiers.contains(KeyModifiers::CONTROL) => {
+                submit = Some((prompt.mode, prompt.value.clone()));
             }
             _ => {}
         }
@@ -2284,6 +2403,23 @@ impl TuiApp {
     }
 
     fn submit_prompt(&mut self, mode: PromptMode, value: &str) -> Result<(), AppError> {
+        if mode == PromptMode::EditDetail {
+            let had_detail = self
+                .editor
+                .current()
+                .is_some_and(|node| !node.detail.is_empty());
+            self.apply_edit(
+                |editor| editor.edit_current_detail(value),
+                if value.trim().is_empty() && had_detail {
+                    "Cleared the selected node details."
+                } else {
+                    "Updated the selected node details."
+                },
+                None,
+            )?;
+            return Ok(());
+        }
+
         if value.is_empty() {
             self.set_status(StatusTone::Warning, "Input was empty; nothing changed.");
             return Ok(());
@@ -2310,6 +2446,7 @@ impl TuiApp {
                 "Updated the selected node.",
                 None,
             ),
+            PromptMode::EditDetail => unreachable!("handled above"),
             PromptMode::SaveView => {
                 self.save_current_search_as(value)?;
                 Ok(())
@@ -2616,7 +2753,7 @@ impl TuiApp {
         self.trigger_motion(MotionTarget::PaletteInput);
         self.set_status(
             StatusTone::Info,
-            "Palette open. Type actions, recipes, relations, #tags, @metadata, ids, frequent places, recent locations, history, checkpoints, themes, settings, nodes, saved views, or help.",
+            "Palette open. Start with recent places, views, and related jumps up top, or arrow through actions, recipes, setup, recovery, and help below. Type any time to filter.",
         );
     }
 
@@ -2737,6 +2874,14 @@ impl TuiApp {
                         .map(Node::display_line)
                         .unwrap_or_default();
                     self.begin_prompt(PromptMode::Edit, initial);
+                }
+                PaletteAction::EditDetails => {
+                    let initial = self
+                        .editor
+                        .current()
+                        .map(Node::detail_text)
+                        .unwrap_or_default();
+                    self.begin_prompt(PromptMode::EditDetail, initial);
                 }
                 PaletteAction::JumpToId => self.begin_prompt(PromptMode::OpenId, String::new()),
                 PaletteAction::JumpToRoot => {
@@ -3034,11 +3179,40 @@ impl TuiApp {
                     detail: format!("{} value", entry.key),
                 })
                 .collect(),
+            FacetTab::Ids => self
+                .search_id_entries(scope.map(FilterQuery::raw))
+                .into_iter()
+                .map(|entry| FacetItem {
+                    label: entry.id,
+                    token: entry.breadcrumb,
+                    count: entry.line,
+                    detail: entry.text,
+                })
+                .collect(),
         }
+    }
+
+    fn search_id_entries(&self, raw: Option<&str>) -> Vec<LinkEntry> {
+        let mut entries = link_entries(self.editor.document());
+        if let Some(raw) = raw {
+            let query = raw.trim().to_lowercase();
+            if !query.is_empty() {
+                entries.retain(|entry| {
+                    entry.id.to_lowercase().contains(&query)
+                        || entry.text.to_lowercase().contains(&query)
+                        || entry.breadcrumb.to_lowercase().contains(&query)
+                });
+            }
+        }
+        entries
     }
 
     fn palette_items(&self, raw: &str) -> Vec<PaletteItem> {
         let query = raw.trim().to_lowercase();
+        if query.is_empty() {
+            return self.palette_home_items();
+        }
+
         let mut items = Vec::new();
         items.extend(self.palette_action_items(&query));
         items.extend(self.palette_recipe_items(&query));
@@ -3065,6 +3239,46 @@ impl TuiApp {
         });
         items.truncate(16);
         items
+    }
+
+    fn palette_home_items(&self) -> Vec<PaletteItem> {
+        let mut items = Vec::new();
+        items.extend(self.palette_frequent_location_items("").into_iter().take(3));
+        items.extend(self.palette_recent_location_items("").into_iter().take(4));
+        items.extend(self.palette_saved_view_items("").into_iter().take(4));
+        items.extend(self.palette_relation_items("").into_iter().take(4));
+        items.extend(self.palette_recipe_items(""));
+        items.extend(self.palette_action_items(""));
+        items.extend(self.palette_history_items("").into_iter().take(4));
+        items.extend(self.palette_checkpoint_items("").into_iter().take(4));
+        items.extend(self.palette_theme_items(""));
+        items.extend(self.palette_setting_items(""));
+        items.extend(self.palette_home_help_items());
+        items
+    }
+
+    fn palette_home_help_items(&self) -> Vec<PaletteItem> {
+        self.help_topics("")
+            .into_iter()
+            .filter(|topic| {
+                matches!(
+                    topic,
+                    HelpTopic::StartHere
+                        | HelpTopic::Details
+                        | HelpTopic::Search
+                        | HelpTopic::Palette
+                        | HelpTopic::Ids
+                )
+            })
+            .map(|topic| PaletteItem {
+                kind: PaletteItemKind::Help,
+                title: topic.title().to_string(),
+                subtitle: topic.summary().to_string(),
+                preview: format!("Help · {}", topic.hint()),
+                score: 0,
+                target: PaletteTarget::HelpTopic(topic),
+            })
+            .collect()
     }
 
     fn palette_action_items(&self, query: &str) -> Vec<PaletteItem> {
@@ -3106,6 +3320,12 @@ impl TuiApp {
                 PaletteAction::EditNode,
             ),
             (
+                "Edit Details",
+                "Write longer notes for the selected node",
+                "details notes prose description quote rationale edit",
+                PaletteAction::EditDetails,
+            ),
+            (
                 "Jump To Id",
                 "Open the jump-to-id prompt",
                 "jump open id deep link",
@@ -3124,9 +3344,9 @@ impl TuiApp {
                 PaletteAction::OpenSearch,
             ),
             (
-                "Browse Facets",
-                "Open the facet browser for tags and metadata",
-                "facets tags metadata browse",
+                "Browse Map Fields",
+                "Open browse for tags, metadata, and ids",
+                "facets browse tags metadata ids deep links",
                 PaletteAction::OpenFacets,
             ),
             (
@@ -3731,6 +3951,7 @@ impl TuiApp {
             HelpTopic::StartHere,
             HelpTopic::Navigation,
             HelpTopic::Editing,
+            HelpTopic::Details,
             HelpTopic::Search,
             HelpTopic::Views,
             HelpTopic::Palette,
@@ -3836,12 +4057,12 @@ impl TuiApp {
         if count == 0 {
             self.set_status(
                 StatusTone::Warning,
-                format!("Applied facet {label}, but no nodes matched."),
+                format!("Applied browse item {label}, but no nodes matched."),
             );
         } else {
             self.set_status(
                 StatusTone::Success,
-                format!("Applied facet {label} and landed on the first of {count} matches."),
+                format!("Applied browse item {label} and landed on the first of {count} matches."),
             );
         }
         Ok(())
@@ -4793,7 +5014,7 @@ fn render(frame: &mut Frame, app: &TuiApp) {
     render_body(frame, outer[1], app);
     render_status(frame, outer[2], app);
     if !app.ui_settings.minimal_mode {
-        render_keybar(frame, outer[3]);
+        render_keybar(frame, outer[3], app);
     }
 
     if let Some(help) = &app.help {
@@ -4819,7 +5040,7 @@ fn render(frame: &mut Frame, app: &TuiApp) {
     if let Some(prompt) = &app.prompt {
         render_prompt_overlay(
             frame,
-            prompt_overlay_rect(app.ui_settings.minimal_mode, area),
+            prompt_overlay_rect(prompt.mode, app.ui_settings.minimal_mode, area),
             prompt,
             app,
         );
@@ -4838,11 +5059,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let breadcrumb = if app.editor.breadcrumb().is_empty() {
-        "(no focus)".to_string()
-    } else {
-        app.editor.breadcrumb().join("  /  ")
-    };
+    let breadcrumb = app.editor.breadcrumb();
     let badge = if app.editor.dirty() {
         "MODIFIED"
     } else {
@@ -4859,6 +5076,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
         (" MANUAL ", PALETTE.border)
     };
     let view_badge = format!(" {} ", app.view_mode.label());
+    let (view_bg, view_fg) = view_badge_style(app.view_mode, PALETTE);
     let filter_badge = app
         .filter
         .as_ref()
@@ -4889,19 +5107,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
                 PALETTE.text,
             ),
             Span::raw(" "),
-            status_chip(
-                "VIEW",
-                app.view_mode.label(),
-                PALETTE.surface_alt,
-                PALETTE.text,
-            ),
-            Span::raw(" "),
-            status_chip(
-                "THEME",
-                app.ui_settings.theme.label(),
-                PALETTE.surface_alt,
-                PALETTE.text,
-            ),
+            status_chip("VIEW", app.view_mode.label(), view_bg, view_fg),
         ];
         if let Some(filter) = &app.filter {
             line.push(Span::raw(" "));
@@ -4957,16 +5163,9 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
         Span::styled(
             view_badge,
             Style::default()
-                .fg(PALETTE.background)
-                .bg(PALETTE.warn)
+                .fg(view_fg)
+                .bg(view_bg)
                 .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-        status_chip(
-            "THEME",
-            app.ui_settings.theme.label(),
-            PALETTE.border,
-            PALETTE.text,
         ),
     ];
     if let Some(filter_badge) = filter_badge {
@@ -4982,13 +5181,176 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
 
     let lines = vec![
         Line::from(header_spans),
-        Line::from(vec![
-            Span::styled("focus ", Style::default().fg(PALETTE.muted)),
-            Span::styled(breadcrumb, Style::default().fg(PALETTE.sky)),
-        ]),
+        header_breadcrumb_line(&breadcrumb, PALETTE, inner.width as usize),
     ];
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+fn header_breadcrumb_line(
+    breadcrumb: &[String],
+    palette: Palette,
+    max_width: usize,
+) -> Line<'static> {
+    if breadcrumb.is_empty() {
+        return Line::from(vec![
+            breadcrumb_chip("PATH", palette.surface_alt, palette.text),
+            breadcrumb_separator(palette.surface_alt, palette.surface),
+            breadcrumb_chip("(no focus)", palette.surface, palette.muted),
+        ]);
+    }
+
+    let visible_segments = truncate_breadcrumb_segments(breadcrumb, max_width);
+    let mut spans = Vec::new();
+    let label_bg = palette.surface_alt;
+    spans.push(breadcrumb_chip("PATH", label_bg, palette.text));
+
+    let segment_count = visible_segments.len();
+    for (index, segment) in visible_segments.iter().enumerate() {
+        let (bg, fg) = breadcrumb_segment_style(index, segment_count, palette);
+        spans.push(breadcrumb_separator(
+            label_bg_for_segment(index, segment_count, palette),
+            bg,
+        ));
+        spans.push(breadcrumb_chip(segment.clone(), bg, fg));
+    }
+
+    Line::from(spans)
+}
+
+fn truncate_breadcrumb_segments(breadcrumb: &[String], max_width: usize) -> Vec<String> {
+    if breadcrumb.is_empty() {
+        return Vec::new();
+    }
+
+    if breadcrumb_render_width(breadcrumb) + breadcrumb_chip_width("PATH") <= max_width {
+        return breadcrumb.to_vec();
+    }
+
+    if breadcrumb.len() == 1 {
+        let available = max_width
+            .saturating_sub(breadcrumb_chip_width("PATH"))
+            .saturating_sub(breadcrumb_separator_width());
+        return vec![truncate_breadcrumb_segment(&breadcrumb[0], available)];
+    }
+
+    let first = breadcrumb
+        .first()
+        .cloned()
+        .expect("breadcrumb should have a first segment");
+    let last = breadcrumb
+        .last()
+        .cloned()
+        .expect("breadcrumb should have a last segment");
+
+    let compact = vec![first.clone(), "…".to_string(), last.clone()];
+    if breadcrumb_render_width(&compact) + breadcrumb_chip_width("PATH") <= max_width {
+        return compact;
+    }
+
+    let prefix = [first.clone(), "…".to_string()];
+    let prefix_width = breadcrumb_render_width(&prefix) + breadcrumb_chip_width("PATH");
+    if prefix_width < max_width {
+        let remaining = max_width.saturating_sub(prefix_width + breadcrumb_separator_width());
+        let truncated_last = truncate_breadcrumb_segment(&last, remaining);
+        if !truncated_last.is_empty() {
+            return vec![first, "…".to_string(), truncated_last];
+        }
+    }
+
+    let tail_prefix = ["…".to_string()];
+    let tail_prefix_width = breadcrumb_render_width(&tail_prefix) + breadcrumb_chip_width("PATH");
+    if tail_prefix_width < max_width {
+        let remaining = max_width.saturating_sub(tail_prefix_width + breadcrumb_separator_width());
+        let truncated_last = truncate_breadcrumb_segment(&last, remaining);
+        if !truncated_last.is_empty() {
+            return vec!["…".to_string(), truncated_last];
+        }
+    }
+
+    let available = max_width
+        .saturating_sub(breadcrumb_chip_width("PATH"))
+        .saturating_sub(breadcrumb_separator_width());
+    vec![truncate_breadcrumb_segment(&last, available)]
+}
+
+fn breadcrumb_render_width(segments: &[String]) -> usize {
+    segments.iter().fold(0, |width, segment| {
+        width + breadcrumb_chip_width(segment) + breadcrumb_separator_width()
+    })
+}
+
+fn breadcrumb_chip_width(content: &str) -> usize {
+    content.chars().count() + 2
+}
+
+fn breadcrumb_separator_width() -> usize {
+    if ascii_accents_enabled() { 3 } else { 1 }
+}
+
+fn truncate_breadcrumb_segment(segment: &str, available_width: usize) -> String {
+    let max_chars = available_width.saturating_sub(2);
+    if segment.chars().count() <= max_chars {
+        return segment.to_string();
+    }
+    if max_chars == 0 {
+        return String::new();
+    }
+    if max_chars == 1 {
+        return "…".to_string();
+    }
+
+    let mut truncated = segment.chars().take(max_chars - 1).collect::<String>();
+    truncated.push('…');
+    truncated
+}
+
+fn label_bg_for_segment(index: usize, segment_count: usize, palette: Palette) -> Color {
+    if index == 0 {
+        palette.surface_alt
+    } else {
+        breadcrumb_segment_style(index - 1, segment_count, palette).0
+    }
+}
+
+fn breadcrumb_segment_style(
+    index: usize,
+    segment_count: usize,
+    palette: Palette,
+) -> (Color, Color) {
+    if index + 1 == segment_count {
+        (palette.sky, palette.background)
+    } else if index == 0 {
+        (palette.accent, palette.background)
+    } else if index % 2 == 1 {
+        (palette.surface_alt, palette.text)
+    } else {
+        (palette.border, palette.text)
+    }
+}
+
+fn breadcrumb_chip(content: impl Into<String>, bg: Color, fg: Color) -> Span<'static> {
+    Span::styled(
+        format!(" {} ", content.into()),
+        Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
+    )
+}
+
+fn breadcrumb_separator(left_bg: Color, right_bg: Color) -> Span<'static> {
+    if ascii_accents_enabled() {
+        Span::styled(" > ", Style::default().fg(right_bg))
+    } else {
+        Span::styled("", Style::default().fg(left_bg).bg(right_bg))
+    }
+}
+
+fn view_badge_style(view_mode: ViewMode, palette: Palette) -> (Color, Color) {
+    match view_mode {
+        ViewMode::FullMap => (palette.sky, palette.background),
+        ViewMode::FocusBranch => (palette.accent, palette.background),
+        ViewMode::SubtreeOnly => (palette.border, palette.text),
+        ViewMode::FilteredFocus => (palette.warn, palette.background),
+    }
 }
 
 fn render_body(frame: &mut Frame, area: Rect, app: &TuiApp) {
@@ -5239,8 +5601,18 @@ fn render_focus_cluster(frame: &mut Frame, area: Rect, app: &TuiApp) {
 }
 
 fn focus_card_height(app: &TuiApp) -> u16 {
+    let detail_lines = app
+        .editor
+        .current()
+        .map(|node| node.detail.len().min(3) as u16)
+        .unwrap_or(0);
+
     if !app.ui_settings.minimal_mode {
-        return if app.filter.is_some() { 9 } else { 8 };
+        let mut height = if app.filter.is_some() { 9 } else { 8 };
+        if detail_lines > 0 {
+            height += detail_lines + 1;
+        }
+        return height.min(13);
     }
 
     let Some(node) = app.editor.current() else {
@@ -5254,6 +5626,9 @@ fn focus_card_height(app: &TuiApp) -> u16 {
     if !node.relations.is_empty() {
         height += 1;
     }
+    if detail_lines > 0 {
+        height += detail_lines + 1;
+    }
     if app.filter.is_some() {
         height += 1;
     }
@@ -5261,7 +5636,7 @@ fn focus_card_height(app: &TuiApp) -> u16 {
         height += 1;
     }
 
-    height.min(9)
+    height.min(12)
 }
 
 #[allow(non_snake_case)]
@@ -5382,6 +5757,31 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                         Style::default().fg(PALETTE.sky),
                     ),
                 ]));
+            }
+            if !node.detail.is_empty() {
+                let visible_lines = if minimal { 2 } else { 3 };
+                let mut detail_iter = node.detail.iter().take(visible_lines).enumerate();
+                for (index, detail_line) in detail_iter.by_ref() {
+                    let label = if index == 0 { "details " } else { "        " };
+                    let text = if detail_line.is_empty() {
+                        " ".to_string()
+                    } else {
+                        detail_line.clone()
+                    };
+                    lines.push(Line::from(vec![
+                        Span::styled(label, Style::default().fg(PALETTE.muted)),
+                        Span::styled(text, Style::default().fg(PALETTE.text)),
+                    ]));
+                }
+                if node.detail.len() > visible_lines {
+                    lines.push(Line::from(vec![
+                        Span::styled("        ", Style::default().fg(PALETTE.muted)),
+                        Span::styled(
+                            format!("… {} more line(s)", node.detail.len() - visible_lines),
+                            Style::default().fg(PALETTE.sky),
+                        ),
+                    ]));
+                }
             }
             if !minimal {
                 lines.push(Line::from(vec![
@@ -5699,9 +6099,8 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
 }
 
 #[allow(non_snake_case)]
-fn render_keybar(frame: &mut Frame, area: Rect) {
-    let PALETTE = active_palette();
-    let line = Line::from(vec![
+fn keybar_spans(app: &TuiApp) -> Vec<Span<'static>> {
+    let mut spans = vec![
         key_hint("↑↓", "move"),
         separator_span(),
         key_hint("←→", "tree"),
@@ -5714,11 +6113,11 @@ fn render_keybar(frame: &mut Frame, area: Rect) {
         separator_span(),
         key_hint("e", "edit"),
         separator_span(),
+        key_hint("d", "details"),
+        separator_span(),
         key_hint("x", "delete"),
         separator_span(),
         key_hint("u/U", "undo"),
-        separator_span(),
-        key_hint("m", "mindmap"),
         separator_span(),
         key_hint(":", "palette"),
         separator_span(),
@@ -5726,20 +6125,47 @@ fn render_keybar(frame: &mut Frame, area: Rect) {
         separator_span(),
         key_hint("/", "find"),
         separator_span(),
-        key_hint("f/F", "find"),
-        separator_span(),
-        key_hint("n", "next"),
-        separator_span(),
-        key_hint("[", "back"),
-        separator_span(),
-        key_hint("]", "out"),
-        separator_span(),
         key_hint("s", "save"),
         separator_span(),
         key_hint("r", "revert"),
         separator_span(),
         key_hint("?", "help"),
-    ]);
+    ];
+
+    if app.filter.is_some() {
+        spans.push(separator_span());
+        spans.push(key_hint("n/N", "match"));
+    }
+
+    let has_outgoing_relations = app
+        .editor
+        .current()
+        .is_some_and(|node| !node.relations.is_empty());
+    let has_backlinks = app
+        .editor
+        .current()
+        .and_then(|node| node.id.as_deref())
+        .is_some_and(|id| !backlinks_to(app.editor.document(), id).is_empty());
+    if has_outgoing_relations || has_backlinks {
+        spans.push(separator_span());
+        spans.push(key_hint("[ ]", "related"));
+    }
+
+    spans
+}
+
+#[cfg(test)]
+fn keybar_text(app: &TuiApp) -> String {
+    keybar_spans(app)
+        .into_iter()
+        .map(|span| span.content.into_owned())
+        .collect::<String>()
+}
+
+#[allow(non_snake_case)]
+fn render_keybar(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let PALETTE = active_palette();
+    let line = Line::from(keybar_spans(app));
     frame.render_widget(
         Paragraph::new(line)
             .style(Style::default().bg(PALETTE.background))
@@ -5765,46 +6191,47 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
+            Constraint::Length(1),
             Constraint::Length(3),
             Constraint::Min(10),
-            Constraint::Length(2),
+            Constraint::Length(1),
         ])
         .split(inner);
 
     frame.render_widget(
-        Paragraph::new(vec![
-            Line::from(vec![
-                Span::styled(
-                    if app.ui_settings.ascii_accents {
-                        "/\\/\\  Searchable Built-In Help"
-                    } else {
-                        "Searchable Built-In Help"
-                    },
-                    Style::default()
-                        .fg(PALETTE.text)
-                        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
-                ),
-                Span::raw("  "),
-                Span::styled(
-                    format!("v{APP_VERSION}"),
-                    Style::default().fg(PALETTE.accent).add_modifier(Modifier::BOLD),
-                ),
-                Span::raw("  "),
-                Span::styled(
-                    if minimal {
-                        "Search guides, reference, and tips."
-                    } else {
-                        "Search help articles for user-guide explanations, command reference, and practical tips without leaving the terminal."
-                    },
-                    Style::default().fg(PALETTE.muted),
-                ),
-            ]),
-            Line::from(Span::styled(
-                format!("Current view: {}.", app.view_mode.label()),
+        Paragraph::new(vec![Line::from(vec![
+            Span::styled(
+                if app.ui_settings.ascii_accents {
+                    "/\\/\\  Searchable Built-In Help"
+                } else {
+                    "Searchable Built-In Help"
+                },
+                Style::default()
+                    .fg(PALETTE.text)
+                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                format!("v{APP_VERSION}"),
+                Style::default()
+                    .fg(PALETTE.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                if minimal {
+                    "Guides and quick answers."
+                } else {
+                    "Search guides and quick answers in place."
+                },
+                Style::default().fg(PALETTE.muted),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                format!("View: {}", app.view_mode.label()),
                 Style::default().fg(PALETTE.sky),
-            )),
-        ]),
+            ),
+        ])]),
         sections[0],
     );
 
@@ -5844,7 +6271,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
 
     let columns = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(38), Constraint::Percentage(62)])
+        .constraints([Constraint::Percentage(34), Constraint::Percentage(66)])
         .split(sections[2]);
 
     let topics = app.help_topics(&help.query);
@@ -5868,29 +6295,56 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
             columns[0],
         );
     } else {
+        let selected_index = help.selected.min(topics.len() - 1);
         let items = topics
             .iter()
+            .enumerate()
             .map(|topic| {
-                ListItem::new(vec![
-                    Line::from(vec![
-                        Span::styled(
-                            topic.title(),
-                            Style::default()
-                                .fg(PALETTE.text)
-                                .add_modifier(Modifier::BOLD),
-                        ),
+                let (index, topic) = topic;
+                let selected = index == selected_index;
+                let mut lines = Vec::new();
+                let current_track = topic.track_label();
+                let previous_track = index
+                    .checked_sub(1)
+                    .and_then(|prev| topics.get(prev))
+                    .map(|prev| prev.track_label());
+
+                if index > 0 && previous_track != Some(current_track) {
+                    lines.push(Line::from(""));
+                }
+                if previous_track != Some(current_track) {
+                    lines.push(help_track_heading(current_track, PALETTE));
+                }
+
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        if selected { "▎ " } else { "  " },
+                        Style::default().fg(if selected {
+                            PALETTE.accent
+                        } else {
+                            PALETTE.border
+                        }),
+                    ),
+                    Span::styled(
+                        topic.title(),
+                        Style::default()
+                            .fg(if selected { PALETTE.text } else { PALETTE.sky })
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ]));
+
+                if selected {
+                    lines.push(Line::from(vec![
                         Span::raw("  "),
-                        Span::styled(topic.track_label(), Style::default().fg(PALETTE.accent)),
-                    ]),
-                    Line::from(Span::styled(
-                        topic.summary(),
-                        Style::default().fg(PALETTE.muted),
-                    )),
-                ])
+                        Span::styled(topic.summary(), Style::default().fg(PALETTE.text)),
+                    ]));
+                }
+
+                ListItem::new(lines)
             })
             .collect::<Vec<_>>();
         let mut state = ListState::default();
-        state.select(Some(help.selected.min(topics.len() - 1)));
+        state.select(Some(selected_index));
         frame.render_stateful_widget(
             List::new(items)
                 .block(
@@ -5898,8 +6352,10 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
                         .title(styled_title("Topics", PALETTE.sky))
                         .borders(Borders::ALL)
                         .border_style(Style::default().fg(PALETTE.sky))
-                        .style(Style::default().bg(PALETTE.surface)),
+                        .style(Style::default().bg(PALETTE.surface))
+                        .padding(Padding::horizontal(1)),
                 )
+                .highlight_symbol("")
                 .highlight_style(
                     Style::default()
                         .bg(PALETTE.surface_alt)
@@ -5919,8 +6375,23 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
             Style::default().fg(PALETTE.muted),
         ))]
     };
+    let preview_title = if let Some(topic) = topics.get(help.selected).copied() {
+        Line::from(vec![
+            Span::styled(
+                format!(" {} ", topic.title()),
+                Style::default()
+                    .fg(PALETTE.background)
+                    .bg(PALETTE.warn)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" "),
+            help_track_chip(topic.track_label(), PALETTE, false),
+        ])
+    } else {
+        styled_title("Article", PALETTE.warn)
+    };
     let preview_block = Block::default()
-        .title(styled_title("Preview", PALETTE.warn))
+        .title(preview_title)
         .borders(Borders::ALL)
         .border_style(Style::default().fg(PALETTE.warn))
         .style(Style::default().bg(PALETTE.surface))
@@ -6178,6 +6649,7 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
         .split(sections[2]);
 
     let items = app.palette_items(&palette.query);
+    let home_mode = palette.query.trim().is_empty();
     if items.is_empty() {
         frame.render_widget(
             Paragraph::new(if minimal {
@@ -6198,30 +6670,79 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
             body[0],
         );
     } else {
-        let group_starts = palette_group_starts(&items);
+        let group_starts = palette_group_starts_with_mode(&items, home_mode);
         let list_items = items
             .iter()
             .enumerate()
             .map(|(index, item)| {
+                let selected = index == palette.selected.min(items.len() - 1);
+                let group_color = palette_group_color(item.kind, PALETTE, home_mode);
                 let mut lines = Vec::new();
-                if group_starts[index] {
-                    lines.push(palette_group_header_line(item.kind, PALETTE));
+                if index > 0 && group_starts[index] {
+                    lines.push(Line::from(""));
                 }
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("[{}]", item.kind.label()),
-                        Style::default().fg(PALETTE.warn),
-                    ),
-                    Span::raw(" "),
-                    Span::styled(
-                        item.title.clone(),
-                        Style::default()
-                            .fg(PALETTE.text)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw("  "),
-                    Span::styled(item.subtitle.clone(), Style::default().fg(PALETTE.muted)),
-                ]));
+                if group_starts[index] {
+                    lines.push(palette_group_header_line(item.kind, PALETTE, home_mode));
+                }
+                let row = if home_mode {
+                    Line::from(vec![
+                        Span::styled(
+                            if selected { "› " } else { "  " },
+                            Style::default().fg(if selected {
+                                group_color
+                            } else {
+                                PALETTE.border
+                            }),
+                        ),
+                        Span::styled(
+                            item.title.clone(),
+                            Style::default()
+                                .fg(if selected { group_color } else { PALETTE.text })
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::raw("  "),
+                        Span::styled(
+                            item.subtitle.clone(),
+                            Style::default().fg(if selected {
+                                PALETTE.text
+                            } else {
+                                PALETTE.muted
+                            }),
+                        ),
+                    ])
+                } else {
+                    Line::from(vec![
+                        Span::styled(
+                            if selected { "› " } else { "  " },
+                            Style::default().fg(if selected {
+                                group_color
+                            } else {
+                                PALETTE.border
+                            }),
+                        ),
+                        Span::styled(
+                            item.kind.label(),
+                            Style::default().fg(group_color).add_modifier(Modifier::DIM),
+                        ),
+                        Span::raw(" "),
+                        Span::styled(
+                            item.title.clone(),
+                            Style::default()
+                                .fg(if selected { group_color } else { PALETTE.text })
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::raw("  "),
+                        Span::styled(
+                            item.subtitle.clone(),
+                            Style::default().fg(if selected {
+                                PALETTE.text
+                            } else {
+                                PALETTE.muted
+                            }),
+                        ),
+                    ])
+                };
+                lines.push(row);
                 ListItem::new(lines)
             })
             .collect::<Vec<_>>();
@@ -6238,7 +6759,7 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
                 )
                 .highlight_style(
                     Style::default()
-                        .bg(PALETTE.surface_alt)
+                        .bg(PALETTE.background)
                         .fg(PALETTE.text)
                         .add_modifier(Modifier::BOLD),
                 ),
@@ -6248,26 +6769,24 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
     }
 
     let preview_lines = if let Some(item) = items.get(palette.selected) {
+        let group_label = palette_group_label(item.kind, home_mode);
+        let group_color = palette_group_color(item.kind, PALETTE, home_mode);
         vec![
             Line::from(vec![
-                Span::styled("groups ", Style::default().fg(PALETTE.muted)),
                 Span::styled(
-                    palette_group_summary(&items, palette.selected),
-                    Style::default().fg(PALETTE.accent),
+                    format!(" {} ", group_label),
+                    Style::default()
+                        .fg(PALETTE.background)
+                        .bg(group_color)
+                        .add_modifier(Modifier::BOLD),
                 ),
+                Span::raw(" "),
+                Span::styled(item.title.clone(), Style::default().fg(group_color)),
             ]),
-            Line::from(vec![
-                Span::styled("kind ", Style::default().fg(PALETTE.muted)),
-                Span::styled(item.kind.label(), Style::default().fg(PALETTE.warn)),
-            ]),
-            Line::from(vec![
-                Span::styled("title ", Style::default().fg(PALETTE.muted)),
-                Span::styled(item.title.clone(), Style::default().fg(PALETTE.text)),
-            ]),
-            Line::from(vec![
-                Span::styled("detail ", Style::default().fg(PALETTE.muted)),
-                Span::styled(item.subtitle.clone(), Style::default().fg(PALETTE.sky)),
-            ]),
+            Line::from(Span::styled(
+                item.subtitle.clone(),
+                Style::default().fg(PALETTE.sky),
+            )),
             Line::from(""),
             Line::from(Span::styled(
                 item.preview.clone(),
@@ -6276,7 +6795,7 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
         ]
     } else {
         vec![Line::from(Span::styled(
-            "Actions and recipes appear first by default. Type to search ids, #tags, @metadata, nodes, frequent places, recent locations, recent actions, checkpoints, saved views, and help.",
+            "The empty palette starts with recent places, views, and related jumps up top, then a browseable catalog of actions, recipes, setup, recovery, and help below. Type to narrow by ids, #tags, @metadata, nodes, or relations.",
             Style::default().fg(PALETTE.muted),
         ))]
     };
@@ -6284,7 +6803,7 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
         Paragraph::new(preview_lines)
             .block(
                 Block::default()
-                    .title(styled_title("Preview", PALETTE.warn))
+                    .title(styled_title("Details", PALETTE.warn))
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(PALETTE.warn))
                     .style(Style::default().bg(PALETTE.surface))
@@ -6446,9 +6965,9 @@ fn render_search_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, search: &S
                 Span::raw("  "),
                 Span::styled(
                     if minimal {
-                        "Query, facets, saved views."
+                        "Query, browse, saved views."
                     } else {
-                        "Query, browse facets, and reopen saved working sets without leaving the map."
+                        "Query, browse tags, metadata, and ids, then reopen saved working sets without leaving the map."
                     },
                     Style::default().fg(PALETTE.muted),
                 ),
@@ -6488,9 +7007,11 @@ fn search_footer_hints(section: SearchSection) -> Vec<Span<'static>> {
         SearchSection::Facets => vec![
             key_hint("Tab", "sections"),
             separator_span(),
+            key_hint("←→", "browse"),
+            separator_span(),
             key_hint("↑↓", "select"),
             separator_span(),
-            key_hint("Enter", "apply"),
+            key_hint("Enter", "run"),
             separator_span(),
             key_hint("c", "clear"),
             separator_span(),
@@ -6680,31 +7201,36 @@ fn render_search_facets_section(
         .constraints([Constraint::Length(2), Constraint::Min(8)])
         .split(area);
 
-    let tabs = [FacetTab::Tags, FacetTab::Keys, FacetTab::Values]
-        .into_iter()
-        .flat_map(|tab| {
-            let is_active = tab == search.facet_tab;
-            let mut spans = vec![Span::styled(
-                format!(" {} ", tab.title()),
-                Style::default()
-                    .fg(if is_active {
-                        PALETTE.background
-                    } else {
-                        PALETTE.text
-                    })
-                    .bg(if is_active {
-                        PALETTE.sky
-                    } else {
-                        PALETTE.surface
-                    })
-                    .add_modifier(Modifier::BOLD),
-            )];
-            if tab != FacetTab::Values {
-                spans.push(Span::raw(" "));
-            }
-            spans
-        })
-        .collect::<Vec<_>>();
+    let tabs = [
+        FacetTab::Tags,
+        FacetTab::Keys,
+        FacetTab::Values,
+        FacetTab::Ids,
+    ]
+    .into_iter()
+    .flat_map(|tab| {
+        let is_active = tab == search.facet_tab;
+        let mut spans = vec![Span::styled(
+            format!(" {} ", tab.title()),
+            Style::default()
+                .fg(if is_active {
+                    PALETTE.background
+                } else {
+                    PALETTE.text
+                })
+                .bg(if is_active {
+                    PALETTE.sky
+                } else {
+                    PALETTE.surface
+                })
+                .add_modifier(Modifier::BOLD),
+        )];
+        if tab != FacetTab::Ids {
+            spans.push(Span::raw(" "));
+        }
+        spans
+    })
+    .collect::<Vec<_>>();
     frame.render_widget(Paragraph::new(Line::from(tabs)), sections[0]);
 
     let body = Layout::default()
@@ -6732,6 +7258,11 @@ fn render_search_facets_section(
         let list_items = items
             .iter()
             .map(|item| {
+                let detail = if search.facet_tab == FacetTab::Ids {
+                    format!("line {}", item.count)
+                } else {
+                    format!("{} nodes", item.count)
+                };
                 ListItem::new(Line::from(vec![
                     Span::styled(
                         item.label.clone(),
@@ -6740,10 +7271,7 @@ fn render_search_facets_section(
                             .add_modifier(Modifier::BOLD),
                     ),
                     Span::raw("  "),
-                    Span::styled(
-                        format!("{} nodes", item.count),
-                        Style::default().fg(PALETTE.warn),
-                    ),
+                    Span::styled(detail, Style::default().fg(PALETTE.warn)),
                 ]))
             })
             .collect::<Vec<_>>();
@@ -6776,18 +7304,31 @@ fn render_search_facets_section(
                 Span::styled("selected ", Style::default().fg(PALETTE.muted)),
                 Span::styled(item.label.clone(), Style::default().fg(PALETTE.text)),
             ]),
-            Line::from(vec![
-                Span::styled("apply ", Style::default().fg(PALETTE.muted)),
-                Span::styled(
-                    compose_query_with_token(&search.draft_query, &item.token),
-                    Style::default().fg(PALETTE.accent),
-                ),
-            ]),
+            if search.facet_tab == FacetTab::Ids {
+                Line::from(vec![
+                    Span::styled("path ", Style::default().fg(PALETTE.muted)),
+                    Span::styled(item.token.clone(), Style::default().fg(PALETTE.sky)),
+                ])
+            } else {
+                Line::from(vec![
+                    Span::styled("apply ", Style::default().fg(PALETTE.muted)),
+                    Span::styled(
+                        compose_query_with_token(&search.draft_query, &item.token),
+                        Style::default().fg(PALETTE.accent),
+                    ),
+                ])
+            },
             Line::from(Span::styled(
-                if app.ui_settings.minimal_mode {
-                    "Enter applies this facet."
+                if search.facet_tab == FacetTab::Ids {
+                    if app.ui_settings.minimal_mode {
+                        "Enter jumps to this id."
+                    } else {
+                        "Enter jumps to this deep-linked branch. Left and right switch Tags / Keys / Values / Ids."
+                    }
+                } else if app.ui_settings.minimal_mode {
+                    "Enter applies this browse item."
                 } else {
-                    "Enter applies this facet. Left and right switch Tags / Keys / Values."
+                    "Enter applies this browse item. Left and right switch Tags / Keys / Values / Ids."
                 },
                 Style::default().fg(PALETTE.muted),
             )),
@@ -7005,6 +7546,19 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
                 "manual save mode is active, so press s after edits".to_string()
             }
         }
+        HelpTopic::Details => app
+            .editor
+            .current()
+            .map(|node| {
+                if node.detail.is_empty() {
+                    "current node has no attached details yet".to_string()
+                } else {
+                    format!("current node has {} detail line(s)", node.detail.len())
+                }
+            })
+            .unwrap_or_else(|| {
+                "focus a branch first, then add details if it needs more than one line".to_string()
+            }),
         HelpTopic::Search => match &app.filter {
             Some(filter) => format!(
                 "active filter {} with {} direct matches",
@@ -7154,22 +7708,92 @@ fn palette_kind_rank(kind: PaletteItemKind) -> u8 {
     }
 }
 
+fn palette_home_group_label(kind: PaletteItemKind) -> &'static str {
+    match kind {
+        PaletteItemKind::Location | PaletteItemKind::Frequent => "Recent",
+        PaletteItemKind::SavedView => "Views",
+        PaletteItemKind::Relation => "Related",
+        PaletteItemKind::Recipe => "Recipes",
+        PaletteItemKind::Action | PaletteItemKind::Inline | PaletteItemKind::Node => "Actions",
+        PaletteItemKind::History | PaletteItemKind::Checkpoint | PaletteItemKind::Safety => {
+            "Recovery"
+        }
+        PaletteItemKind::Theme | PaletteItemKind::Setting => "Setup",
+        PaletteItemKind::Help => "Help",
+    }
+}
+
+fn palette_group_label(kind: PaletteItemKind, home_mode: bool) -> &'static str {
+    if home_mode {
+        palette_home_group_label(kind)
+    } else {
+        kind.label()
+    }
+}
+
+fn palette_group_color(kind: PaletteItemKind, palette: Palette, home_mode: bool) -> Color {
+    if home_mode {
+        match palette_home_group_label(kind) {
+            "Recent" => palette.sky,
+            "Views" => palette.accent,
+            "Related" => palette.warn,
+            "Recipes" => palette.accent,
+            "Actions" => palette.sky,
+            "Recovery" => palette.warn,
+            "Setup" => palette.border,
+            "Help" => palette.accent,
+            _ => palette.sky,
+        }
+    } else {
+        match kind {
+            PaletteItemKind::Action => palette.warn,
+            PaletteItemKind::Recipe => palette.accent,
+            PaletteItemKind::Theme | PaletteItemKind::Setting => palette.border,
+            PaletteItemKind::Relation => palette.warn,
+            PaletteItemKind::Inline => palette.accent,
+            PaletteItemKind::Frequent | PaletteItemKind::Location | PaletteItemKind::SavedView => {
+                palette.sky
+            }
+            PaletteItemKind::History | PaletteItemKind::Checkpoint | PaletteItemKind::Safety => {
+                palette.warn
+            }
+            PaletteItemKind::Node => palette.text,
+            PaletteItemKind::Help => palette.accent,
+        }
+    }
+}
+
+#[cfg(test)]
 fn palette_group_starts(items: &[PaletteItem]) -> Vec<bool> {
+    palette_group_starts_with_mode(items, false)
+}
+
+fn palette_group_starts_with_mode(items: &[PaletteItem], home_mode: bool) -> Vec<bool> {
     let mut starts = Vec::with_capacity(items.len());
-    let mut previous_kind = None;
+    let mut previous_label = None;
     for item in items {
-        let starts_group = previous_kind != Some(item.kind);
+        let current_label = palette_group_label(item.kind, home_mode);
+        let starts_group = previous_label != Some(current_label);
         starts.push(starts_group);
-        previous_kind = Some(item.kind);
+        previous_label = Some(current_label);
     }
     starts
 }
 
+#[cfg(test)]
 fn next_palette_group_index(items: &[PaletteItem], selected: usize) -> usize {
+    next_palette_group_index_with_mode(items, selected, false)
+}
+
+fn next_palette_group_index_with_mode(
+    items: &[PaletteItem],
+    selected: usize,
+    home_mode: bool,
+) -> usize {
     if items.is_empty() {
         return 0;
     }
-    let group_starts = palette_group_starts(items);
+    let group_starts = palette_group_starts_with_mode(items, home_mode);
     let selected = selected.min(items.len() - 1);
     for (index, starts_group) in group_starts.iter().enumerate().skip(selected + 1) {
         if *starts_group {
@@ -7179,11 +7803,20 @@ fn next_palette_group_index(items: &[PaletteItem], selected: usize) -> usize {
     selected
 }
 
+#[cfg(test)]
 fn previous_palette_group_index(items: &[PaletteItem], selected: usize) -> usize {
+    previous_palette_group_index_with_mode(items, selected, false)
+}
+
+fn previous_palette_group_index_with_mode(
+    items: &[PaletteItem],
+    selected: usize,
+    home_mode: bool,
+) -> usize {
     if items.is_empty() {
         return 0;
     }
-    let group_starts = palette_group_starts(items);
+    let group_starts = palette_group_starts_with_mode(items, home_mode);
     let selected = selected.min(items.len() - 1);
     for index in (0..selected).rev() {
         if group_starts[index] {
@@ -7193,54 +7826,58 @@ fn previous_palette_group_index(items: &[PaletteItem], selected: usize) -> usize
     0
 }
 
+#[cfg(test)]
 fn palette_group_summary(items: &[PaletteItem], selected: usize) -> String {
+    palette_group_summary_with_mode(items, selected, false)
+}
+
+#[cfg(test)]
+fn palette_group_summary_with_mode(
+    items: &[PaletteItem],
+    selected: usize,
+    home_mode: bool,
+) -> String {
     if items.is_empty() {
         return "No groups".to_string();
     }
 
     let selected = selected.min(items.len() - 1);
-    let mut groups = Vec::new();
+    let mut groups: Vec<&str> = Vec::new();
     for item in items {
-        if groups.last().copied() != Some(item.kind) {
-            groups.push(item.kind);
+        let label = palette_group_label(item.kind, home_mode);
+        if groups.last().copied() != Some(label) {
+            groups.push(label);
         }
     }
 
-    let current_kind = items[selected].kind;
+    let current_label = palette_group_label(items[selected].kind, home_mode);
     groups
         .into_iter()
-        .map(|kind| {
-            if kind == current_kind {
-                format!("[{}]", kind.label())
+        .map(|label| {
+            if label == current_label {
+                format!("[{label}]")
             } else {
-                kind.label().to_string()
+                label.to_string()
             }
         })
         .collect::<Vec<_>>()
         .join(" · ")
 }
 
-fn palette_group_header_line(kind: PaletteItemKind, palette: Palette) -> Line<'static> {
-    let label = if ascii_accents_enabled() {
-        format!("// {} //", kind.label())
-    } else {
-        kind.label().to_uppercase()
-    };
-    let divider = if ascii_accents_enabled() {
-        "----------------"
-    } else {
-        "················"
-    };
-    Line::from(vec![
-        Span::styled(
-            label,
-            Style::default()
-                .fg(palette.sky)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" "),
-        Span::styled(divider, Style::default().fg(palette.border)),
-    ])
+fn palette_group_header_line(
+    kind: PaletteItemKind,
+    palette: Palette,
+    home_mode: bool,
+) -> Line<'static> {
+    let group_label = palette_group_label(kind, home_mode);
+    let group_color = palette_group_color(kind, palette, home_mode);
+    Line::from(vec![Span::styled(
+        format!(" {} ", group_label.to_uppercase()),
+        Style::default()
+            .fg(palette.background)
+            .bg(group_color)
+            .add_modifier(Modifier::BOLD),
+    )])
 }
 
 fn palette_match_score(query: &str, primary: &str, haystack: &str) -> Option<i64> {
@@ -7489,6 +8126,7 @@ fn collect_palette_nodes_from(
             .map(|entry| format!("@{}:{}", entry.key, entry.value))
             .collect::<Vec<_>>()
             .join(" ");
+        let detail_preview = node.detail_preview().unwrap_or_default();
         let id = node.id.clone().unwrap_or_default();
         let secondary = if id.is_empty() {
             breadcrumb_text.clone()
@@ -7496,12 +8134,13 @@ fn collect_palette_nodes_from(
             id.clone()
         };
         let haystack = format!(
-            "{} {} {} {} {} {}",
+            "{} {} {} {} {} {} {}",
             label,
             breadcrumb_text,
             id,
             node.tags.join(" "),
             metadata,
+            detail_preview,
             node.relations
                 .iter()
                 .map(|relation| relation.display_token())
@@ -7512,7 +8151,11 @@ fn collect_palette_nodes_from(
             path: path.clone(),
             primary: label,
             secondary,
-            preview: breadcrumb_text,
+            preview: if detail_preview.is_empty() {
+                breadcrumb_text
+            } else {
+                format!("{breadcrumb_text}\n{detail_preview}")
+            },
             haystack,
         });
         collect_palette_nodes_from(&node.children, entries, path, breadcrumb);
@@ -7729,7 +8372,10 @@ fn query_preview_matches(app: &TuiApp, raw: &str) -> Vec<(String, String)> {
     find_matches(app.editor.document(), raw)
         .into_iter()
         .map(|entry| {
-            let detail = entry.id.unwrap_or(entry.breadcrumb);
+            let detail = entry
+                .detail_snippet
+                .or(entry.id)
+                .unwrap_or(entry.breadcrumb);
             (entry.text, detail)
         })
         .collect()
@@ -7748,6 +8394,11 @@ fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState, ap
         .padding(Padding::uniform(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
+
+    if prompt.mode == PromptMode::EditDetail {
+        render_detail_prompt_overlay(frame, inner, prompt, app);
+        return;
+    }
 
     if minimal {
         let chunks = Layout::default()
@@ -7830,6 +8481,120 @@ fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState, ap
     }
 }
 
+fn render_detail_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState, app: &TuiApp) {
+    let palette = app.theme_colors();
+    let minimal = app.ui_settings.minimal_mode;
+    let node_label = app
+        .editor
+        .current()
+        .map(|node| {
+            if node.text.is_empty() {
+                "(empty)".to_string()
+            } else {
+                node.text.clone()
+            }
+        })
+        .unwrap_or_else(|| "(missing focus)".to_string());
+    let detail_summary = detail_prompt_summary(&prompt.value);
+
+    if minimal {
+        let sections = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(2),
+                Constraint::Min(6),
+                Constraint::Length(1),
+            ])
+            .split(area);
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("node ", Style::default().fg(palette.muted)),
+                Span::styled(node_label, Style::default().fg(palette.sky)),
+                Span::raw("  "),
+                Span::styled(detail_summary.clone(), Style::default().fg(palette.warn)),
+            ])),
+            sections[0],
+        );
+        render_prompt_input(
+            frame,
+            sections[1],
+            prompt,
+            palette,
+            Block::default()
+                .title(" Details ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(palette.accent))
+                .style(Style::default().bg(palette.surface)),
+        );
+        frame.render_widget(
+            Paragraph::new("Enter: new line  ·  ^S: save  ·  Esc: cancel")
+                .style(Style::default().fg(palette.muted)),
+            sections[2],
+        );
+        return;
+    }
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Min(8),
+            Constraint::Length(2),
+            Constraint::Length(2),
+        ])
+        .split(area);
+
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(vec![
+                Span::styled("node ", Style::default().fg(palette.muted)),
+                Span::styled(node_label, Style::default().fg(palette.sky)),
+                Span::raw("  "),
+                Span::styled(detail_summary, Style::default().fg(palette.warn)),
+            ]),
+            Line::from(Span::styled(
+                "Use details for longer notes, quotes, rationale, and context without bloating the one-line node label.",
+                Style::default().fg(palette.muted),
+            )),
+        ])
+        .wrap(Wrap { trim: false }),
+        sections[0],
+    );
+
+    render_prompt_input(
+        frame,
+        sections[1],
+        prompt,
+        palette,
+        Block::default()
+            .title(" Details ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(palette.accent))
+            .style(Style::default().bg(palette.surface)),
+    );
+
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(Span::styled(
+                "Detail lines are stored under the node as | ... in the raw file.",
+                Style::default().fg(palette.sky),
+            )),
+            Line::from(Span::styled(
+                "Leave the editor empty if you want to clear the current details.",
+                Style::default().fg(palette.muted),
+            )),
+        ])
+        .wrap(Wrap { trim: false }),
+        sections[2],
+    );
+    frame.render_widget(
+        Paragraph::new("Enter: new line  ·  ^S: save  ·  Esc: cancel")
+            .style(Style::default().fg(palette.muted))
+            .wrap(Wrap { trim: false }),
+        sections[3],
+    );
+}
+
 fn render_prompt_input(
     frame: &mut Frame,
     area: Rect,
@@ -7838,9 +8603,45 @@ fn render_prompt_input(
     input_block: Block<'_>,
 ) {
     let input_inner = input_block.inner(area);
+    frame.render_widget(input_block, area);
+
+    if prompt.mode == PromptMode::EditDetail {
+        let view = multiline_view(
+            &prompt.value,
+            prompt.cursor,
+            input_inner.width as usize,
+            input_inner.height as usize,
+        );
+        let lines = if prompt.value.is_empty() {
+            let mut placeholder = vec![Line::from(Span::styled(
+                "Start typing attached detail lines for this node.",
+                Style::default().fg(palette.muted),
+            ))];
+            if input_inner.height > 1 {
+                placeholder.push(Line::from(Span::styled(
+                    "Good fits: rationale, quotes, research notes, meeting context.",
+                    Style::default().fg(palette.border),
+                )));
+            }
+            placeholder
+        } else {
+            styled_detail_lines(&view, palette)
+        };
+        frame.render_widget(
+            Paragraph::new(lines).wrap(Wrap { trim: false }),
+            input_inner,
+        );
+        if input_inner.width > 0 && input_inner.height > 0 {
+            frame.set_cursor_position((
+                input_inner.x + view.cursor_x,
+                input_inner.y + view.cursor_y,
+            ));
+        }
+        return;
+    }
+
     let (visible_value, cursor_offset) =
         single_line_view(&prompt.value, prompt.cursor, input_inner.width as usize);
-    frame.render_widget(input_block, area);
     frame.render_widget(
         Paragraph::new(highlight_prompt_input(&visible_value, prompt.mode, palette))
             .wrap(Wrap { trim: false }),
@@ -7852,6 +8653,13 @@ fn render_prompt_input(
 }
 
 fn highlight_prompt_input(value: &str, mode: PromptMode, palette: Palette) -> Line<'static> {
+    if mode == PromptMode::EditDetail {
+        return Line::from(Span::styled(
+            value.to_string(),
+            Style::default().fg(palette.text),
+        ));
+    }
+
     let mut spans = Vec::new();
     let mut chars = value.chars().peekable();
 
@@ -7910,6 +8718,7 @@ fn prompt_token_kind(token: &str, mode: PromptMode) -> PromptTokenKind {
                 PromptTokenKind::Text
             }
         }
+        PromptMode::EditDetail => PromptTokenKind::Text,
         PromptMode::OpenId => PromptTokenKind::Id,
         PromptMode::SaveView | PromptMode::SaveCheckpoint => PromptTokenKind::Text,
     }
@@ -7960,6 +8769,7 @@ fn prompt_input_title(mode: PromptMode) -> &'static str {
         PromptMode::AddChild | PromptMode::AddSibling | PromptMode::AddRoot | PromptMode::Edit => {
             " Node line "
         }
+        PromptMode::EditDetail => " Details ",
         PromptMode::OpenId => " Node id ",
         PromptMode::SaveView => " View name ",
         PromptMode::SaveCheckpoint => " Checkpoint name ",
@@ -7980,6 +8790,9 @@ fn prompt_footer_text(mode: PromptMode) -> Option<&'static str> {
         PromptMode::AddChild | PromptMode::AddSibling | PromptMode::AddRoot | PromptMode::Edit => {
             Some("Single-line node syntax: Label #tag @key:value [id:path] [[target]].")
         }
+        PromptMode::EditDetail => Some(
+            "Details are stored below the node as | ... lines and stay separate from the one-line tree label.",
+        ),
         PromptMode::OpenId => Some("Ids come from [id:...] tokens on node lines."),
         PromptMode::SaveView => Some("Saves the current active filter under a reusable name."),
         PromptMode::SaveCheckpoint => {
@@ -8008,6 +8821,7 @@ fn prompt_assist(app: &TuiApp, prompt: &PromptState) -> PromptAssist {
         PromptMode::AddChild | PromptMode::AddSibling | PromptMode::AddRoot | PromptMode::Edit => {
             prompt_fragment_assist(app, prompt)
         }
+        PromptMode::EditDetail => prompt_detail_assist(app, prompt.value.as_str()),
         PromptMode::OpenId => prompt_open_id_assist(app, prompt.value.trim()),
         PromptMode::SaveView => {
             if let Some(query) = app.current_search_query_for_save() {
@@ -8035,6 +8849,41 @@ fn prompt_assist(app: &TuiApp, prompt: &PromptState) -> PromptAssist {
                 current_scope_label(app, None),
             ],
         },
+    }
+}
+
+fn prompt_detail_assist(app: &TuiApp, value: &str) -> PromptAssist {
+    let node_label = app
+        .editor
+        .current()
+        .map(|node| {
+            if node.text.is_empty() {
+                "(empty)".to_string()
+            } else {
+                node.text.clone()
+            }
+        })
+        .unwrap_or_else(|| "(missing focus)".to_string());
+    let normalized = value.replace("\r\n", "\n");
+    let trimmed = normalized.trim_matches('\n');
+    if trimmed.trim().is_empty() {
+        return PromptAssist {
+            tone: PromptAssistTone::Info,
+            lines: vec![
+                format!("Details for '{node_label}' are currently empty."),
+                "Use this space for longer notes, quotes, rationale, and context that would feel noisy in the main tree."
+                    .to_string(),
+            ],
+        };
+    }
+
+    let line_count = trimmed.lines().count();
+    PromptAssist {
+        tone: PromptAssistTone::Success,
+        lines: vec![
+            format!("Editing details for '{node_label}'."),
+            format!("{line_count} line(s) will be stored under this node."),
+        ],
     }
 }
 
@@ -8437,6 +9286,77 @@ fn key_hint<'a>(key: &'a str, meaning: &'a str) -> Span<'a> {
     )
 }
 
+fn detail_prompt_summary(value: &str) -> String {
+    let normalized = value.replace("\r\n", "\n");
+    let trimmed = normalized.trim_matches('\n');
+    let line_count = if trimmed.is_empty() {
+        0
+    } else {
+        trimmed.lines().count()
+    };
+    let char_count = normalized.chars().count();
+    format!("{line_count} line(s) · {char_count} char(s)")
+}
+
+fn styled_detail_lines(view: &TextAreaView, palette: Palette) -> Vec<Line<'static>> {
+    view.lines
+        .iter()
+        .enumerate()
+        .map(|(index, line)| {
+            if index as u16 != view.cursor_y {
+                return Line::from(Span::styled(
+                    line.clone(),
+                    Style::default().fg(palette.text),
+                ));
+            }
+
+            let cursor_col = view.cursor_x as usize;
+            let total_chars = line.chars().count();
+            if cursor_col >= total_chars {
+                return Line::from(vec![
+                    Span::styled(line.clone(), Style::default().fg(palette.text)),
+                    Span::styled(
+                        " ",
+                        Style::default()
+                            .fg(palette.background)
+                            .bg(palette.accent)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ]);
+            }
+
+            let cursor_byte = nth_char_boundary(line, cursor_col);
+            let next_byte = nth_char_boundary(line, cursor_col + 1);
+            let before = line[..cursor_byte].to_string();
+            let current = line[cursor_byte..next_byte].to_string();
+            let after = line[next_byte..].to_string();
+
+            Line::from(vec![
+                Span::styled(before, Style::default().fg(palette.text)),
+                Span::styled(
+                    current,
+                    Style::default()
+                        .fg(palette.background)
+                        .bg(palette.accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(after, Style::default().fg(palette.text)),
+            ])
+        })
+        .collect()
+}
+
+fn nth_char_boundary(value: &str, char_index: usize) -> usize {
+    if char_index == 0 {
+        return 0;
+    }
+    value
+        .char_indices()
+        .nth(char_index)
+        .map(|(offset, _)| offset)
+        .unwrap_or(value.len())
+}
+
 fn status_chip(label: &str, value: &str, bg: Color, fg: Color) -> Span<'static> {
     Span::styled(
         format!(" {label} {value} "),
@@ -8503,35 +9423,60 @@ fn compact_scope_label(scope_label: &str) -> String {
 
 fn help_section_heading(title: &'static str, color: Color) -> Line<'static> {
     Line::from(Span::styled(
-        title,
-        Style::default().fg(color).add_modifier(Modifier::BOLD),
+        format!(" {title} "),
+        Style::default()
+            .fg(color)
+            .bg(active_palette().surface_alt)
+            .add_modifier(Modifier::BOLD),
     ))
+}
+
+fn help_track_heading(label: &str, palette: Palette) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(
+            format!(" {} ", label.to_uppercase()),
+            Style::default()
+                .fg(palette.background)
+                .bg(palette.border)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("────────────────", Style::default().fg(palette.border)),
+    ])
+}
+
+fn help_track_chip(label: &str, palette: Palette, selected: bool) -> Span<'static> {
+    Span::styled(
+        format!(" {label} "),
+        Style::default()
+            .fg(if selected {
+                palette.background
+            } else {
+                palette.text
+            })
+            .bg(if selected {
+                palette.accent
+            } else {
+                palette.surface_alt
+            })
+            .add_modifier(Modifier::BOLD),
+    )
 }
 
 fn help_preview_lines(app: &TuiApp, topic: HelpTopic) -> Vec<Line<'static>> {
     let palette = app.theme_colors();
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("help ", Style::default().fg(palette.muted)),
-            Span::styled(
-                topic.title(),
-                Style::default()
-                    .fg(palette.sky)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  "),
-            Span::styled(topic.track_label(), Style::default().fg(palette.accent)),
-        ]),
-        Line::from(Span::styled(
-            topic.summary(),
-            Style::default().fg(palette.text),
-        )),
-        Line::from(""),
-    ];
-    lines.push(help_section_heading("User Guide", palette.accent));
+    let mut lines = vec![Line::from(Span::styled(
+        topic.summary(),
+        Style::default()
+            .fg(palette.muted)
+            .add_modifier(Modifier::ITALIC),
+    ))];
+    lines.push(Line::from(""));
+    lines.push(help_section_heading("What This Covers", palette.accent));
     lines.push(Line::from(Span::styled(
         topic.guide_intro(),
-        Style::default().fg(palette.text),
+        Style::default()
+            .fg(palette.text)
+            .add_modifier(Modifier::ITALIC),
     )));
     lines.push(Line::from(""));
     for paragraph in topic.guide_body() {
@@ -8541,7 +9486,7 @@ fn help_preview_lines(app: &TuiApp, topic: HelpTopic) -> Vec<Line<'static>> {
         )));
         lines.push(Line::from(""));
     }
-    lines.push(help_section_heading("Command Reference", palette.sky));
+    lines.push(help_section_heading("Useful Keys", palette.sky));
     for (command, description) in topic.command_reference() {
         lines.push(Line::from(vec![
             Span::styled(
@@ -8563,15 +9508,18 @@ fn help_preview_lines(app: &TuiApp, topic: HelpTopic) -> Vec<Line<'static>> {
     }
     if let Some(example) = topic.example() {
         lines.push(Line::from(""));
-        lines.push(help_section_heading("Example", palette.border));
+        lines.push(help_section_heading("Try It", palette.border));
         lines.push(Line::from(Span::styled(
             example,
-            Style::default().fg(palette.accent),
+            Style::default()
+                .fg(palette.accent)
+                .bg(palette.surface_alt)
+                .add_modifier(Modifier::BOLD),
         )));
     }
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
-        Span::styled("context ", Style::default().fg(palette.muted)),
+        Span::styled("Right now ", Style::default().fg(palette.muted)),
         Span::styled(
             help_context_line(app, topic),
             Style::default().fg(palette.warn),
@@ -8833,7 +9781,15 @@ fn centered_rect_with_min(
     rect
 }
 
-fn prompt_overlay_rect(minimal: bool, area: Rect) -> Rect {
+fn prompt_overlay_rect(mode: PromptMode, minimal: bool, area: Rect) -> Rect {
+    if mode == PromptMode::EditDetail {
+        return if minimal {
+            centered_rect_with_min(70, 48, 54, 12, area)
+        } else {
+            centered_rect_with_min(76, 68, 64, 20, area)
+        };
+    }
+
     if minimal {
         centered_rect_with_min(60, 18, 48, 8, area)
     } else {
@@ -8858,6 +9814,33 @@ fn next_boundary(value: &str, index: usize) -> usize {
         .nth(1)
         .map(|(offset, _)| index + offset)
         .unwrap_or(value.len())
+}
+
+fn line_start(value: &str, index: usize) -> usize {
+    value[..index]
+        .rfind('\n')
+        .map(|position| position + 1)
+        .unwrap_or(0)
+}
+
+fn line_end(value: &str, index: usize) -> usize {
+    value[index..]
+        .find('\n')
+        .map(|offset| index + offset)
+        .unwrap_or(value.len())
+}
+
+fn line_column(value: &str, start: usize, index: usize) -> usize {
+    value[start..index].chars().count()
+}
+
+fn line_index_for_column(value: &str, start: usize, end: usize, column: usize) -> usize {
+    for (count, (offset, _)) in value[start..end].char_indices().enumerate() {
+        if count == column {
+            return start + offset;
+        }
+    }
+    end
 }
 
 fn single_line_view(value: &str, cursor: usize, width: usize) -> (String, usize) {
@@ -8892,6 +9875,73 @@ fn single_line_view(value: &str, cursor: usize, width: usize) -> (String, usize)
         value[start..end].to_string(),
         clamped_cursor.saturating_sub(start).min(width),
     )
+}
+
+#[derive(Debug, Clone)]
+struct TextAreaView {
+    lines: Vec<String>,
+    cursor_x: u16,
+    cursor_y: u16,
+}
+
+fn multiline_view(value: &str, cursor: usize, width: usize, height: usize) -> TextAreaView {
+    if width == 0 || height == 0 {
+        return TextAreaView {
+            lines: vec![String::new()],
+            cursor_x: 0,
+            cursor_y: 0,
+        };
+    }
+
+    let mut lines = vec![String::new()];
+    let mut visual_line = 0usize;
+    let mut visual_col = 0usize;
+    let mut cursor_line = 0usize;
+    let mut cursor_col = 0usize;
+    let mut cursor_recorded = cursor == 0;
+
+    for (index, ch) in value.char_indices() {
+        if !cursor_recorded && index == cursor {
+            cursor_line = visual_line;
+            cursor_col = visual_col;
+            cursor_recorded = true;
+        }
+
+        if ch == '\n' {
+            lines.push(String::new());
+            visual_line += 1;
+            visual_col = 0;
+            continue;
+        }
+
+        if visual_col >= width {
+            lines.push(String::new());
+            visual_line += 1;
+            visual_col = 0;
+        }
+
+        lines
+            .last_mut()
+            .expect("multiline view should always have a line")
+            .push(ch);
+        visual_col += 1;
+    }
+
+    if !cursor_recorded {
+        cursor_line = visual_line;
+        cursor_col = visual_col;
+    }
+
+    let scroll = cursor_line.saturating_sub(height.saturating_sub(1));
+    let visible_lines = (0..height)
+        .map(|offset| lines.get(scroll + offset).cloned().unwrap_or_default())
+        .collect::<Vec<_>>();
+
+    TextAreaView {
+        lines: visible_lines,
+        cursor_x: cursor_col as u16,
+        cursor_y: cursor_line.saturating_sub(scroll) as u16,
+    }
 }
 
 #[cfg(test)]
@@ -9020,6 +10070,63 @@ mod tests {
         if session_path.exists() {
             std::fs::remove_file(session_path).ok();
         }
+    }
+
+    #[test]
+    fn empty_query_palette_defaults_to_a_mixed_home_surface() {
+        let map_path = temp_map_path("palette-home.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let items = app.palette_items("");
+        assert!(!items.is_empty(), "home palette should not be empty");
+        assert_ne!(items[0].kind, PaletteItemKind::Action);
+        assert!(
+            items
+                .iter()
+                .any(|item| item.kind == PaletteItemKind::Action),
+            "home palette should still include a few direct actions"
+        );
+        assert!(
+            items.iter().any(|item| item.title == "Show Help"),
+            "home palette should expose the broader action catalog"
+        );
+        assert!(
+            items.iter().any(|item| item.title == "Theme: Monograph"),
+            "home palette should expose setup browsing too"
+        );
+        assert!(
+            items.iter().any(|item| {
+                matches!(
+                    item.kind,
+                    PaletteItemKind::Location
+                        | PaletteItemKind::Frequent
+                        | PaletteItemKind::Recipe
+                        | PaletteItemKind::SavedView
+                        | PaletteItemKind::History
+                        | PaletteItemKind::Checkpoint
+                        | PaletteItemKind::Safety
+                )
+            }),
+            "home palette should include contextual, non-action results"
+        );
+        assert!(
+            items.iter().any(|item| item.kind == PaletteItemKind::Help),
+            "home palette should include help entries"
+        );
+        assert!(
+            items.iter().all(|item| item.kind != PaletteItemKind::Node),
+            "empty query should not immediately dump node search results"
+        );
+
+        cleanup_sidecars(&map_path);
     }
 
     #[test]
@@ -10254,6 +11361,44 @@ mod tests {
     }
 
     #[test]
+    fn detail_prompt_inserts_new_lines_and_saves_with_ctrl_s() {
+        let map_path = temp_map_path("detail-prompt.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE))
+            .expect("d should open the detail prompt");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.mode),
+            Some(PromptMode::EditDetail)
+        );
+
+        app.prompt.as_mut().expect("prompt should exist").value = "Line one".to_string();
+        app.prompt.as_mut().expect("prompt should exist").cursor = "Line one".len();
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should insert a newline in detail mode");
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE))
+            .expect("typing should continue in detail mode");
+        app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL))
+            .expect("ctrl+s should save the detail prompt");
+
+        assert!(app.prompt.is_none(), "prompt should close after saving");
+        assert_eq!(
+            app.editor.current().expect("focus should exist").detail,
+            vec!["Line one".to_string(), "x".to_string()]
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
     fn autosave_writes_after_a_structural_edit() {
         let map_path = temp_map_path("autosave.md");
         let source = "- Product Idea [id:product]\n  - Tasks #todo [id:product/tasks]\n";
@@ -10913,12 +12058,14 @@ mod tests {
     fn prompt_overlay_rect_uses_a_safe_minimum_height() {
         let frame_area = Rect::new(0, 0, 100, 24);
 
-        let full = prompt_overlay_rect(false, frame_area);
-        let minimal = prompt_overlay_rect(true, frame_area);
+        let full = prompt_overlay_rect(PromptMode::AddChild, false, frame_area);
+        let minimal = prompt_overlay_rect(PromptMode::AddChild, true, frame_area);
+        let detail = prompt_overlay_rect(PromptMode::EditDetail, false, frame_area);
 
         assert!(full.height >= 17);
         assert!(minimal.height >= 8);
         assert!(full.height > minimal.height);
+        assert!(detail.height > full.height);
     }
 
     #[test]
@@ -11094,6 +12241,144 @@ mod tests {
             palette_group_summary(&items, 1),
             "Action · [History] · Safety"
         );
+    }
+
+    #[test]
+    fn palette_home_group_summary_uses_shelf_labels() {
+        let items = vec![
+            PaletteItem {
+                kind: PaletteItemKind::Location,
+                title: "Tasks".to_string(),
+                subtitle: "product/tasks".to_string(),
+                preview: String::new(),
+                score: 10,
+                target: PaletteTarget::RecentLocation(vec![0, 1]),
+            },
+            PaletteItem {
+                kind: PaletteItemKind::Recipe,
+                title: "Review Todo Work".to_string(),
+                subtitle: "Apply #todo".to_string(),
+                preview: String::new(),
+                score: 9,
+                target: PaletteTarget::Recipe(PaletteRecipe::ReviewTodo),
+            },
+            PaletteItem {
+                kind: PaletteItemKind::Checkpoint,
+                title: "Checkpoint · Planning milestone".to_string(),
+                subtitle: "manual snapshot".to_string(),
+                preview: String::new(),
+                score: 8,
+                target: PaletteTarget::Checkpoint(0),
+            },
+            PaletteItem {
+                kind: PaletteItemKind::Help,
+                title: "Start Here".to_string(),
+                subtitle: "Learn the core mental model".to_string(),
+                preview: String::new(),
+                score: 7,
+                target: PaletteTarget::HelpTopic(HelpTopic::StartHere),
+            },
+        ];
+
+        assert_eq!(
+            palette_group_summary_with_mode(&items, 1, true),
+            "Recent · [Recipes] · Recovery · Help"
+        );
+        assert_eq!(
+            palette_group_starts_with_mode(&items, true),
+            vec![true, true, true, true]
+        );
+    }
+
+    #[test]
+    fn keybar_hides_match_and_relation_hints_when_not_relevant() {
+        let map_path = temp_map_path("keybar-base.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let rendered = keybar_text(&app);
+        assert!(!rendered.contains("n/N"));
+        assert!(!rendered.contains("[ ]"));
+        assert!(!rendered.contains("m:mindmap"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn breadcrumb_truncation_keeps_full_path_when_it_fits() {
+        let breadcrumb = vec![
+            "Glass Archive".to_string(),
+            "Core Cast".to_string(),
+            "Character tensions".to_string(),
+        ];
+
+        assert_eq!(truncate_breadcrumb_segments(&breadcrumb, 120), breadcrumb);
+    }
+
+    #[test]
+    fn breadcrumb_truncation_collapses_middle_when_space_is_tight() {
+        let breadcrumb = vec![
+            "The Glass Archive Novel Research And Writing Map".to_string(),
+            "Core Cast".to_string(),
+            "Character tensions".to_string(),
+        ];
+
+        let truncated = truncate_breadcrumb_segments(&breadcrumb, 48);
+        assert!(truncated.len() <= 3);
+        assert!(truncated.iter().any(|segment| segment == "…"));
+        assert!(
+            truncated
+                .last()
+                .is_some_and(|segment| segment.starts_with("Character"))
+        );
+    }
+
+    #[test]
+    fn keybar_shows_match_hint_only_when_filter_is_active() {
+        let map_path = temp_map_path("keybar-filter.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.apply_filter("#todo").expect("filter should apply");
+        let rendered = keybar_text(&app);
+        assert!(rendered.contains("n/N"));
+        assert!(!rendered.contains("[ ]"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn keybar_shows_relation_hint_only_when_current_node_has_related_links() {
+        let map_path = temp_map_path("keybar-relations.md");
+        let document = sample_document_with_relations();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let rendered = keybar_text(&app);
+        assert!(rendered.contains("[ ]"));
+        assert!(!rendered.contains("m:mindmap"));
+
+        cleanup_sidecars(&map_path);
     }
 
     #[test]
@@ -11447,13 +12732,13 @@ mod tests {
             SavedViewsState::default(),
         );
 
-        app.handle_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE))
-            .expect("f should open search on facets");
+        app.handle_key(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE))
+            .expect("b should open browse");
         assert!(
             app.search
                 .as_ref()
                 .is_some_and(|search| search.section == SearchSection::Facets),
-            "search should open on facets"
+            "search should open on browse"
         );
 
         app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
@@ -11495,8 +12780,8 @@ mod tests {
             Some(1)
         );
 
-        app.handle_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE))
-            .expect("f should open search on facets");
+        app.handle_key(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE))
+            .expect("b should open browse");
         app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
             .expect("right should move to keys");
         app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
@@ -11514,6 +12799,46 @@ mod tests {
         if session_path.exists() {
             std::fs::remove_file(session_path).ok();
         }
+    }
+
+    #[test]
+    fn browse_ids_tab_lists_deep_links_and_enters_them() {
+        let map_path = temp_map_path("browse-ids.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.open_search_overlay(SearchSection::Facets);
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE))
+            .expect("left should wrap browse tabs to ids");
+        assert_eq!(
+            app.search.as_ref().map(|search| search.facet_tab),
+            Some(FacetTab::Ids)
+        );
+
+        let items = app.facet_items_for_query(FacetTab::Ids, None);
+        assert!(items.iter().any(|item| item.label == "product"));
+        let selected = items
+            .iter()
+            .position(|item| item.label == "product/tasks")
+            .expect("product/tasks id should exist");
+
+        app.search
+            .as_mut()
+            .expect("search should exist")
+            .facet_selected = selected;
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should jump to the selected id");
+
+        assert_eq!(app.editor.focus_path(), &[0, 1]);
+
+        cleanup_sidecars(&map_path);
     }
 
     #[test]
@@ -11535,8 +12860,8 @@ mod tests {
         app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
             .expect("enter should apply the filter");
 
-        app.handle_key(KeyEvent::new(KeyCode::Char('F'), KeyModifiers::NONE))
-            .expect("F should open saved views");
+        app.handle_key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE))
+            .expect("w should open saved views");
         app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE))
             .expect("a should begin save-view prompt");
         app.handle_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE))
@@ -11567,8 +12892,8 @@ mod tests {
             .expect("a second escape should clear the active filter in the main TUI");
         assert!(app.filter.is_none(), "filter should be cleared");
 
-        app.handle_key(KeyEvent::new(KeyCode::Char('F'), KeyModifiers::NONE))
-            .expect("F should reopen saved views");
+        app.handle_key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE))
+            .expect("w should reopen saved views");
         app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
             .expect("enter should reopen the saved view");
 
@@ -11626,7 +12951,7 @@ mod tests {
         );
         assert_eq!(
             app.status.text,
-            "Applied facet #todo and landed on the first of 2 matches."
+            "Applied browse item #todo and landed on the first of 2 matches."
         );
 
         cleanup_sidecars(&map_path);

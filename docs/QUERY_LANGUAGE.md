@@ -29,9 +29,9 @@ You do not need to learn every pattern up front. Even a simple text search is en
 Use:
 
 - `/` to open search on the query tab
-- `f` to open search on facets
-- `F` to open search on saved views
-- `Tab` to switch between Query, Facets, and Saved Views
+- `b` to open browse for tags, metadata, and ids
+- `w` to open search on saved views
+- `Tab` to switch between Query, Browse, and Saved Views
 - `Enter` to apply the current query or selection
 - `n` / `N` to move between matches
 - `c` to clear the active filter
@@ -131,7 +131,7 @@ These are useful because they show the same search language from the CLI side.
 
 - start broad, then tighten
 - prefer a few consistent tags and metadata keys over many one-off variants
-- use facets when you do not know the map’s vocabulary yet
+- use browse when you do not know the map’s vocabulary yet
 - save only recurring searches
 - if you already know the exact branch or id, use the palette instead of search
 
