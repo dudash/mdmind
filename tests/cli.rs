@@ -280,15 +280,18 @@ fn examples_copy_all_writes_gallery_and_maps() {
     assert!(destination.join("README.md").is_file());
     assert!(destination.join("demo.md").is_file());
     assert!(destination.join("product-status.md").is_file());
+    assert!(destination.join("meeting-notes-action-map.md").is_file());
+    assert!(destination.join("agent-research-handoff.md").is_file());
 
     std::fs::remove_file(destination.join("README.md")).expect("README should be removable");
     for file_name in [
         "demo.md",
         "product-status.md",
+        "meeting-notes-action-map.md",
+        "agent-research-handoff.md",
         "lantern-studio-map.md",
         "game-world-moonwake.md",
         "novel-research-writing-map.md",
-        "team-project-board.md",
         "prompt-ops.md",
         "decision-log.md",
     ] {

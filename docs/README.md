@@ -16,6 +16,11 @@ If you are new to `mdmind`:
 - [TUI_WORKFLOWS.md](/Users/jason/Documents/Programming/mdmind/docs/TUI_WORKFLOWS.md)
 - [USING_MDMIND_AS_OUTLINER.md](/Users/jason/Documents/Programming/mdmind/docs/USING_MDMIND_AS_OUTLINER.md)
 
+If you want to use `mdmind` with AI agents:
+
+- [AGENT_USAGE.md](/Users/jason/Documents/Programming/mdmind/docs/AGENT_USAGE.md)
+- [SKILLS.md](/Users/jason/Documents/Programming/mdmind/docs/SKILLS.md)
+
 If you want a product-status map instead of a tutorial:
 
 - [product/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/README.md)
@@ -28,6 +33,8 @@ Core map language:
 - [IDS_AND_DEEP_LINKS.md](/Users/jason/Documents/Programming/mdmind/docs/IDS_AND_DEEP_LINKS.md)
 - [CROSS_LINKS_AND_BACKLINKS.md](/Users/jason/Documents/Programming/mdmind/docs/CROSS_LINKS_AND_BACKLINKS.md)
 - [NODE_DETAILS.md](/Users/jason/Documents/Programming/mdmind/docs/NODE_DETAILS.md)
+- [AGENT_USAGE.md](/Users/jason/Documents/Programming/mdmind/docs/AGENT_USAGE.md)
+- [SKILLS.md](/Users/jason/Documents/Programming/mdmind/docs/SKILLS.md)
 
 Day-to-day usage:
 

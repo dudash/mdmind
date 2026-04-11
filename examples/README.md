@@ -5,9 +5,10 @@ These example maps are meant to be opened, searched, filtered, and deep-linked, 
 Each one demonstrates a different style of thinking in `mdmind`:
 
 - product and roadmap planning
-- team execution and ownership tracking
+- meeting notes and action follow-up
 - prompt iteration and evaluation
 - decision logging
+- agent-to-human research handoff
 - studio operating maps
 - game worldbuilding and quest architecture
 - novel research, themes, and drafting
@@ -23,6 +24,8 @@ mdm view examples/lantern-studio-map.md#lantern/execution/now
 
 - Want the smallest starter example: [demo.md](./demo.md)
 - Want realistic product planning: [product-status.md](./product-status.md)
+- Want meeting notes that still feel like an outliner: [meeting-notes-action-map.md](./meeting-notes-action-map.md)
+- Want an agent-generated handoff shape: [agent-research-handoff.md](./agent-research-handoff.md)
 - Want a lived-in studio operating map: [lantern-studio-map.md](./lantern-studio-map.md)
 - Want worldbuilding and quests: [game-world-moonwake.md](./game-world-moonwake.md)
 - Want writing and research: [novel-research-writing-map.md](./novel-research-writing-map.md)
@@ -65,28 +68,28 @@ mdm kv examples/product-status.md --keys status,owner,priority --plain
 mdm links examples/product-status.md --plain
 ```
 
-### `team-project-board.md`
+### `meeting-notes-action-map.md`
 
-A team delivery board with lanes, owner slices, rituals, and a few useful recurring query ideas.
+A classic meeting-notes outline with agenda, discussion notes, decisions, action items, and parking-lot topics.
 
 What it demonstrates:
 
-- execution lanes like ready, active, blocked, and done
-- `@owner:*` workflows
-- operational query recipes embedded in the map itself
+- an OmniOutliner-style use case that still benefits from tags, metadata, ids, and cross-links
+- longer discussion notes attached with detail lines instead of bloating row labels
+- turning one meeting into a reusable action surface instead of a dead transcript
 
 Good first jump:
 
 ```bash
-mdm view examples/team-project-board.md#example/team/lanes/active
+mdm view examples/meeting-notes-action-map.md#meeting/actions
 ```
 
 Good CLI probes:
 
 ```bash
-mdm find examples/team-project-board.md "@owner:jason" --plain
-mdm find examples/team-project-board.md "#blocked" --plain
-mdm kv examples/team-project-board.md --keys owner,status,priority,blocked_by --plain
+mdm find examples/meeting-notes-action-map.md "@owner:maya" --plain
+mdm find examples/meeting-notes-action-map.md "#decision" --plain
+mdm kv examples/meeting-notes-action-map.md --keys owner,status,priority,date --plain
 ```
 
 ### `prompt-ops.md`
@@ -129,6 +132,31 @@ Good CLI probes:
 mdm tags examples/decision-log.md --plain
 mdm links examples/decision-log.md --plain
 mdm find examples/decision-log.md "tradeoff" --plain
+```
+
+### `agent-research-handoff.md`
+
+A research synthesis map shaped the way an agent might hand off work to a human operator.
+
+What it demonstrates:
+
+- agent-friendly map structure without over-structuring every branch
+- themes, evidence, open questions, and actions in one file
+- ids, details, and a few meaningful relations
+- a practical bridge from agent output to human cleanup in `mdmind`
+
+Good first jump:
+
+```bash
+mdm view examples/agent-research-handoff.md#agent-handoff/themes
+```
+
+Good CLI probes:
+
+```bash
+mdm find examples/agent-research-handoff.md "@source:interview" --plain
+mdm find examples/agent-research-handoff.md "#todo @status:active" --plain
+mdm relations examples/agent-research-handoff.md#agent-handoff/themes/ownership --plain
 ```
 
 ### `lantern-studio-map.md`
@@ -222,6 +250,6 @@ If you are trying to learn the product quickly:
 
 1. Open one example in `mdmind`.
 2. Use `:` or `Ctrl+P` to jump by branch name, id, `#tag`, or `@metadata`.
-3. Use `/` and `f` to compare freeform queries with facet browsing.
+3. Use `/` and `b` to compare freeform queries with browse-driven discovery.
 4. Use `m` after narrowing the working set to see how the mindmap reflects the same scope.
 5. Use the same file in `mdm` with `find`, `tags`, `kv`, and `links` to see the read-only CLI model.

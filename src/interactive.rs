@@ -441,6 +441,7 @@ impl PaletteItemKind {
 enum HelpTopic {
     StartHere,
     Outliner,
+    Agents,
     Navigation,
     Editing,
     Details,
@@ -460,6 +461,7 @@ impl HelpTopic {
         match self {
             Self::StartHere => "Start Here",
             Self::Outliner => "Using mdmind As An Outliner",
+            Self::Agents => "Using mdmind With Agents",
             Self::Navigation => "Navigation",
             Self::Editing => "Editing",
             Self::Details => "Node Details",
@@ -480,6 +482,9 @@ impl HelpTopic {
             Self::StartHere => "Learn the core mental model and the first few things worth trying.",
             Self::Outliner => {
                 "Use mdmind as a calm, keyboard-first outliner before you think about maps."
+            }
+            Self::Agents => {
+                "Use mdmind as a structured output format for agent planning, synthesis, and handoff."
             }
             Self::Navigation => "Move through the tree, jump quickly, and open major overlays.",
             Self::Editing => "Add, rename, delete, and reshape branches without leaving the map.",
@@ -512,6 +517,9 @@ impl HelpTopic {
             Self::Outliner => {
                 "User guide for people who think in outlines, notes, plans, and writing structures."
             }
+            Self::Agents => {
+                "User guide for asking agents to create, validate, and hand off mdmind maps."
+            }
             Self::Navigation => "User guide plus movement keys and large-map wayfinding tips.",
             Self::Editing => "User guide plus editing keys, undo safety, and restructuring tips.",
             Self::Details => {
@@ -538,6 +546,9 @@ impl HelpTopic {
             }
             Self::Outliner => {
                 "outliner outline outlining rows hierarchy notes nested notes planning writing research checklist omnioutliner sections branches details minimal mode reading"
+            }
+            Self::Agents => {
+                "agent agents ai llm assistant codex claude chatgpt workflow prompt prompts handoff synthesis planning research structured output skills skill validation json export"
             }
             Self::Navigation => {
                 "navigate movement arrows focus jump root open id palette hotkeys relations backlinks related cross links"
@@ -581,6 +592,9 @@ impl HelpTopic {
             }
             Self::Outliner => {
                 "You can use mdmind as an outliner long before you care about visual mind maps. The tree is the real working surface, and features like details, focused views, minimal mode, and search all support that outline-first workflow."
+            }
+            Self::Agents => {
+                "mdmind works well as an agent output format when the result needs to stay useful for a human later. The tree keeps structure obvious, inline syntax keeps the map queryable, and mdm gives you validation and inspection tools before you hand the file off."
             }
             Self::Navigation => {
                 "Navigation in mdmind is tree-first. Stay in the outline while exploring, then use the palette or id jumps when the map gets too large to scroll comfortably."
@@ -632,6 +646,11 @@ impl HelpTopic {
                 "The simplest way to think about mdmind is as a structured outliner with better navigation, filtering, and long-term memory. One line is one row in the outline. Children create hierarchy. If you are used to nested notes, this should feel natural. The TUI just makes moving through that outline feel fast.",
                 "Node details make it practical for writing and research. Focused views make it practical for large plans. Minimal mode makes it calmer once you know the basics. None of that changes the core truth that the outline is the main tool.",
                 "The visual mindmap is optional. It is useful as a second lens, but you do not need it for normal outlining, planning, writing, or review work.",
+            ],
+            Self::Agents => &[
+                "Ask agents for native mdmind maps when you want a structured plan, research synthesis, writing outline, decision tree, or project breakdown that a human will keep working in. The format is better than a prose blob when branch structure, tags, metadata, ids, or cross-links actually matter.",
+                "Do not force every agent task into a map. Plain Markdown is still better for short prose answers, loose brainstorming, or temporary scratch notes that do not need long-term structure.",
+                "A good agent workflow is: generate the map, run mdm validate, inspect it with mdm view or mdm find, then open it in mdmind for human cleanup. If the output needs machine use later, mdm export --format json is the clean bridge.",
             ],
             Self::Navigation => &[
                 "The current focus is the center of the interface. The outline, focus card, and visual map all follow it, so plain arrow movement is enough for a lot of work.",
@@ -706,6 +725,26 @@ impl HelpTopic {
                     "Use the palette to switch to the quieter pro layout",
                 ),
                 ("/ and :", "Search the outline or jump straight to intent"),
+            ],
+            Self::Agents => &[
+                (
+                    "mdm init map.md --template product",
+                    "Start from a map scaffold instead of a blank file",
+                ),
+                (
+                    "mdm validate map.md",
+                    "Check that an agent-produced file is structurally valid",
+                ),
+                ("mdm view map.md", "Inspect the resulting tree from the CLI"),
+                (
+                    "mdm export map.md --format json",
+                    "Turn the map into structured JSON for another tool",
+                ),
+                (
+                    "mdm examples copy all",
+                    "Copy example maps locally for prompt and format references",
+                ),
+                ("?", "Open this help topic again when teaching the workflow"),
             ],
             Self::Navigation => &[
                 ("↑ / ↓", "Move through visible nodes"),
@@ -875,6 +914,12 @@ impl HelpTopic {
                 "Minimal mode plus Focus Branch or Subtree Only is usually the calmest outliner setup once your maps get larger.",
                 "Reading mode is the next emphasis layer after that. It expands the current branch inline into a calmer document-like reading surface without turning the outline into a separate editor.",
             ],
+            Self::Agents => &[
+                "Ask the agent for concise node labels first. Use detail lines only when a branch genuinely needs prose, rationale, or quoted material.",
+                "Prefer a few stable keys like @owner, @status, and [id:...] over lots of one-off metadata invented in one run.",
+                "Use mdm validate as the contract check before you trust a generated map.",
+                "If humans will keep editing the file, optimize for readable labels and stable ids, not maximal structure everywhere.",
+            ],
             Self::Navigation => &[
                 "If the tree starts feeling noisy, change view mode before you keep scrolling.",
                 "Use recent locations in the palette when you are bouncing between two branches repeatedly.",
@@ -945,6 +990,9 @@ impl HelpTopic {
             Self::Safety => Some("checkpoint"),
             Self::Details => Some("| This branch still depends on partner auth."),
             Self::Outliner => Some("Minimal mode + Focus Branch + node details"),
+            Self::Agents => {
+                Some("Turn these notes into an mdmind map with ids on durable branches.")
+            }
             Self::Syntax => Some("API Design #backend @status:todo @owner:mira"),
             Self::Ids => Some("API Design #backend [id:product/api-design]"),
             Self::Relations => Some("Launch Readiness [[rel:blocked-by->product/api-design]]"),
@@ -956,24 +1004,25 @@ impl HelpTopic {
         match self {
             Self::StartHere => 0,
             Self::Outliner => 1,
-            Self::Navigation => 2,
-            Self::Editing => 3,
-            Self::Details => 4,
-            Self::Search => 5,
-            Self::Views => 6,
-            Self::Palette => 7,
-            Self::Safety => 8,
-            Self::Syntax => 9,
-            Self::Ids => 10,
-            Self::Relations => 11,
-            Self::Themes => 12,
-            Self::Mindmap => 13,
+            Self::Agents => 2,
+            Self::Navigation => 3,
+            Self::Editing => 4,
+            Self::Details => 5,
+            Self::Search => 6,
+            Self::Views => 7,
+            Self::Palette => 8,
+            Self::Safety => 9,
+            Self::Syntax => 10,
+            Self::Ids => 11,
+            Self::Relations => 12,
+            Self::Themes => 13,
+            Self::Mindmap => 14,
         }
     }
 
     fn track_label(self) -> &'static str {
         match self {
-            Self::StartHere | Self::Outliner => "Basics",
+            Self::StartHere | Self::Outliner | Self::Agents => "Basics",
             Self::Navigation
             | Self::Editing
             | Self::Details
@@ -4075,6 +4124,7 @@ impl TuiApp {
         let mut topics = [
             HelpTopic::StartHere,
             HelpTopic::Outliner,
+            HelpTopic::Agents,
             HelpTopic::Navigation,
             HelpTopic::Editing,
             HelpTopic::Details,
@@ -7779,6 +7829,19 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
                     .to_string()
             }
         }
+        HelpTopic::Agents => {
+            if app
+                .editor
+                .current()
+                .is_some_and(|node| node.id.is_some() || !node.detail.is_empty())
+            {
+                "the current map already has some of the structure agents usually need: stable ids or attached details"
+                    .to_string()
+            } else {
+                "for agent-generated maps, ask for concise labels, a few stable metadata keys, and ids on durable branches"
+                    .to_string()
+            }
+        }
         HelpTopic::Navigation => {
             let breadcrumb = if app.editor.breadcrumb().is_empty() {
                 "(no focus)".to_string()
@@ -10815,8 +10878,9 @@ mod tests {
         let topics = app.help_topics("");
         assert_eq!(topics.first().copied(), Some(HelpTopic::StartHere));
         assert_eq!(topics.get(1).copied(), Some(HelpTopic::Outliner));
-        assert_eq!(topics.get(2).copied(), Some(HelpTopic::Navigation));
-        assert_eq!(topics.get(3).copied(), Some(HelpTopic::Editing));
+        assert_eq!(topics.get(2).copied(), Some(HelpTopic::Agents));
+        assert_eq!(topics.get(3).copied(), Some(HelpTopic::Navigation));
+        assert_eq!(topics.get(4).copied(), Some(HelpTopic::Editing));
         assert!(
             topics.iter().position(|topic| *topic == HelpTopic::Palette)
                 < topics.iter().position(|topic| *topic == HelpTopic::Themes),

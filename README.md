@@ -127,6 +127,7 @@ If you are new:
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
 - [docs/TUI_WORKFLOWS.md](docs/TUI_WORKFLOWS.md)
 - [docs/USING_MDMIND_AS_OUTLINER.md](docs/USING_MDMIND_AS_OUTLINER.md)
+- [docs/AGENT_USAGE.md](docs/AGENT_USAGE.md)
 
 If you want specific features:
 
@@ -134,6 +135,7 @@ If you want specific features:
 - [docs/IDS_AND_DEEP_LINKS.md](docs/IDS_AND_DEEP_LINKS.md)
 - [docs/CROSS_LINKS_AND_BACKLINKS.md](docs/CROSS_LINKS_AND_BACKLINKS.md)
 - [docs/NODE_DETAILS.md](docs/NODE_DETAILS.md)
+- [docs/SKILLS.md](docs/SKILLS.md)
 - [docs/SAFETY_AND_HISTORY.md](docs/SAFETY_AND_HISTORY.md)
 - [docs/TEMPLATES.md](docs/TEMPLATES.md)
 - [examples/README.md](examples/README.md)

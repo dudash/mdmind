@@ -1,0 +1,87 @@
+- Neighborhood Climate Research Handoff #guide @surface:agent-output [id:agent-handoff]
+  - Read Me First #guide #beginner [id:agent-handoff/start]
+    - What this map is
+      - a research synthesis map shaped the way an agent might hand work off to a human
+      - it keeps the structure tight: themes, evidence, open questions, and next actions
+      - it uses ids, details, metadata, and a few cross-links without turning every branch into a schema
+    - Good first jumps #reference
+      - thesis: agent-handoff/thesis
+      - themes: agent-handoff/themes
+      - source evidence: agent-handoff/evidence
+      - next actions: agent-handoff/actions
+    - Good first filters #reference
+      - query #todo @status:active
+      - query @source:interview
+      - query #question
+      - query @owner:jason
+  - Brief #guide [id:agent-handoff/brief]
+    - User ask #reference
+      - explain why neighborhood cooling projects stall after pilot funding
+      - turn the findings into something a human operator can refine
+    - Output contract #reference
+      - keep labels short
+      - add ids only to durable branches
+      - attach quotes and nuance as details
+      - create action branches only where the evidence supports them
+  - Thesis #guide [id:agent-handoff/thesis]
+    - Core conclusion #idea @status:active [id:agent-handoff/thesis/core]
+      | The strongest pattern is not lack of ideas. It is loss of local operating capacity after the pilot phase ends.
+      | Money often arrives as a demonstration grant, but staff time, maintenance ownership, and neighborhood trust are expected to appear later.
+      - most projects fail in the transition from launch team to steady operator
+      - the technical fix is usually simpler than the stewardship model
+      - public reporting tends to reward openings, not maintenance
+  - Themes #guide [id:agent-handoff/themes]
+    - Ownership gap #theme [id:agent-handoff/themes/ownership] [[rel:supported-by->agent-handoff/evidence/interviews]] [[rel:drives->agent-handoff/actions/operating-model]]
+      | Interview-heavy finding. Everyone can describe the pilot team, but almost nobody can name the long-term owner after year one.
+      - maintenance responsibility is ambiguous after initial rollout
+      - city staff and neighborhood partners often assume the other side will absorb the work
+    - Trust is hyperlocal #theme [id:agent-handoff/themes/trust] [[rel:supported-by->agent-handoff/evidence/case-studies]] [[rel:shapes->agent-handoff/actions/community-brief]]
+      | Residents respond best when cooling spaces are run by known local institutions instead of distant seasonal programs.
+      - sign-up rates improve when the host is already familiar
+      - communication fails when outreach sounds emergency-only instead of year-round
+    - Measurement drift #theme [id:agent-handoff/themes/measurement] [[rel:supported-by->agent-handoff/evidence/data-review]]
+      - funding narratives emphasize attendance spikes during launch
+      - fewer programs track repeat usage, upkeep, or volunteer fatigue
+      - weak measurement makes strong renewal cases harder
+    - Procurement friction #theme [id:agent-handoff/themes/procurement] [[rel:connected-to->agent-handoff/questions/purchasing]]
+      - replacement parts and seasonal materials are slow to reorder
+      - simple breakages create visible trust failures
+  - Evidence #guide [id:agent-handoff/evidence]
+    - Interview cluster #reference @source:interview [id:agent-handoff/evidence/interviews]
+      - program managers describe year-two staffing as the real failure point
+      - neighborhood partners resent being called co-owners only after grant money is spent
+      - maintenance tasks are often not budgeted as named roles
+    - Case study cluster #reference @source:case-study [id:agent-handoff/evidence/case-studies]
+      - libraries and churches outperform temporary pop-up operators on repeat use
+      - cooling sites tied to existing community rituals see steadier attendance
+      - visibility matters less than predictability after the first season
+    - Data review #reference @source:report [id:agent-handoff/evidence/data-review]
+      - usage dashboards often stop after the pilot window
+      - upkeep and closure reasons are inconsistently recorded
+      - renewal memos over-index on new-site count
+  - Open Questions #question [id:agent-handoff/questions]
+    - Purchasing delays #question @status:active [id:agent-handoff/questions/purchasing]
+      - which replacement items fail most often and how long do they take to reorder
+    - Volunteer burden #question @status:todo [id:agent-handoff/questions/volunteers]
+      - where does unpaid coordination quietly substitute for formal staffing
+    - Seasonal messaging #question @status:todo [id:agent-handoff/questions/messaging]
+      - how often do residents hear about the site outside emergency heat windows
+  - Recommended Actions #guide [id:agent-handoff/actions]
+    - Write a year-two operating model #todo @status:active @owner:jason [id:agent-handoff/actions/operating-model] [[rel:answers->agent-handoff/themes/ownership]]
+      | Do this before adding more locations. The map suggests capacity is the bottleneck, not imagination.
+      - define named maintenance roles
+      - define replacement budget ownership
+      - define local host commitments
+    - Build a community host brief #todo @status:active @owner:jason [id:agent-handoff/actions/community-brief] [[rel:answers->agent-handoff/themes/trust]]
+      - list what makes a host institution credible
+      - explain what support does and does not come from the city
+      - include a plain-language seasonal operating calendar
+    - Tighten recurring measurement #todo @status:todo @owner:team [id:agent-handoff/actions/measurement]
+      - track repeat usage, closures, and upkeep requests
+      - make renewal memos compare operating stability, not just launch count
+  - Prompt Notes #reference [id:agent-handoff/prompt]
+    - good agent prompt
+      - synthesize these notes into an mdmind map with themes, evidence, open questions, and next actions
+      - keep labels concise
+      - use details only for nuance or direct quote-like findings
+      - add ids on durable branches only

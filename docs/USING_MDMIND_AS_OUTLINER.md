@@ -101,3 +101,4 @@ But it should feel like a second lens, not the main tool.
 - [NODE_DETAILS.md](NODE_DETAILS.md)
 - [PALETTE_AND_HELP.md](PALETTE_AND_HELP.md)
 - [USER_GUIDE.md](USER_GUIDE.md)
+- [AGENT_USAGE.md](AGENT_USAGE.md)

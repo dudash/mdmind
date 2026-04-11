@@ -24,6 +24,18 @@ const ASSETS: &[ExampleAsset] = &[
         contents: include_str!("../examples/product-status.md"),
     },
     ExampleAsset {
+        name: "meeting-notes-action-map",
+        file_name: "meeting-notes-action-map.md",
+        description: "Meeting notes, decisions, and action follow-up in an outliner-style map.",
+        contents: include_str!("../examples/meeting-notes-action-map.md"),
+    },
+    ExampleAsset {
+        name: "agent-research-handoff",
+        file_name: "agent-research-handoff.md",
+        description: "Agent-to-human research synthesis with themes, evidence, questions, and actions.",
+        contents: include_str!("../examples/agent-research-handoff.md"),
+    },
+    ExampleAsset {
         name: "lantern-studio-map",
         file_name: "lantern-studio-map.md",
         description: "A larger operating map for a fictional live experience team.",
@@ -40,12 +52,6 @@ const ASSETS: &[ExampleAsset] = &[
         file_name: "novel-research-writing-map.md",
         description: "Writing and research workflow with characters, themes, chapters, and notes.",
         contents: include_str!("../examples/novel-research-writing-map.md"),
-    },
-    ExampleAsset {
-        name: "team-project-board",
-        file_name: "team-project-board.md",
-        description: "Cross-owner project tracking and execution planning.",
-        contents: include_str!("../examples/team-project-board.md"),
     },
     ExampleAsset {
         name: "prompt-ops",

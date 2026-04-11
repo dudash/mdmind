@@ -1,0 +1,75 @@
+- Harbor Team Weekly Notes #guide @surface:outliner @cadence:weekly [id:meeting]
+  - Read Me First #guide #beginner [id:meeting/start]
+    - What this map is
+      - a classic outliner-style meeting file with agenda, notes, decisions, action items, and parking lot topics
+      - it is intentionally practical for people who think in OmniOutliner or nested meeting notes
+      - the detail lines show where mdmind can hold longer discussion notes without bloating the outline itself
+    - Good first jumps #reference
+      - agenda: meeting/agenda
+      - decisions: meeting/decisions
+      - actions: meeting/actions
+      - next week: meeting/next-week
+    - Good first filters #reference
+      - query #todo @status:active
+      - query @owner:maya
+      - query #decision
+      - query #parking-lot
+  - Meeting Info #reference [id:meeting/info]
+    - Date @date:2026-04-11
+    - Duration @duration:45m
+    - Participants @people:maya,jason,leah,theo
+    - Goal
+      - align on launch blockers, decide the handout format, and leave with named owners
+  - Agenda #guide [id:meeting/agenda]
+    - Launch blockers #agenda-item [id:meeting/agenda/blockers]
+    - Print handout decision #agenda-item [id:meeting/agenda/handout]
+    - Neighborhood partner updates #agenda-item [id:meeting/agenda/partners]
+    - Next-week prep #agenda-item [id:meeting/agenda/next-week]
+  - Discussion Notes #guide [id:meeting/notes]
+    - Launch blockers #note [id:meeting/notes/blockers]
+      | Theo still does not have the final accessibility escort timing from the venue side.
+      | The real risk is not the escort itself. It is printing guest guidance before that timing is final.
+      - weather backup venue quote still missing
+      - volunteer arrival window is mostly settled
+      - signage order can proceed without the escort answer
+    - Print handout #note [id:meeting/notes/handout]
+      | Team prefers a folded one-page field card over a booklet.
+      | Guests need a low-light friendly object, not a dense packet they will stop reading halfway through.
+      - keep typography large
+      - keep route numbering obvious
+      - avoid glossy stock
+    - Partner updates #note [id:meeting/notes/partners]
+      - archive venue confirmed the rehearsal walk
+      - ferry office still wants final headcount by Tuesday
+      - neighborhood bakery is open to late-night pickup tie-in
+  - Decisions #guide [id:meeting/decisions]
+    - Use the folded field card format #decision @status:done [id:meeting/decisions/field-card]
+      - rationale
+        - easier to use in low light
+        - faster to update before print cutoff
+        - feels more like part of the experience than a brochure
+    - Wait to print escort timing #decision @status:done [id:meeting/decisions/escort]
+      - rationale
+        - better to leave that line off the first print than print something wrong
+    - Keep bakery tie-in as optional launch-weekend add-on #decision @status:done [id:meeting/decisions/bakery]
+      - rationale
+        - useful flavor, not core path risk
+  - Action Items #guide [id:meeting/actions]
+    - Draft field card copy #todo @status:active @owner:maya @priority:high [id:meeting/actions/field-card-copy] [[rel:follows->meeting/decisions/field-card]]
+      - first draft by Monday noon
+      - route names and cue numbering must match steward guide
+    - Confirm escort timing fallback language #todo @status:active @owner:theo @priority:high [id:meeting/actions/escort-copy] [[rel:follows->meeting/decisions/escort]]
+      - if timing is still unresolved by Tuesday, write placeholder language instead
+    - Update rehearsal walkthrough sheet #todo @status:todo @owner:jason [id:meeting/actions/rehearsal-sheet]
+      - add the archive venue arrival note
+      - add the weather-call decision point
+    - Price the bakery add-on cleanly #todo @status:todo @owner:leah [id:meeting/actions/bakery]
+      - avoid adding complexity to base ticket ops
+  - Parking Lot #guide [id:meeting/parking]
+    - merch table idea #parking-lot @status:todo
+    - after-party playlist #parking-lot @status:todo
+    - printed neighborhood map keepsake #parking-lot @status:todo
+  - Next Week #guide [id:meeting/next-week]
+    - Bring final field card draft
+    - Confirm venue timing answer or fallback copy
+    - Decide whether bakery tie-in is in scope for launch week

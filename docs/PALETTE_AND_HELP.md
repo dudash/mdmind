@@ -84,6 +84,7 @@ If you are new:
 
 - start with `Start Here`
 - then read `Using mdmind As An Outliner` if that framing fits how you work
+- read `Using mdmind With Agents` if you expect an agent to generate maps or outlines for you
 - then read `Navigation`, `Editing`, and `Search And Filters`
 - treat `Ids And Deep Links` and `Relations And Backlinks` as power-feature guides you can adopt later
 
@@ -115,3 +116,4 @@ Keeping them close makes the app easier to learn because the same user who types
 - [QUERY_LANGUAGE.md](QUERY_LANGUAGE.md)
 - [IDS_AND_DEEP_LINKS.md](IDS_AND_DEEP_LINKS.md)
 - [CROSS_LINKS_AND_BACKLINKS.md](CROSS_LINKS_AND_BACKLINKS.md)
+- [AGENT_USAGE.md](AGENT_USAGE.md)
