@@ -32,6 +32,8 @@ Editing and safety:
 Surface and guidance:
 
 - [built-in-help.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/built-in-help.md)
+- [outliner-guides-and-help.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/outliner-guides-and-help.md)
 - [themes-and-minimal-mode.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/themes-and-minimal-mode.md)
 - [visual-mindmap.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/visual-mindmap.md)
 - [templates-and-examples.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/templates-and-examples.md)
+- [release-installers-and-homebrew.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/release-installers-and-homebrew.md)

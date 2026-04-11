@@ -17,11 +17,11 @@ Use the product shelves for the current picture:
 - in progress: [docs/product/features/inwork/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/inwork/README.md)
 - still future: [docs/product/features/future/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/README.md)
 
-## In Work
+## Recently Closed
 
-- docs site and adoption pass: [docs/product/features/inwork/docs-site-and-adoption.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/inwork/docs-site-and-adoption.md)
-- outliner guides and help: [docs/product/features/inwork/outliner-guides-and-help.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/inwork/outliner-guides-and-help.md)
-- richer export: [docs/product/features/inwork/richer-export-and-import.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/inwork/richer-export-and-import.md)
+- docs site and adoption is now future-facing docs-site work, not an active implementation shelf item
+- outliner guides and help is now shipped and tracked in the finished shelf
+- richer export now includes filtered export through `mdm export --query`
 
 ## Still Future
 

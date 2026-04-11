@@ -12,6 +12,7 @@ If a feature is here, it should not be described anywhere else as already real.
 
 ## Larger Future Work
 
+- [docs-site-and-adoption.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/docs-site-and-adoption.md)
 - [import-and-ingestion.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/import-and-ingestion.md)
 - [spatial-canvas.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/spatial-canvas.md)
 - [template-variables.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/template-variables.md)

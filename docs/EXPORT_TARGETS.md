@@ -22,6 +22,7 @@ Extend `mdm export` with a format flag:
 - `mdm export map.md --format mermaid`
 - `mdm export map.md --format opml`
 - `mdm export map.md#product/tasks --format mermaid`
+- `mdm export map.md --query "#todo @status:active" --format json`
 
 For diagram-like targets, expose a few view choices:
 
@@ -33,7 +34,7 @@ Today:
 
 - full tree works by default
 - current subtree works by exporting a deep link target such as `map.md#node/id`
-- filtered subtree is still future work
+- filtered subtree works with `--query`
 
 ## Mapping Rules
 
@@ -63,7 +64,6 @@ Phase 1:
 
 Phase 2:
 
-- filtered exports
 - better formatting options
 
 ## Risks

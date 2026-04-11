@@ -27,6 +27,17 @@ pub fn find_matches(document: &Document, query: &str) -> Vec<SearchMatch> {
     matches
 }
 
+pub fn filter_document(document: &Document, query: &str) -> Option<Document> {
+    let query = FilterQuery::parse(query)?;
+    Some(Document {
+        nodes: document
+            .nodes
+            .iter()
+            .filter_map(|node| filter_node(node, &query))
+            .collect(),
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FilterQuery {
     raw: String,
@@ -414,6 +425,22 @@ fn matching_detail_snippet(query: &FilterQuery, node: &Node) -> Option<String> {
         .cloned()
 }
 
+fn filter_node(node: &Node, query: &FilterQuery) -> Option<Node> {
+    let children = node
+        .children
+        .iter()
+        .filter_map(|child| filter_node(child, query))
+        .collect::<Vec<_>>();
+
+    if query.matches(node) || !children.is_empty() {
+        let mut node = node.clone();
+        node.children = children;
+        Some(node)
+    } else {
+        None
+    }
+}
+
 fn find_relation_target_breadcrumb(document: &Document, target: &str) -> Option<String> {
     let mut resolved = None;
     walk_nodes(&document.nodes, &mut Vec::new(), &mut |node, breadcrumb| {
@@ -437,5 +464,28 @@ where
         visitor(node, breadcrumb);
         walk_nodes(&node.children, breadcrumb, visitor);
         breadcrumb.pop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::parse_document;
+
+    use super::filter_document;
+
+    #[test]
+    fn filter_document_keeps_matching_nodes_and_their_ancestors() {
+        let parsed = parse_document(
+            "- Root [id:root]\n  - Active Work #todo @status:active [id:root/active]\n    - Ship the field card\n  - Done Work @status:done [id:root/done]\n",
+        );
+
+        let filtered =
+            filter_document(&parsed.document, "#todo").expect("query should parse successfully");
+
+        assert_eq!(filtered.nodes.len(), 1);
+        assert_eq!(filtered.nodes[0].text, "Root");
+        assert_eq!(filtered.nodes[0].children.len(), 1);
+        assert_eq!(filtered.nodes[0].children[0].text, "Active Work");
+        assert!(filtered.nodes[0].children[0].children.is_empty());
     }
 }

@@ -187,6 +187,37 @@ fn export_outputs_opml() {
 }
 
 #[test]
+fn export_supports_query_filtered_scope() {
+    let output = run_mdm(&[
+        "export",
+        &example("meeting-notes-action-map.md"),
+        "--query",
+        "#todo @owner:maya",
+        "--format",
+        "json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let value: serde_json::Value =
+        serde_json::from_str(&stdout(&output)).expect("export should be valid json");
+
+    let root = &value["nodes"][0];
+    assert_eq!(root["text"], "Harbor Team Weekly Notes");
+    let children = root["children"]
+        .as_array()
+        .expect("children should serialize as an array");
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0]["text"], "Action Items");
+    assert_eq!(children[0]["children"][0]["text"], "Draft field card copy");
+    assert_eq!(
+        children[0]["children"]
+            .as_array()
+            .expect("children should serialize as an array")
+            .len(),
+        1
+    );
+}
+
+#[test]
 fn validate_fails_with_exit_code_one_for_invalid_maps() {
     let output = run_mdm(&["validate", &fixture("invalid.md")]);
     assert_eq!(output.status.code(), Some(1));

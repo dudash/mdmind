@@ -29,6 +29,7 @@ What export already ships:
 - Mermaid
 - OPML
 - subtree export through deep links
+- filtered export through `--query`
 
 Why it matters:
 
@@ -43,4 +44,4 @@ Related docs:
 - [README.md](/Users/jason/Documents/Programming/mdmind/README.md)
 - [QUERY_LANGUAGE.md](/Users/jason/Documents/Programming/mdmind/docs/QUERY_LANGUAGE.md)
 - [TEMPLATES.md](/Users/jason/Documents/Programming/mdmind/docs/TEMPLATES.md)
-- [richer-export-and-import.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/inwork/richer-export-and-import.md)
+- [EXPORT_TARGETS.md](/Users/jason/Documents/Programming/mdmind/docs/EXPORT_TARGETS.md)

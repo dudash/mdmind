@@ -17,8 +17,8 @@ use crate::examples::{
 use crate::export::export_document;
 use crate::interactive::run_interactive;
 use crate::query::{
-    find_matches, link_entries, metadata_rows, relation_entries, relation_entries_for_path,
-    tag_counts,
+    filter_document, find_matches, link_entries, metadata_rows, relation_entries,
+    relation_entries_for_path, tag_counts,
 };
 use crate::render::{
     render_find, render_find_plain, render_links, render_links_plain, render_metadata,
@@ -33,7 +33,7 @@ use crate::templates::TemplateKind;
     version,
     about = "Inspect and validate local markdown-like thought maps.",
     long_about = "mdm is the CLI for local-first structured maps. It reads plain-text tree files, renders them for humans, and exports machine-friendly output when you ask for --json or --plain.",
-    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm open ideas.md#product/api-design"
+    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -110,6 +110,8 @@ enum Commands {
             value_parser = PossibleValuesParser::new(["json", "mermaid", "opml"])
         )]
         format: String,
+        #[arg(long)]
+        query: Option<String>,
     },
     #[command(about = "Create a new map from a starter template.")]
     Init {
@@ -334,9 +336,26 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
 
             Ok(())
         }
-        Commands::Export { target, format } => {
+        Commands::Export {
+            target,
+            format,
+            query,
+        } => {
             let loaded = load_document(&target).map_err(CliError::from_app)?;
             let document = select_document(&loaded).map_err(CliError::from_app)?;
+            let document = if let Some(query) = query.as_deref() {
+                let filtered = filter_document(&document, query)
+                    .ok_or_else(|| CliError::runtime("Export query must not be empty."))?;
+                if filtered.nodes.is_empty() {
+                    return Err(CliError::runtime(format!(
+                        "No nodes matched export query '{}'.",
+                        query
+                    )));
+                }
+                filtered
+            } else {
+                document
+            };
             println!(
                 "{}",
                 export_document(&document, &format).map_err(CliError::runtime)?

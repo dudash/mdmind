@@ -1,18 +1,13 @@
 # In-Work Features
 
-These areas already have meaningful shipped pieces, but the final product story is still moving.
+There are no major product features currently parked in the `inwork` shelf.
 
-This is the shelf for “real, but not settled yet.”
+Recent items were either:
 
-## Current Focus Areas
+- finished and moved to the shipped shelf
+- or clarified as future work instead of active implementation
 
-- [outliner-guides-and-help.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/inwork/outliner-guides-and-help.md)
-- [release-installers-and-homebrew.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/inwork/release-installers-and-homebrew.md)
-- [richer-export-and-import.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/inwork/richer-export-and-import.md)
-- [docs-site-and-adoption.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/inwork/docs-site-and-adoption.md)
+So for now, read the shelves like this:
 
-## How To Read This Shelf
-
-- expect shipped pieces
-- do not assume the naming, surface, or delivery shape is final
-- use these docs to understand where the product is still being actively clarified
+- [finished/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/README.md) for what ships now
+- [future/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/README.md) for the next real capability gaps
