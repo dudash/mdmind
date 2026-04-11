@@ -14,8 +14,7 @@ What ships today:
 
 - a persisted per-map reading mode setting
 - palette toggle and preview
-- a larger calmer detail reader pane on the right
-- placeholder guidance even when the current node has no details yet
+- inline expansion of the selected node into a larger calmer reading block inside the outline
 - good pairing with Focus Branch, Subtree Only, and minimal mode
 
 Why it matters:

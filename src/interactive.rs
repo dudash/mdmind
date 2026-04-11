@@ -5589,7 +5589,7 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
             };
             let mut lines = Vec::new();
             let mut spans = Vec::new();
-            let show_tags = !row.tags.is_empty();
+            let show_tags = !row.tags.is_empty() && (!minimal || is_selected || row.matched);
             let scope_role = if scope_attention > 0 {
                 scope_handoff_role(&row.path, &scope_root, app.view_mode)
             } else {
@@ -6073,164 +6073,45 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
-fn outline_inline_reading_lines(app: &TuiApp, row: &VisibleRow, width: u16) -> Vec<Line<'static>> {
+fn outline_inline_reading_lines(app: &TuiApp, row: &VisibleRow, _width: u16) -> Vec<Line<'static>> {
     let palette = active_palette();
-    let minimal = minimal_mode_enabled();
     let Some(node) = get_node(&app.editor.document().nodes, &row.path) else {
         return Vec::new();
     };
-    let indent = " ".repeat(row.depth * 2 + 4);
-    let breadcrumb = if app.editor.breadcrumb().is_empty() {
-        "(no focus)".to_string()
-    } else {
-        app.editor.breadcrumb().join(" / ")
-    };
-    let mut lines = vec![
-        Line::default(),
-        prefixed_line(
-            &indent,
-            vec![
-                Span::styled("path ", Style::default().fg(palette.muted)),
-                Span::styled(breadcrumb, Style::default().fg(palette.sky)),
-            ],
-        ),
-    ];
-
-    if !node.detail.is_empty() {
-        lines.push(prefixed_line(
-            &indent,
-            vec![
-                Span::styled("attached notes ", Style::default().fg(palette.muted)),
-                Span::styled(
-                    detail_prompt_summary(&node.detail.join("\n")),
-                    Style::default().fg(palette.sky),
-                ),
-                if let Some(id) = &node.id {
-                    Span::styled(format!("  [id:{id}]"), Style::default().fg(palette.muted))
-                } else {
-                    Span::raw("")
-                },
-            ],
-        ));
-    } else {
-        lines.push(prefixed_line(
-            &indent,
-            vec![Span::styled(
-                "No attached notes on this branch yet. Press d to add rationale, quotes, scene notes, or research.",
-                Style::default().fg(palette.muted),
-            )],
-        ));
-    }
-
-    if !node.tags.is_empty() || !node.metadata.is_empty() {
-        let mut meta = Vec::new();
-        if !node.tags.is_empty() {
-            meta.push(Span::styled(
-                node.tags.join(" "),
-                Style::default().fg(palette.accent),
-            ));
-        }
-        if !node.metadata.is_empty() {
-            if !meta.is_empty() {
-                meta.push(Span::raw("   "));
-            }
-            meta.push(Span::styled(
-                node.metadata
-                    .iter()
-                    .map(|entry| format!("@{}:{}", entry.key, entry.value))
-                    .collect::<Vec<_>>()
-                    .join(" "),
-                Style::default().fg(palette.warn),
-            ));
-        }
-        lines.push(prefixed_line(&indent, meta));
-    }
-
-    if !node.relations.is_empty() {
-        lines.push(prefixed_line(
-            &indent,
-            vec![
-                Span::styled("relations ", Style::default().fg(palette.muted)),
-                Span::styled(
-                    node.relations
-                        .iter()
-                        .map(|relation| relation.display_token())
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                    Style::default().fg(palette.sky),
-                ),
-            ],
-        ));
-    }
-
-    if let Some(filter) = &app.filter {
-        let filter_label = filter.query.raw().to_string();
-        lines.push(prefixed_line(
-            &indent,
-            vec![
-                Span::styled("filter ", Style::default().fg(palette.muted)),
-                Span::styled(filter_label, Style::default().fg(palette.warn)),
-                Span::raw("  "),
-                Span::styled(
-                    if current_node_matches_filter(app) {
-                        "direct match"
-                    } else {
-                        "context ancestor"
-                    },
-                    Style::default().fg(palette.muted),
-                ),
-            ],
-        ));
-    } else if app.view_mode == ViewMode::SubtreeOnly
-        && let Some(root) = app.subtree_root_node()
-    {
-        let scope_label = if root.text.is_empty() {
-            "(empty)".to_string()
-        } else {
-            root.text.clone()
-        };
-        lines.push(prefixed_line(
-            &indent,
-            vec![
-                Span::styled("scope ", Style::default().fg(palette.muted)),
-                Span::styled(scope_label, Style::default().fg(palette.warn)),
-                Span::raw("  "),
-                Span::styled("g", Style::default().fg(palette.accent)),
-                Span::raw(" returns here"),
-            ],
-        ));
-    }
-
-    lines.push(prefixed_line(
-        &indent,
-        vec![reading_rule_span(width, row.depth, palette)],
-    ));
-    if !minimal && !node.detail.is_empty() {
-        lines.push(prefixed_line(
-            &indent,
-            vec![Span::styled(
-                "Long-form notes stay attached to this branch while the rest of the outline stays in place around them.",
-                Style::default().fg(palette.muted),
-            )],
-        ));
-        lines.push(Line::default());
-    }
-
     if node.detail.is_empty() {
-        return lines;
+        return Vec::new();
     }
 
-    for detail_line in &node.detail {
+    let indent = " ".repeat(row.depth * 2 + 6);
+    let first_prefix = if ascii_accents_enabled() {
+        "\\- "
+    } else {
+        "╰─ "
+    };
+    let continuation_prefix = " ".repeat(first_prefix.chars().count());
+    let mut lines = Vec::new();
+
+    for (index, detail_line) in node.detail.iter().enumerate() {
         lines.push(prefixed_line(
             &indent,
-            vec![Span::styled(
-                if detail_line.is_empty() {
-                    " ".to_string()
-                } else {
-                    detail_line.clone()
-                },
-                Style::default().fg(palette.text),
-            )],
+            vec![
+                Span::styled(
+                    if index == 0 {
+                        first_prefix.to_string()
+                    } else {
+                        continuation_prefix.clone()
+                    },
+                    Style::default().fg(palette.border),
+                ),
+                Span::styled(
+                    if detail_line.is_empty() {
+                        " ".to_string()
+                    } else {
+                        detail_line.clone()
+                    },
+                    Style::default().fg(palette.text),
+                ),
+            ],
         ));
     }
     lines
@@ -6241,13 +6122,6 @@ fn prefixed_line(prefix: &str, spans: Vec<Span<'static>>) -> Line<'static> {
     prefixed.push(Span::raw(prefix.to_string()));
     prefixed.extend(spans);
     Line::from(prefixed)
-}
-
-fn reading_rule_span(width: u16, depth: usize, palette: Palette) -> Span<'static> {
-    let available = width.saturating_sub(2).max(12) as usize;
-    let glyph = if ascii_accents_enabled() { "-" } else { "─" };
-    let usable = available.saturating_sub(depth * 2 + 4).clamp(12, 72);
-    Span::styled(glyph.repeat(usable), Style::default().fg(palette.border))
 }
 
 #[allow(non_snake_case)]
@@ -11297,7 +11171,7 @@ mod tests {
     }
 
     #[test]
-    fn detail_reader_shows_a_placeholder_when_node_has_no_details() {
+    fn inline_reading_block_is_hidden_when_node_has_no_details() {
         let map_path = temp_map_path("reading-placeholder.md");
         let document = sample_document();
         let app = TuiApp::new(
@@ -11319,8 +11193,7 @@ mod tests {
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(rendered.contains("No attached notes on this branch yet."));
-        assert!(rendered.contains("Press d to add rationale"));
+        assert!(rendered.trim().is_empty());
 
         cleanup_sidecars(&map_path);
     }

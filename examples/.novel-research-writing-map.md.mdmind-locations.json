@@ -8,19 +8,8 @@
         ],
         "id": "glass-archive/plot"
       },
-      "visits": 48,
-      "last_seen": 342
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          5
-        ],
-        "id": "glass-archive/themes"
-      },
-      "visits": 37,
-      "last_seen": 343
+      "visits": 52,
+      "last_seen": 353
     },
     {
       "anchor": {
@@ -30,8 +19,19 @@
         ],
         "id": "glass-archive/places"
       },
-      "visits": 36,
-      "last_seen": 341
+      "visits": 39,
+      "last_seen": 354
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          5
+        ],
+        "id": "glass-archive/themes"
+      },
+      "visits": 39,
+      "last_seen": 345
     },
     {
       "anchor": {
@@ -48,24 +48,24 @@
       "anchor": {
         "path": [
           0,
+          4,
+          0
+        ],
+        "id": "glass-archive/plot/main"
+      },
+      "visits": 33,
+      "last_seen": 352
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
           7
         ],
         "id": "glass-archive/quotes"
       },
       "visits": 32,
       "last_seen": 336
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          4,
-          0
-        ],
-        "id": "glass-archive/plot/main"
-      },
-      "visits": 31,
-      "last_seen": 262
     },
     {
       "anchor": {

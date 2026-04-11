@@ -4,27 +4,109 @@
       "anchor": {
         "path": [
           0,
-          2,
-          1,
           1
         ],
-        "id": null
+        "id": "example/decisions/options"
       },
-      "visits": 7,
-      "last_seen": 152
+      "visits": 19,
+      "last_seen": 167
     },
     {
       "anchor": {
         "path": [
           0,
-          2,
+          0,
           1,
           0
         ],
         "id": null
       },
-      "visits": 7,
-      "last_seen": 151
+      "visits": 14,
+      "last_seen": 100
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          0
+        ],
+        "id": "example/decisions/options/generated"
+      },
+      "visits": 12,
+      "last_seen": 168
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          1
+        ],
+        "id": null
+      },
+      "visits": 12,
+      "last_seen": 99
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0
+        ],
+        "id": "example/decisions/current"
+      },
+      "visits": 11,
+      "last_seen": 162
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "id": null
+      },
+      "visits": 11,
+      "last_seen": 101
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          0
+        ],
+        "id": null
+      },
+      "visits": 11,
+      "last_seen": 98
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          2
+        ],
+        "id": "example/decisions/recommendation"
+      },
+      "visits": 10,
+      "last_seen": 171
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          1,
+          2
+        ],
+        "id": null
+      },
+      "visits": 9,
+      "last_seen": 102
     },
     {
       "anchor": {
@@ -32,125 +114,10 @@
           0,
           3
         ],
-        "id": "example/product/assignments"
+        "id": "example/decisions/evidence"
       },
-      "visits": 4,
-      "last_seen": 113
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          0,
-          0
-        ],
-        "id": "example/product/palette"
-      },
-      "visits": 4,
-      "last_seen": 64
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          2,
-          1
-        ],
-        "id": "example/product/features/discovery"
-      },
-      "visits": 3,
-      "last_seen": 150
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          1,
-          2
-        ],
-        "id": null
-      },
-      "visits": 3,
-      "last_seen": 70
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          1,
-          1
-        ],
-        "id": null
-      },
-      "visits": 3,
-      "last_seen": 69
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          1,
-          0
-        ],
-        "id": null
-      },
-      "visits": 3,
-      "last_seen": 68
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          1
-        ],
-        "id": "example/product/roadmap/next"
-      },
-      "visits": 3,
-      "last_seen": 67
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          0,
-          2
-        ],
-        "id": "example/product/docs"
-      },
-      "visits": 3,
-      "last_seen": 66
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          0,
-          1
-        ],
-        "id": "example/product/help"
-      },
-      "visits": 3,
-      "last_seen": 65
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          3,
-          1,
-          1
-        ],
-        "id": null
-      },
-      "visits": 2,
-      "last_seen": 109
+      "visits": 8,
+      "last_seen": 135
     },
     {
       "anchor": {
@@ -158,45 +125,71 @@
           0,
           4
         ],
-        "id": "example/product/lenses"
+        "id": "example/decisions/links"
       },
-      "visits": 2,
-      "last_seen": 108
+      "visits": 6,
+      "last_seen": 131
     },
     {
       "anchor": {
         "path": [
           0,
-          5
+          1,
+          2
         ],
-        "id": "example/product/questions"
+        "id": "example/decisions/options/manual"
       },
-      "visits": 2,
-      "last_seen": 107
+      "visits": 5,
+      "last_seen": 170
     },
     {
       "anchor": {
         "path": [
           0,
-          5,
+          1,
+          1
+        ],
+        "id": "example/decisions/options/aligned"
+      },
+      "visits": 5,
+      "last_seen": 169
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4,
           0
         ],
         "id": null
       },
-      "visits": 2,
-      "last_seen": 106
+      "visits": 4,
+      "last_seen": 130
     },
     {
       "anchor": {
         "path": [
           0,
-          5,
+          4,
           1
         ],
         "id": null
       },
-      "visits": 2,
-      "last_seen": 105
+      "visits": 4,
+      "last_seen": 129
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 149
     }
   ]
 }
