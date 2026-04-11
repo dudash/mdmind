@@ -32,6 +32,8 @@ If you are new:
 
 That is enough to become productive.
 
+If you naturally think in nested notes or outlines, also read [USING_MDMIND_AS_OUTLINER.md](USING_MDMIND_AS_OUTLINER.md). It frames the same product in a simpler outline-first way.
+
 ## Browsing The Tree
 
 The outline is still the main working surface.
@@ -49,6 +51,7 @@ Important movement keys:
 - `←` collapses a branch or moves to the parent
 - `→` expands a branch or enters the first child
 - `Enter` or `Space` toggles expansion
+- `z / Z` collapse or expand the current working scope
 - `g` jumps to the root
 
 If the tree starts feeling noisy, do not keep scrolling blindly. Change the visible working set first.
@@ -197,6 +200,19 @@ Poor times to open it:
 
 The tree should usually lead. The mindmap is the second lens.
 
+## Reading Heavy Branches
+
+If one node has longer notes or attached detail lines, use reading mode instead of changing the tree projection again.
+
+Good pattern:
+
+1. focus the branch you care about
+2. use `Focus Branch` or `Subtree Only` if needed
+3. turn on `reading mode` from the palette
+4. keep navigating in the outline while the selected node expands inline into a calmer document-style reader for its details
+
+That keeps the whole tree visible while making the long-form content feel more like a focused reading surface than a stack of utility panels.
+
 ## Safety Workflow
 
 The safety layer should make you faster, not slower.
@@ -217,6 +233,8 @@ If you want a quieter pro surface:
 1. open the palette
 2. choose the `Monograph` theme
 3. turn on `minimal mode`
+
+If you are working with longer notes, also turn on `reading mode`. That keeps the calm shell while making the selected node expand into a more useful inline reading surface.
 
 That setup gives you:
 

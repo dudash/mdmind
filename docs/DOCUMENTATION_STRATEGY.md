@@ -55,6 +55,10 @@ The repository should remain the source of truth for versioned docs tied to code
 
 Recommended structure:
 
+- `docs/product/README.md`: product docs hub organized by shipped, in-work, and future features
+- `docs/product/features/finished/`: concise writeups for major shipped capabilities
+- `docs/product/features/inwork/`: features with real shipped pieces but moving product scope
+- `docs/product/features/future/`: roadmap items that are not in the product yet
 - `README.md`: product pitch, install, quickstart, screenshots, and primary links
 - `docs/USER_GUIDE.md`: task-first user guide written as a real map that also works inside `mdmind`
 - `docs/TUI_WORKFLOWS.md`: day-to-day guide to navigating, editing, narrowing, and reviewing work in `mdmind`
@@ -70,7 +74,7 @@ Recommended structure:
 - `docs/recipes.md`: common real tasks
 - `DEVELOPER.md`: setup, testing, release, and contributor workflow
 
-The current design notes in `docs/` should stay, but they should be clearly separated from end-user guides.
+The current design notes in `docs/` should stay, but they should be clearly separated from end-user guides. The `docs/product/` tree is the cleaner status-oriented front door, while the flat `docs/` directory keeps longer guides and design notes.
 
 ## Layer 2: Built-In Docs
 
@@ -130,6 +134,7 @@ Suggested site sections:
 ## Phase 1: Repo Cleanup
 
 - tighten `README.md`
+- add a product docs hub with finished / inwork / future shelves
 - create missing end-user docs for format, query language, TUI, and export
 - keep feature briefs in `docs/` but link them as design notes
 

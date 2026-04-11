@@ -34,6 +34,7 @@ fn ui_settings_round_trip_through_disk() {
         motion_enabled: true,
         ascii_accents: false,
         minimal_mode: true,
+        reading_mode: true,
     };
     save_ui_settings_for(&map_path, &settings).expect("ui settings should write");
 
@@ -69,6 +70,7 @@ fn ui_settings_load_older_sidecars_without_minimal_mode() {
     assert!(loaded.motion_enabled);
     assert!(loaded.ascii_accents);
     assert!(!loaded.minimal_mode);
+    assert!(!loaded.reading_mode);
 
     std::fs::remove_file(settings_path).ok();
     std::fs::remove_file(map_path).ok();
@@ -96,6 +98,7 @@ fn ui_settings_load_reduced_motion_sidecars() {
     assert!(!loaded.motion_enabled);
     assert!(!loaded.ascii_accents);
     assert!(!loaded.minimal_mode);
+    assert!(!loaded.reading_mode);
 
     std::fs::remove_file(settings_path).ok();
     std::fs::remove_file(map_path).ok();

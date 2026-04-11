@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::editor::get_node;
 use crate::model::{
     Document, LinkEntry, MetadataEntry, MetadataKeyCount, MetadataRow, MetadataValueCount, Node,
     RelationDirection, RelationRow, SearchMatch, TagCount,
@@ -245,6 +246,39 @@ pub fn relation_entries_for_anchor(document: &Document, anchor_id: &str) -> Vec<
     rows
 }
 
+pub fn relation_entries_for_path(document: &Document, path: &[usize]) -> Vec<RelationRow> {
+    let Some(node) = get_node(&document.nodes, path) else {
+        return Vec::new();
+    };
+
+    let breadcrumb = breadcrumb_for_path(document, path);
+    let mut rows = node
+        .relations
+        .iter()
+        .map(|relation| RelationRow {
+            direction: RelationDirection::Outgoing,
+            line: node.line,
+            breadcrumb: breadcrumb.clone(),
+            text: node.text.clone(),
+            id: node.id.clone(),
+            relation: relation.label(),
+            target: relation.target.clone(),
+            resolved_path: find_relation_target_breadcrumb(document, &relation.target),
+        })
+        .collect::<Vec<_>>();
+
+    if let Some(id) = &node.id {
+        rows.extend(backlinks_to(document, id));
+    }
+
+    rows.sort_by(|left, right| {
+        left.line
+            .cmp(&right.line)
+            .then_with(|| left.breadcrumb.cmp(&right.breadcrumb))
+    });
+    rows
+}
+
 pub fn backlinks_to(document: &Document, target_id: &str) -> Vec<RelationRow> {
     relation_entries_for_anchor(document, target_id)
         .into_iter()
@@ -262,6 +296,23 @@ pub fn find_by_id<'a>(nodes: &'a [Node], id: &str) -> Option<&'a Node> {
         }
     }
     None
+}
+
+fn breadcrumb_for_path(document: &Document, path: &[usize]) -> String {
+    let mut breadcrumb = Vec::new();
+    let mut nodes = &document.nodes;
+    for index in path {
+        let Some(node) = nodes.get(*index) else {
+            break;
+        };
+        breadcrumb.push(if node.text.is_empty() {
+            "(empty)".to_string()
+        } else {
+            node.text.clone()
+        });
+        nodes = &node.children;
+    }
+    breadcrumb.join(" / ")
 }
 
 fn metadata_matches(entry: &MetadataEntry, lowered: &str) -> bool {

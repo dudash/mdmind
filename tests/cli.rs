@@ -43,6 +43,18 @@ fn view_renders_tree_output() {
 }
 
 #[test]
+fn view_supports_label_path_fallback_when_no_id_exists() {
+    let output = run_mdm(&[
+        "view",
+        &format!("{}#Product Idea/Prompt Library", fixture("sample.md")),
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("Prompt Library #prompt @owner:jason [id:prompts/library]"));
+    assert!(!stdout.contains("Product Idea #idea [id:product]"));
+}
+
+#[test]
 fn find_supports_plain_output() {
     let output = run_mdm(&["find", &fixture("sample.md"), "#prompt", "--plain"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));
@@ -118,6 +130,20 @@ fn relations_can_list_outgoing_links_and_backlinks() {
     assert!(focused_stdout.contains("in\t"));
     assert!(focused_stdout.contains("out\t"));
     assert!(focused_stdout.contains("Prompt Library"));
+
+    let focused_by_label = run_mdm(&[
+        "relations",
+        &format!("{}#Product Idea/MVP Scope", fixture("relations.md")),
+        "--plain",
+    ]);
+    assert!(
+        focused_by_label.status.success(),
+        "stderr: {}",
+        stderr(&focused_by_label)
+    );
+    let focused_by_label_stdout = stdout(&focused_by_label);
+    assert!(focused_by_label_stdout.contains("in\t"));
+    assert!(focused_by_label_stdout.contains("out\t"));
 }
 
 #[test]

@@ -20,7 +20,7 @@ use ratatui::widgets::{
 use ratatui::{Frame, Terminal};
 
 use crate::APP_VERSION;
-use crate::app::{AppError, TargetRef, ensure_parseable, load_document};
+use crate::app::{AppError, TargetRef, ensure_parseable, load_document, resolve_anchor_path};
 use crate::checkpoints::{
     Checkpoint, CheckpointAnchor, CheckpointViewMode, CheckpointsState, load_checkpoints_for,
     save_checkpoints_for,
@@ -440,6 +440,7 @@ impl PaletteItemKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HelpTopic {
     StartHere,
+    Outliner,
     Navigation,
     Editing,
     Details,
@@ -458,6 +459,7 @@ impl HelpTopic {
     fn title(self) -> &'static str {
         match self {
             Self::StartHere => "Start Here",
+            Self::Outliner => "Using mdmind As An Outliner",
             Self::Navigation => "Navigation",
             Self::Editing => "Editing",
             Self::Details => "Node Details",
@@ -476,6 +478,9 @@ impl HelpTopic {
     fn summary(self) -> &'static str {
         match self {
             Self::StartHere => "Learn the core mental model and the first few things worth trying.",
+            Self::Outliner => {
+                "Use mdmind as a calm, keyboard-first outliner before you think about maps."
+            }
             Self::Navigation => "Move through the tree, jump quickly, and open major overlays.",
             Self::Editing => "Add, rename, delete, and reshape branches without leaving the map.",
             Self::Details => "Keep node titles short while storing longer notes under a branch.",
@@ -504,6 +509,9 @@ impl HelpTopic {
             Self::StartHere => {
                 "Intro guide for first-time users, first steps, and what matters most."
             }
+            Self::Outliner => {
+                "User guide for people who think in outlines, notes, plans, and writing structures."
+            }
             Self::Navigation => "User guide plus movement keys and large-map wayfinding tips.",
             Self::Editing => "User guide plus editing keys, undo safety, and restructuring tips.",
             Self::Details => {
@@ -528,6 +536,9 @@ impl HelpTopic {
             Self::StartHere => {
                 "start begin beginner intro getting started first steps first five minutes overview basics new user"
             }
+            Self::Outliner => {
+                "outliner outline outlining rows hierarchy notes nested notes planning writing research checklist omnioutliner sections branches details minimal mode reading"
+            }
             Self::Navigation => {
                 "navigate movement arrows focus jump root open id palette hotkeys relations backlinks related cross links"
             }
@@ -548,7 +559,7 @@ impl HelpTopic {
                 "safety undo redo checkpoint checkpoints autosave save revert restore history recent actions recovery"
             }
             Self::Themes => {
-                "theme themes paper blueprint calm violet monograph terminal neon workbench palette ui settings motion ascii accents minimal purple lavender"
+                "theme themes paper blueprint calm violet monograph terminal neon workbench palette ui settings motion ascii accents minimal reading purple lavender"
             }
             Self::Mindmap => "mindmap visual bubble canvas png export pan recenter map overlay",
             Self::Syntax => {
@@ -567,6 +578,9 @@ impl HelpTopic {
         match self {
             Self::StartHere => {
                 "If you are new to mdmind, keep the mental model small: one line is one node, focus is the center of the UI, and view or search can calm things down when the tree gets large."
+            }
+            Self::Outliner => {
+                "You can use mdmind as an outliner long before you care about visual mind maps. The tree is the real working surface, and features like details, focused views, minimal mode, and search all support that outline-first workflow."
             }
             Self::Navigation => {
                 "Navigation in mdmind is tree-first. Stay in the outline while exploring, then use the palette or id jumps when the map gets too large to scroll comfortably."
@@ -614,6 +628,11 @@ impl HelpTopic {
                 "A good first map is small and concrete. One project, one trip, one feature area, one story outline. Add ids and relations later, once the shape starts to matter.",
                 "If you do not want a blank file, start from mdm init and one of the built-in templates.",
             ],
+            Self::Outliner => &[
+                "The simplest way to think about mdmind is as a structured outliner with better navigation, filtering, and long-term memory. One line is one row in the outline. Children create hierarchy. If you are used to nested notes, this should feel natural. The TUI just makes moving through that outline feel fast.",
+                "Node details make it practical for writing and research. Focused views make it practical for large plans. Minimal mode makes it calmer once you know the basics. None of that changes the core truth that the outline is the main tool.",
+                "The visual mindmap is optional. It is useful as a second lens, but you do not need it for normal outlining, planning, writing, or review work.",
+            ],
             Self::Navigation => &[
                 "The current focus is the center of the interface. The outline, focus card, and visual map all follow it, so plain arrow movement is enough for a lot of work.",
                 "When you already know the branch or id you want, use the palette instead of drilling manually. It is faster and keeps navigation feeling like one surface instead of several.",
@@ -658,6 +677,7 @@ impl HelpTopic {
             Self::Ids => &[
                 "Not every node needs an id. Add ids to branches you expect to revisit, deep-link, export, or reference from somewhere else. That usually means major branches, durable work items, named sections, or cross-map anchors.",
                 "The payoff is consistency. Palette jumps, mdmind and mdm deep-link opens, export targets, saved references, and cross-links all get more reliable when a branch has a stable id instead of depending on its visible label.",
+                "If no id matches, mdmind and mdm can now fall back to label paths like file.md#Parent/Child. That is handy for casual maps, but ids are still the better long-term target.",
             ],
             Self::Relations => &[
                 "A plain relation like [[target/id]] says two branches are connected. A typed relation like [[rel:blocks->target/id]] says why they are connected. Start with the plain form most of the time.",
@@ -673,8 +693,19 @@ impl HelpTopic {
                 ("a / e", "Add a child or edit the current node"),
                 ("/", "Search by text, tags, or metadata"),
                 (": / Ctrl+P", "Open the command palette"),
+                ("z / Z", "Collapse or expand the current working scope"),
                 ("?", "Open built-in help"),
                 ("m", "Open the visual mindmap"),
+            ],
+            Self::Outliner => &[
+                ("↑ / ↓", "Move through outline rows"),
+                ("a / e / d", "Add, edit, or open details on the current row"),
+                ("v / V", "Change how much of the outline stays visible"),
+                (
+                    "minimal",
+                    "Use the palette to switch to the quieter pro layout",
+                ),
+                ("/ and :", "Search the outline or jump straight to intent"),
             ],
             Self::Navigation => &[
                 ("↑ / ↓", "Move through visible nodes"),
@@ -683,6 +714,7 @@ impl HelpTopic {
                     "Collapse or expand, or move to parent / first child",
                 ),
                 ("Enter / Space", "Toggle expanded or collapsed state"),
+                ("z / Z", "Collapse or expand the current working scope"),
                 ("g", "Jump to the map root, or subtree root in Subtree Only"),
                 (": / Ctrl+P", "Open the command palette"),
                 (
@@ -732,6 +764,10 @@ impl HelpTopic {
                     "v / V",
                     "Cycle Full Map, Focus Branch, Subtree Only, and Filtered Focus",
                 ),
+                (
+                    "z / Z",
+                    "Collapse or expand the current working scope in that view",
+                ),
                 ("Esc", "Exit a focused projection before clearing filters"),
                 ("g", "Return to the subtree root inside Subtree Only"),
                 ("←", "Stay inside the subtree root boundary in Subtree Only"),
@@ -765,6 +801,10 @@ impl HelpTopic {
                     "Preview themes like paper, violet, monograph, or blueprint",
                 ),
                 ("minimal", "Toggle the quieter pro layout"),
+                (
+                    "reading",
+                    "Toggle the distraction-free detail reading layout",
+                ),
                 ("ascii", "Toggle terminal-style accents"),
                 ("motion", "Toggle attention-guiding motion"),
                 ("Enter / Esc", "Keep or cancel a previewed surface change"),
@@ -796,6 +836,10 @@ impl HelpTopic {
                     "mdmind map.md#id",
                     "Open the TUI straight to a deep-linked branch",
                 ),
+                (
+                    "mdmind map.md#Parent/Child",
+                    "Fall back to a label path when no id exists",
+                ),
                 ("mdm links map.md", "List ids available in a map"),
                 (
                     "mdm view map.md#id",
@@ -824,6 +868,12 @@ impl HelpTopic {
             Self::StartHere => &[
                 "If you are just learning, focus on movement, add or edit, search, and the palette first.",
                 "You can adopt ids and relations later. They are power features, not prerequisites.",
+            ],
+            Self::Outliner => &[
+                "If you mostly think in outlines, ignore ids, relations, and the mindmap at first. The core outliner loop is already strong without them.",
+                "Node details are the feature that makes mdmind feel less like a terse tree and more like a practical outlining tool for writing, research, and planning.",
+                "Minimal mode plus Focus Branch or Subtree Only is usually the calmest outliner setup once your maps get larger.",
+                "Reading mode is the next emphasis layer after that. It expands the current branch inline into a calmer document-like reading surface without turning the outline into a separate editor.",
             ],
             Self::Navigation => &[
                 "If the tree starts feeling noisy, change view mode before you keep scrolling.",
@@ -863,6 +913,7 @@ impl HelpTopic {
             Self::Themes => &[
                 "Use Monograph with minimal mode for the calmest current surface.",
                 "Keep motion on if you want attention guidance, but use minimal mode when you want less explanatory chrome and a roomier main tree.",
+                "Turn on reading mode when you want the current node's details to expand inline and dominate a quieter document-style surface without changing the active view mode.",
             ],
             Self::Mindmap => &[
                 "Open the mindmap after isolating a branch or applying a filter, not before.",
@@ -893,6 +944,7 @@ impl HelpTopic {
             Self::Palette => Some("review todo"),
             Self::Safety => Some("checkpoint"),
             Self::Details => Some("| This branch still depends on partner auth."),
+            Self::Outliner => Some("Minimal mode + Focus Branch + node details"),
             Self::Syntax => Some("API Design #backend @status:todo @owner:mira"),
             Self::Ids => Some("API Design #backend [id:product/api-design]"),
             Self::Relations => Some("Launch Readiness [[rel:blocked-by->product/api-design]]"),
@@ -903,24 +955,25 @@ impl HelpTopic {
     fn order_rank(self) -> usize {
         match self {
             Self::StartHere => 0,
-            Self::Navigation => 1,
-            Self::Editing => 2,
-            Self::Details => 3,
-            Self::Search => 4,
-            Self::Views => 5,
-            Self::Palette => 6,
-            Self::Safety => 7,
-            Self::Syntax => 8,
-            Self::Ids => 9,
-            Self::Relations => 10,
-            Self::Themes => 11,
-            Self::Mindmap => 12,
+            Self::Outliner => 1,
+            Self::Navigation => 2,
+            Self::Editing => 3,
+            Self::Details => 4,
+            Self::Search => 5,
+            Self::Views => 6,
+            Self::Palette => 7,
+            Self::Safety => 8,
+            Self::Syntax => 9,
+            Self::Ids => 10,
+            Self::Relations => 11,
+            Self::Themes => 12,
+            Self::Mindmap => 13,
         }
     }
 
     fn track_label(self) -> &'static str {
         match self {
-            Self::StartHere => "Basics",
+            Self::StartHere | Self::Outliner => "Basics",
             Self::Navigation
             | Self::Editing
             | Self::Details
@@ -1070,6 +1123,7 @@ enum SurfaceSetting {
     Motion(bool),
     AsciiAccents(bool),
     MinimalMode(bool),
+    ReadingMode(bool),
 }
 
 impl SurfaceSetting {
@@ -1081,6 +1135,8 @@ impl SurfaceSetting {
             Self::AsciiAccents(false) => "ASCII Accents: Off",
             Self::MinimalMode(true) => "Minimal Mode: On",
             Self::MinimalMode(false) => "Minimal Mode: Off",
+            Self::ReadingMode(true) => "Reading Mode: On",
+            Self::ReadingMode(false) => "Reading Mode: Off",
         }
     }
 
@@ -1098,6 +1154,10 @@ impl SurfaceSetting {
                 "Reduce secondary copy and chrome in overlays for a quieter expert-focused surface"
             }
             Self::MinimalMode(false) => "Restore richer helper text and fuller overlay chrome",
+            Self::ReadingMode(true) => {
+                "Enlarge and calm the detail surface so long-form node content is easier to read"
+            }
+            Self::ReadingMode(false) => "Return to the standard balanced focus and context layout",
         }
     }
 
@@ -1121,6 +1181,12 @@ impl SurfaceSetting {
             Self::MinimalMode(false) => {
                 "Preview the fuller guided surface with richer helper copy. Enter commits it; Esc restores the previous surface."
             }
+            Self::ReadingMode(true) => {
+                "Preview a calmer reading layout that gives more room to node details. Enter commits it; Esc restores the previous surface."
+            }
+            Self::ReadingMode(false) => {
+                "Preview the standard balanced layout with equal emphasis on context lanes. Enter commits it; Esc restores the previous surface."
+            }
         }
     }
 
@@ -1136,6 +1202,10 @@ impl SurfaceSetting {
             Self::MinimalMode(false) => {
                 "minimal mode off full hints guided overlays descriptive chrome"
             }
+            Self::ReadingMode(true) => {
+                "reading mode on detail reader details prose quotes rationale research writing"
+            }
+            Self::ReadingMode(false) => "reading mode off standard balanced context layout details",
         }
     }
 }
@@ -1191,6 +1261,10 @@ impl PaletteTarget {
             }
             Self::Setting(SurfaceSetting::MinimalMode(enabled)) => {
                 preview.minimal_mode = *enabled;
+                Some(preview)
+            }
+            Self::Setting(SurfaceSetting::ReadingMode(enabled)) => {
+                preview.reading_mode = *enabled;
                 Some(preview)
             }
             _ => None,
@@ -1756,6 +1830,14 @@ impl TuiApp {
             KeyCode::Char('V') => {
                 self.delete_armed = false;
                 self.cycle_view_mode(false);
+            }
+            KeyCode::Char('z') => {
+                self.delete_armed = false;
+                self.collapse_all_in_scope();
+            }
+            KeyCode::Char('Z') => {
+                self.delete_armed = false;
+                self.expand_all_in_scope();
             }
             KeyCode::Char('a') => {
                 self.delete_armed = false;
@@ -2739,6 +2821,46 @@ impl TuiApp {
         Ok(())
     }
 
+    fn expand_all_in_scope(&mut self) {
+        self.expanded = self.expandable_paths_in_scope();
+        self.set_status(
+            StatusTone::Info,
+            "Expanded all branches in the current scope.",
+        );
+    }
+
+    fn collapse_all_in_scope(&mut self) {
+        let scope_paths = self.expandable_paths_in_scope();
+        let keep_visible = ancestor_paths(self.editor.focus_path());
+        self.expanded = keep_visible
+            .into_iter()
+            .filter(|path| scope_paths.contains(path))
+            .collect();
+        self.set_status(
+            StatusTone::Info,
+            "Collapsed the current scope and kept the focused path visible.",
+        );
+    }
+
+    fn expandable_paths_in_scope(&self) -> HashSet<Vec<usize>> {
+        let filter_visible_paths = self.filter.as_ref().map(filter_visible_paths);
+        let projection_focus_path = self.projection_focus_path();
+        let projection = ViewProjection {
+            filter: self.filter.as_ref(),
+            filter_visible_paths: filter_visible_paths.as_ref(),
+            focus_path: &projection_focus_path,
+            view_mode: self.view_mode,
+        };
+        let mut paths = HashSet::new();
+        collect_expandable_paths_in_scope(
+            &self.editor.document().nodes,
+            projection,
+            &mut paths,
+            Vec::new(),
+        );
+        paths
+    }
+
     fn begin_prompt(&mut self, mode: PromptMode, value: String) {
         self.quit_armed = false;
         self.delete_armed = false;
@@ -3264,6 +3386,7 @@ impl TuiApp {
                 matches!(
                     topic,
                     HelpTopic::StartHere
+                        | HelpTopic::Outliner
                         | HelpTopic::Details
                         | HelpTopic::Search
                         | HelpTopic::Palette
@@ -3578,6 +3701,8 @@ impl TuiApp {
             SurfaceSetting::AsciiAccents(false),
             SurfaceSetting::MinimalMode(true),
             SurfaceSetting::MinimalMode(false),
+            SurfaceSetting::ReadingMode(true),
+            SurfaceSetting::ReadingMode(false),
         ];
 
         settings
@@ -3949,6 +4074,7 @@ impl TuiApp {
         let query = raw.trim().to_lowercase();
         let mut topics = [
             HelpTopic::StartHere,
+            HelpTopic::Outliner,
             HelpTopic::Navigation,
             HelpTopic::Editing,
             HelpTopic::Details,
@@ -4585,6 +4711,7 @@ impl TuiApp {
             SurfaceSetting::Motion(enabled) => baseline.motion_enabled == enabled,
             SurfaceSetting::AsciiAccents(enabled) => baseline.ascii_accents == enabled,
             SurfaceSetting::MinimalMode(enabled) => baseline.minimal_mode == enabled,
+            SurfaceSetting::ReadingMode(enabled) => baseline.reading_mode == enabled,
         }
     }
 
@@ -4636,6 +4763,11 @@ impl TuiApp {
                 self.ui_settings.minimal_mode = enabled;
                 changed
             }
+            SurfaceSetting::ReadingMode(enabled) => {
+                let changed = self.ui_settings.reading_mode != enabled;
+                self.ui_settings.reading_mode = enabled;
+                changed
+            }
         };
 
         self.persist_ui_settings()?;
@@ -4678,6 +4810,20 @@ impl TuiApp {
             ),
             SurfaceSetting::MinimalMode(false) => {
                 (StatusTone::Info, "Minimal mode is already disabled.")
+            }
+            SurfaceSetting::ReadingMode(true) if changed => (
+                StatusTone::Success,
+                "Reading mode enabled. The detail surface now gets more room and calmer emphasis.",
+            ),
+            SurfaceSetting::ReadingMode(true) => {
+                (StatusTone::Info, "Reading mode is already enabled.")
+            }
+            SurfaceSetting::ReadingMode(false) if changed => (
+                StatusTone::Success,
+                "Reading mode disabled. The standard balanced focus layout is back.",
+            ),
+            SurfaceSetting::ReadingMode(false) => {
+                (StatusTone::Info, "Reading mode is already disabled.")
             }
         };
         self.set_status(tone, message);
@@ -4778,6 +4924,20 @@ impl TuiApp {
                     ),
                     SurfaceSetting::MinimalMode(false) => {
                         (StatusTone::Info, "Minimal mode is already disabled.")
+                    }
+                    SurfaceSetting::ReadingMode(true) if changed => (
+                        StatusTone::Success,
+                        "Reading mode enabled. The detail surface now gets more room and calmer emphasis.",
+                    ),
+                    SurfaceSetting::ReadingMode(true) => {
+                        (StatusTone::Info, "Reading mode is already enabled.")
+                    }
+                    SurfaceSetting::ReadingMode(false) if changed => (
+                        StatusTone::Success,
+                        "Reading mode disabled. The standard balanced focus layout is back.",
+                    ),
+                    SurfaceSetting::ReadingMode(false) => {
+                        (StatusTone::Info, "Reading mode is already disabled.")
                     }
                 };
                 self.set_status(tone, message);
@@ -5354,6 +5514,11 @@ fn view_badge_style(view_mode: ViewMode, palette: Palette) -> (Color, Color) {
 }
 
 fn render_body(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    if app.ui_settings.reading_mode {
+        render_outline(frame, area, app);
+        return;
+    }
+
     let columns = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(if app.ui_settings.minimal_mode {
@@ -5371,6 +5536,7 @@ fn render_body(frame: &mut Frame, area: Rect, app: &TuiApp) {
 fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let PALETTE = app.theme_colors();
     let minimal = app.ui_settings.minimal_mode;
+    let reading = app.ui_settings.reading_mode;
     let rows = app.visible_rows();
     let selected_index = app.selected_index(&rows);
     let scope_root = app.projection_focus_path();
@@ -5415,9 +5581,14 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let items: Vec<ListItem> = rows
         .iter()
         .map(|row| {
-            let mut spans = Vec::new();
             let is_selected = row.path == focus_path;
-            let show_detail = !minimal || is_selected || row.matched;
+            let show_detail = if reading {
+                is_selected
+            } else {
+                !minimal || is_selected || row.matched
+            };
+            let mut lines = Vec::new();
+            let mut spans = Vec::new();
             let show_tags = !row.tags.is_empty();
             let scope_role = if scope_attention > 0 {
                 scope_handoff_role(&row.path, &scope_root, app.view_mode)
@@ -5522,7 +5693,7 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     }),
                 ));
             }
-            if !minimal && row.has_children {
+            if !minimal && !reading && row.has_children {
                 spans.push(Span::raw(" "));
                 spans.push(Span::styled(
                     format!("({})", row.child_count),
@@ -5544,7 +5715,11 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     }),
                 ));
             }
-            ListItem::new(Line::from(spans))
+            lines.push(Line::from(spans));
+            if reading && is_selected {
+                lines.extend(outline_inline_reading_lines(app, row, area.width));
+            }
+            ListItem::new(lines)
         })
         .collect();
 
@@ -5552,7 +5727,11 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
         .block(
             Block::default()
                 .title(styled_title(
-                    if app.filter.is_some() {
+                    if reading && app.filter.is_some() {
+                        "Outline · Reading · Filtered"
+                    } else if reading {
+                        "Outline · Reading"
+                    } else if app.filter.is_some() {
                         "Map · Filtered"
                     } else {
                         "Map"
@@ -5574,6 +5753,7 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
 
 fn render_focus_cluster(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let focus_height = focus_card_height(app);
+
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(focus_height), Constraint::Min(8)])
@@ -5881,6 +6061,7 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     ),
                 ]));
             }
+
             lines
         }
         None => vec![Line::from(Span::styled(
@@ -5890,6 +6071,183 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
     };
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+fn outline_inline_reading_lines(app: &TuiApp, row: &VisibleRow, width: u16) -> Vec<Line<'static>> {
+    let palette = active_palette();
+    let minimal = minimal_mode_enabled();
+    let Some(node) = get_node(&app.editor.document().nodes, &row.path) else {
+        return Vec::new();
+    };
+    let indent = " ".repeat(row.depth * 2 + 4);
+    let breadcrumb = if app.editor.breadcrumb().is_empty() {
+        "(no focus)".to_string()
+    } else {
+        app.editor.breadcrumb().join(" / ")
+    };
+    let mut lines = vec![
+        Line::default(),
+        prefixed_line(
+            &indent,
+            vec![
+                Span::styled("path ", Style::default().fg(palette.muted)),
+                Span::styled(breadcrumb, Style::default().fg(palette.sky)),
+            ],
+        ),
+    ];
+
+    if !node.detail.is_empty() {
+        lines.push(prefixed_line(
+            &indent,
+            vec![
+                Span::styled("attached notes ", Style::default().fg(palette.muted)),
+                Span::styled(
+                    detail_prompt_summary(&node.detail.join("\n")),
+                    Style::default().fg(palette.sky),
+                ),
+                if let Some(id) = &node.id {
+                    Span::styled(format!("  [id:{id}]"), Style::default().fg(palette.muted))
+                } else {
+                    Span::raw("")
+                },
+            ],
+        ));
+    } else {
+        lines.push(prefixed_line(
+            &indent,
+            vec![Span::styled(
+                "No attached notes on this branch yet. Press d to add rationale, quotes, scene notes, or research.",
+                Style::default().fg(palette.muted),
+            )],
+        ));
+    }
+
+    if !node.tags.is_empty() || !node.metadata.is_empty() {
+        let mut meta = Vec::new();
+        if !node.tags.is_empty() {
+            meta.push(Span::styled(
+                node.tags.join(" "),
+                Style::default().fg(palette.accent),
+            ));
+        }
+        if !node.metadata.is_empty() {
+            if !meta.is_empty() {
+                meta.push(Span::raw("   "));
+            }
+            meta.push(Span::styled(
+                node.metadata
+                    .iter()
+                    .map(|entry| format!("@{}:{}", entry.key, entry.value))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                Style::default().fg(palette.warn),
+            ));
+        }
+        lines.push(prefixed_line(&indent, meta));
+    }
+
+    if !node.relations.is_empty() {
+        lines.push(prefixed_line(
+            &indent,
+            vec![
+                Span::styled("relations ", Style::default().fg(palette.muted)),
+                Span::styled(
+                    node.relations
+                        .iter()
+                        .map(|relation| relation.display_token())
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    Style::default().fg(palette.sky),
+                ),
+            ],
+        ));
+    }
+
+    if let Some(filter) = &app.filter {
+        let filter_label = filter.query.raw().to_string();
+        lines.push(prefixed_line(
+            &indent,
+            vec![
+                Span::styled("filter ", Style::default().fg(palette.muted)),
+                Span::styled(filter_label, Style::default().fg(palette.warn)),
+                Span::raw("  "),
+                Span::styled(
+                    if current_node_matches_filter(app) {
+                        "direct match"
+                    } else {
+                        "context ancestor"
+                    },
+                    Style::default().fg(palette.muted),
+                ),
+            ],
+        ));
+    } else if app.view_mode == ViewMode::SubtreeOnly
+        && let Some(root) = app.subtree_root_node()
+    {
+        let scope_label = if root.text.is_empty() {
+            "(empty)".to_string()
+        } else {
+            root.text.clone()
+        };
+        lines.push(prefixed_line(
+            &indent,
+            vec![
+                Span::styled("scope ", Style::default().fg(palette.muted)),
+                Span::styled(scope_label, Style::default().fg(palette.warn)),
+                Span::raw("  "),
+                Span::styled("g", Style::default().fg(palette.accent)),
+                Span::raw(" returns here"),
+            ],
+        ));
+    }
+
+    lines.push(prefixed_line(
+        &indent,
+        vec![reading_rule_span(width, row.depth, palette)],
+    ));
+    if !minimal && !node.detail.is_empty() {
+        lines.push(prefixed_line(
+            &indent,
+            vec![Span::styled(
+                "Long-form notes stay attached to this branch while the rest of the outline stays in place around them.",
+                Style::default().fg(palette.muted),
+            )],
+        ));
+        lines.push(Line::default());
+    }
+
+    if node.detail.is_empty() {
+        return lines;
+    }
+
+    for detail_line in &node.detail {
+        lines.push(prefixed_line(
+            &indent,
+            vec![Span::styled(
+                if detail_line.is_empty() {
+                    " ".to_string()
+                } else {
+                    detail_line.clone()
+                },
+                Style::default().fg(palette.text),
+            )],
+        ));
+    }
+    lines
+}
+
+fn prefixed_line(prefix: &str, spans: Vec<Span<'static>>) -> Line<'static> {
+    let mut prefixed = Vec::with_capacity(spans.len() + 1);
+    prefixed.push(Span::raw(prefix.to_string()));
+    prefixed.extend(spans);
+    Line::from(prefixed)
+}
+
+fn reading_rule_span(width: u16, depth: usize, palette: Palette) -> Span<'static> {
+    let available = width.saturating_sub(2).max(12) as usize;
+    let glyph = if ascii_accents_enabled() { "-" } else { "─" };
+    let usable = available.saturating_sub(depth * 2 + 4).clamp(12, 72);
+    Span::styled(glyph.repeat(usable), Style::default().fg(palette.border))
 }
 
 #[allow(non_snake_case)]
@@ -7531,6 +7889,22 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
                     .to_string()
             }
         }
+        HelpTopic::Outliner => {
+            if app.ui_settings.minimal_mode {
+                "minimal mode is on, which already fits the calmer outliner workflow well"
+                    .to_string()
+            } else if app
+                .editor
+                .current()
+                .is_some_and(|node| !node.detail.is_empty())
+            {
+                "the current node already has attached details, so you are using one of the strongest outliner features"
+                    .to_string()
+            } else {
+                "treat the tree as the main tool and the visual map as optional unless you need a second lens"
+                    .to_string()
+            }
+        }
         HelpTopic::Navigation => {
             let breadcrumb = if app.editor.breadcrumb().is_empty() {
                 "(no focus)".to_string()
@@ -7601,7 +7975,7 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
             }
         }
         HelpTopic::Themes => format!(
-            "current theme {}, motion {}, accents {}, minimal {} stored next to the map",
+            "current theme {}, motion {}, accents {}, minimal {}, reading {} stored next to the map",
             app.ui_settings.theme.label(),
             if app.ui_settings.motion_enabled {
                 "on"
@@ -7614,6 +7988,11 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
                 "default"
             },
             if app.ui_settings.minimal_mode {
+                "on"
+            } else {
+                "off"
+            },
+            if app.ui_settings.reading_mode {
                 "on"
             } else {
                 "off"
@@ -8803,8 +9182,7 @@ fn prompt_footer_text(mode: PromptMode) -> Option<&'static str> {
 
 fn resolve_initial_focus(target: &TargetRef, document: &Document) -> Result<Vec<usize>, AppError> {
     if let Some(anchor) = &target.anchor {
-        return find_path_by_id(&document.nodes, anchor)
-            .ok_or_else(|| AppError::new(format!("No node id matches anchor '{anchor}'.")));
+        return resolve_anchor_path(document, anchor);
     }
 
     if let Some(session) = load_session_for(&target.path)?
@@ -9225,6 +9603,31 @@ fn collect_visible_rows(
         subtree_has_visible_rows |= include_row || child_has_visible_rows;
     }
     subtree_has_visible_rows
+}
+
+fn collect_expandable_paths_in_scope(
+    nodes: &[Node],
+    projection: ViewProjection<'_>,
+    paths: &mut HashSet<Vec<usize>>,
+    prefix: Vec<usize>,
+) {
+    for (index, node) in nodes.iter().enumerate() {
+        let mut path = prefix.clone();
+        path.push(index);
+
+        let include_row = visible_in_view_mode(
+            &path,
+            projection.focus_path,
+            projection.filter_visible_paths,
+            projection.view_mode,
+        );
+
+        if include_row && !node.children.is_empty() {
+            paths.insert(path.clone());
+        }
+
+        collect_expandable_paths_in_scope(&node.children, projection, paths, path);
+    }
 }
 
 fn collect_match_paths(document: &Document, query: &FilterQuery) -> Vec<Vec<usize>> {
@@ -10537,8 +10940,9 @@ mod tests {
 
         let topics = app.help_topics("");
         assert_eq!(topics.first().copied(), Some(HelpTopic::StartHere));
-        assert_eq!(topics.get(1).copied(), Some(HelpTopic::Navigation));
-        assert_eq!(topics.get(2).copied(), Some(HelpTopic::Editing));
+        assert_eq!(topics.get(1).copied(), Some(HelpTopic::Outliner));
+        assert_eq!(topics.get(2).copied(), Some(HelpTopic::Navigation));
+        assert_eq!(topics.get(3).copied(), Some(HelpTopic::Editing));
         assert!(
             topics.iter().position(|topic| *topic == HelpTopic::Palette)
                 < topics.iter().position(|topic| *topic == HelpTopic::Themes),
@@ -10575,6 +10979,12 @@ mod tests {
         assert!(
             beginner_topics.contains(&HelpTopic::StartHere),
             "searching for intro-level guide prose should find the Start Here article"
+        );
+
+        let outliner_topics = app.help_topics("nested notes");
+        assert!(
+            outliner_topics.contains(&HelpTopic::Outliner),
+            "searching for outliner framing should find the outliner help article"
         );
 
         let rooted_topics = app.help_topics("temporary workspace");
@@ -10828,6 +11238,41 @@ mod tests {
     }
 
     #[test]
+    fn command_palette_can_toggle_reading_mode_and_persist_it() {
+        let map_path = temp_map_path("palette-reading.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char(':'), KeyModifiers::NONE))
+            .expect("colon should open the command palette");
+        for character in "reading".chars() {
+            app.handle_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE))
+                .expect("typing should search reading mode");
+        }
+        assert!(
+            app.ui_settings.reading_mode,
+            "selection should preview reading mode"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should commit reading mode");
+        assert!(app.ui_settings.reading_mode);
+
+        let loaded_settings =
+            load_ui_settings_for(&map_path).expect("ui settings should load after reading mode");
+        assert!(loaded_settings.reading_mode);
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
     fn focus_navigation_sets_a_focus_attention_cue() {
         let map_path = temp_map_path("focus-motion.md");
         let document = sample_document();
@@ -10847,6 +11292,35 @@ mod tests {
             app.motion_cue.map(|cue| cue.target),
             Some(MotionTarget::Focus)
         );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn detail_reader_shows_a_placeholder_when_node_has_no_details() {
+        let map_path = temp_map_path("reading-placeholder.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let row = app
+            .visible_rows()
+            .into_iter()
+            .find(|row| row.path == vec![0])
+            .expect("focused row should be visible");
+        let rendered = outline_inline_reading_lines(&app, &row, 64)
+            .into_iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(rendered.contains("No attached notes on this branch yet."));
+        assert!(rendered.contains("Press d to add rationale"));
 
         cleanup_sidecars(&map_path);
     }
@@ -11180,6 +11654,77 @@ mod tests {
         if session_path.exists() {
             std::fs::remove_file(session_path).ok();
         }
+    }
+
+    #[test]
+    fn expand_all_reveals_deeper_branches_in_the_current_scope() {
+        let map_path = temp_map_path("expand-all.md");
+        let document = parse_document(
+            "- Root [id:root]\n  - Alpha [id:root/alpha]\n    - Alpha child\n  - Beta [id:root/beta]\n    - Beta child\n",
+        )
+        .document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        assert!(
+            !app.visible_rows()
+                .iter()
+                .any(|row| row.text == "Alpha child" || row.text == "Beta child")
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('Z'), KeyModifiers::NONE))
+            .expect("Z should expand the current scope");
+
+        let rows = app.visible_rows();
+        assert!(rows.iter().any(|row| row.text == "Alpha child"));
+        assert!(rows.iter().any(|row| row.text == "Beta child"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn collapse_all_keeps_the_focused_path_visible() {
+        let map_path = temp_map_path("collapse-all.md");
+        let document = parse_document(
+            "- Root [id:root]\n  - Alpha [id:root/alpha]\n    - Alpha child [id:root/alpha/child]\n  - Beta [id:root/beta]\n    - Beta child\n",
+        )
+        .document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('Z'), KeyModifiers::NONE))
+            .expect("Z should expand the current scope");
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("down should focus Alpha");
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("down should focus Alpha child");
+
+        assert_eq!(app.editor.focus_path(), &[0, 0, 0]);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE))
+            .expect("z should collapse the current scope");
+
+        let rows = app
+            .visible_rows()
+            .into_iter()
+            .map(|row| row.text)
+            .collect::<Vec<_>>();
+        assert_eq!(rows, vec!["Root", "Alpha", "Alpha child", "Beta"]);
+        assert_eq!(app.editor.focus_path(), &[0, 0, 0]);
+
+        cleanup_sidecars(&map_path);
     }
 
     #[test]

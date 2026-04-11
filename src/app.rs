@@ -1,9 +1,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::editor::get_node;
 use crate::model::{Diagnostic, Document, Node, Severity, has_errors};
 use crate::parser::parse_document;
-use crate::query::find_by_id;
 use crate::templates::TemplateKind;
 use crate::validate::validate_document;
 
@@ -100,24 +100,58 @@ pub fn select_document(loaded: &LoadedDocument) -> Result<Document, AppError> {
     ensure_parseable(loaded)?;
     match &loaded.target.anchor {
         Some(anchor) => {
-            let matches = count_id_occurrences(&loaded.document.nodes, anchor);
-            if matches == 0 {
-                return Err(AppError::new(format!(
-                    "No node id matches anchor '{anchor}'."
-                )));
-            }
-            if matches > 1 {
-                return Err(AppError::new(format!(
-                    "Anchor '{anchor}' is ambiguous because the file contains duplicate ids."
-                )));
-            }
-
-            let node = find_by_id(&loaded.document.nodes, anchor).expect("count ensured a match");
+            let path = resolve_anchor_path(&loaded.document, anchor)?;
+            let node =
+                get_node(&loaded.document.nodes, &path).expect("resolved anchor path should exist");
             Ok(Document {
                 nodes: vec![node.clone()],
             })
         }
         None => Ok(loaded.document.clone()),
+    }
+}
+
+pub fn resolve_anchor_path(document: &Document, anchor: &str) -> Result<Vec<usize>, AppError> {
+    let matches = count_id_occurrences(&document.nodes, anchor);
+    if matches > 1 {
+        return Err(AppError::new(format!(
+            "Anchor '{anchor}' is ambiguous because the file contains duplicate ids."
+        )));
+    }
+    if matches == 1 {
+        return Ok(find_path_by_anchor_id(&document.nodes, anchor).expect("count ensured a match"));
+    }
+
+    let segments = normalized_anchor_segments(anchor);
+    if segments.is_empty() {
+        return Err(AppError::new(format!(
+            "No node id or label path matches anchor '{anchor}'."
+        )));
+    }
+
+    let mut label_matches = Vec::new();
+    collect_label_path_matches(&document.nodes, &segments, Vec::new(), &mut label_matches);
+    match label_matches.len() {
+        0 => Err(AppError::new(format!(
+            "No node id or label path matches anchor '{anchor}'."
+        ))),
+        1 => Ok(label_matches.remove(0)),
+        _ => {
+            let candidates = label_matches
+                .iter()
+                .take(5)
+                .map(|path| format!("- {}", breadcrumb_for_path(document, path)))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let suffix = if label_matches.len() > 5 {
+                format!("\n- … and {} more", label_matches.len() - 5)
+            } else {
+                String::new()
+            };
+            Err(AppError::new(format!(
+                "Anchor '{anchor}' is ambiguous as a label path. Candidates:\n{candidates}{suffix}"
+            )))
+        }
     }
 }
 
@@ -167,4 +201,144 @@ fn count_id_occurrences(nodes: &[Node], target_id: &str) -> usize {
         count += count_id_occurrences(&node.children, target_id);
     }
     count
+}
+
+fn find_path_by_anchor_id(nodes: &[Node], id: &str) -> Option<Vec<usize>> {
+    for (index, node) in nodes.iter().enumerate() {
+        let path = vec![index];
+        if node.id.as_deref() == Some(id) {
+            return Some(path);
+        }
+        if let Some(found) = find_path_by_anchor_id_with_prefix(&node.children, id, path.clone()) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn find_path_by_anchor_id_with_prefix(
+    nodes: &[Node],
+    id: &str,
+    prefix: Vec<usize>,
+) -> Option<Vec<usize>> {
+    for (index, node) in nodes.iter().enumerate() {
+        let mut path = prefix.clone();
+        path.push(index);
+        if node.id.as_deref() == Some(id) {
+            return Some(path);
+        }
+        if let Some(found) = find_path_by_anchor_id_with_prefix(&node.children, id, path.clone()) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn normalized_anchor_segments(anchor: &str) -> Vec<String> {
+    anchor
+        .split('/')
+        .map(normalize_anchor_segment)
+        .filter(|segment| !segment.is_empty())
+        .collect()
+}
+
+fn normalize_anchor_segment(raw: &str) -> String {
+    let normalized = raw
+        .trim()
+        .chars()
+        .map(|ch| match ch {
+            '-' | '_' => ' ',
+            other => other.to_ascii_lowercase(),
+        })
+        .collect::<String>();
+    normalized.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn collect_label_path_matches(
+    nodes: &[Node],
+    segments: &[String],
+    prefix: Vec<usize>,
+    matches: &mut Vec<Vec<usize>>,
+) {
+    let Some((first, rest)) = segments.split_first() else {
+        return;
+    };
+
+    for (index, node) in nodes.iter().enumerate() {
+        if normalize_anchor_segment(&node.text) != *first {
+            continue;
+        }
+
+        let mut path = prefix.clone();
+        path.push(index);
+        if rest.is_empty() {
+            matches.push(path);
+        } else {
+            collect_label_path_matches(&node.children, rest, path, matches);
+        }
+    }
+}
+
+fn breadcrumb_for_path(document: &Document, path: &[usize]) -> String {
+    let mut breadcrumb = Vec::new();
+    let mut nodes = &document.nodes;
+    for index in path {
+        let Some(node) = nodes.get(*index) else {
+            break;
+        };
+        breadcrumb.push(if node.text.is_empty() {
+            "(empty)".to_string()
+        } else {
+            node.text.clone()
+        });
+        nodes = &node.children;
+    }
+    breadcrumb.join(" / ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(source: &str) -> Document {
+        parse_document(source).document
+    }
+
+    #[test]
+    fn anchor_resolution_prefers_ids_before_label_paths() {
+        let document = parse("- Product Idea [id:product]\n  - Tasks [id:product/tasks]\n");
+        assert_eq!(
+            resolve_anchor_path(&document, "product/tasks").expect("id should resolve"),
+            vec![0, 0]
+        );
+    }
+
+    #[test]
+    fn anchor_resolution_falls_back_to_label_paths() {
+        let document = parse("- Product Idea\n  - Tasks\n    - Ship tests\n");
+        assert_eq!(
+            resolve_anchor_path(&document, "Product Idea/Tasks/Ship tests")
+                .expect("label path should resolve"),
+            vec![0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn anchor_resolution_normalizes_case_spacing_and_separators() {
+        let document = parse("- Product Idea\n  - Ship Tests_Now\n");
+        assert_eq!(
+            resolve_anchor_path(&document, " product   idea / ship-tests now ")
+                .expect("normalized label path should resolve"),
+            vec![0, 0]
+        );
+    }
+
+    #[test]
+    fn anchor_resolution_reports_ambiguous_label_paths() {
+        let document = parse("- Product Idea\n  - Tasks\n- Product Idea\n  - Tasks\n");
+        let error = resolve_anchor_path(&document, "Product Idea/Tasks")
+            .expect_err("duplicate label path should be ambiguous");
+        assert!(error.message().contains("ambiguous as a label path"));
+        assert!(error.message().contains("Product Idea / Tasks"));
+    }
 }

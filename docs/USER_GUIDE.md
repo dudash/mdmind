@@ -48,6 +48,8 @@
       - ← collapses a branch or moves to the parent
       - → expands a branch or enters the first child
       - Enter or Space toggles branch expansion
+      - z collapses the current working scope
+      - Z expands the current working scope
       - g jumps to the root, or to the subtree root in Subtree Only
     - When to use the palette #guide [id:guide/navigation/palette]
       - use : or Ctrl+P when you know what branch, id, action, or help topic you want
@@ -253,9 +255,14 @@
     - Minimal mode #reference [id:guide/themes/minimal]
       - type minimal in the palette to toggle the quieter pro layout
       - minimal mode condenses the shell, hides the keybar, reduces overlay chrome, and gives more room to the main tree by trimming the right-side context lanes
+    - Reading mode #reference [id:guide/themes/reading]
+      - type reading in the palette to toggle the detail-focused reading layout
+      - reading mode keeps the outline visible but expands the current node's details inline into a larger calmer reading block
+      - it pairs especially well with Focus Branch, Subtree Only, and minimal mode
     - Theme tips #tip [id:guide/themes/tips]
       - Monograph plus minimal mode is the calmest current working surface
       - motion helps guide attention, while minimal mode reduces explanatory noise
+      - reading mode is for content emphasis, not for changing the active tree scope
   - Mindmap Mode #guide @section:mindmap [id:guide/mindmap]
     - What the visual map is for #guide [id:guide/mindmap/why]
       - it is a second lens on the current working set

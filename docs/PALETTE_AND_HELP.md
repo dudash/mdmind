@@ -83,6 +83,7 @@ That keeps it unified in the product while still letting different topics teach 
 If you are new:
 
 - start with `Start Here`
+- then read `Using mdmind As An Outliner` if that framing fits how you work
 - then read `Navigation`, `Editing`, and `Search And Filters`
 - treat `Ids And Deep Links` and `Relations And Backlinks` as power-feature guides you can adopt later
 
@@ -109,6 +110,7 @@ Keeping them close makes the app easier to learn because the same user who types
 
 ## Related Docs
 
+- [USING_MDMIND_AS_OUTLINER.md](USING_MDMIND_AS_OUTLINER.md)
 - [TUI_WORKFLOWS.md](TUI_WORKFLOWS.md)
 - [QUERY_LANGUAGE.md](QUERY_LANGUAGE.md)
 - [IDS_AND_DEEP_LINKS.md](IDS_AND_DEEP_LINKS.md)

@@ -140,6 +140,7 @@ These are useful for learning the map language in read-only mode:
 - `tags` gives you the vocabulary and shape of a map quickly
 - `links` lists stable ids you can deep-link to from `view`, `open`, or `export`
 - `relations` shows outgoing references across the map, or outgoing plus incoming backlinks for a deep-linked node
+- deep links prefer explicit ids, but `mdm` and `mdmind` can now fall back to label paths like `map.md#Product Idea/Tasks` when no id exists
 
 Open the interactive TUI:
 
@@ -161,6 +162,7 @@ Core navigation:
 - `↑` / `↓`: move through visible nodes
 - `←` / `→`: collapse/expand or move between parent and child
 - `Enter`: toggle branch expansion
+- `z` / `Z`: collapse or expand the current working scope
 - `g`: jump to root
 
 Editing:
@@ -188,6 +190,7 @@ Search and large-map workflows:
 - `]`: follow the next outgoing relation on the focused node
 - `[`: follow the next backlink into the focused node
 - type `minimal` in the palette to switch to a quieter pro layout with a condensed shell, no keybar, a wider main tree, and fewer right-side context lanes
+- type `reading` in the palette when you want the current node to expand inline into a larger, calmer document-style reading block without changing the active view mode
 - `?`: open searchable built-in help with user guides, command reference, and tips
 - `/`: open unified search
 - `b`: open browse for tags, metadata, and ids
@@ -245,9 +248,17 @@ mdm init novel.md --template writing
 
 ## Repo Docs
 
-User-facing and product docs:
+Start here:
+
+- [docs/product/README.md](docs/product/README.md)
+- [docs/product/features/finished/README.md](docs/product/features/finished/README.md)
+- [docs/product/features/inwork/README.md](docs/product/features/inwork/README.md)
+- [docs/product/features/future/README.md](docs/product/features/future/README.md)
+
+User-facing guides:
 
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+- [docs/USING_MDMIND_AS_OUTLINER.md](docs/USING_MDMIND_AS_OUTLINER.md)
 - [docs/TUI_WORKFLOWS.md](docs/TUI_WORKFLOWS.md)
 - [docs/PALETTE_AND_HELP.md](docs/PALETTE_AND_HELP.md)
 - [docs/SAFETY_AND_HISTORY.md](docs/SAFETY_AND_HISTORY.md)
@@ -256,9 +267,14 @@ User-facing and product docs:
 - [docs/QUERY_LANGUAGE.md](docs/QUERY_LANGUAGE.md)
 - [docs/IDS_AND_DEEP_LINKS.md](docs/IDS_AND_DEEP_LINKS.md)
 - [docs/CROSS_LINKS_AND_BACKLINKS.md](docs/CROSS_LINKS_AND_BACKLINKS.md)
+
+Design notes and roadmap docs:
+
 - [docs/FUTURE_FEATURES.md](docs/FUTURE_FEATURES.md)
 - [docs/TERMINAL_EXPERIENCE.md](docs/TERMINAL_EXPERIENCE.md)
 - [docs/DOCUMENTATION_STRATEGY.md](docs/DOCUMENTATION_STRATEGY.md)
+- [docs/UX_DESIGN_REVIEW.md](docs/UX_DESIGN_REVIEW.md)
+- [docs/IMPORT_AND_INGESTION.md](docs/IMPORT_AND_INGESTION.md)
 - [docs/SPATIAL_CANVAS.md](docs/SPATIAL_CANVAS.md)
 - [docs/COMMAND_PALETTE.md](docs/COMMAND_PALETTE.md)
 

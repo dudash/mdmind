@@ -8,12 +8,12 @@ use clap::{ArgAction, Parser, Subcommand};
 use crate::APP_VERSION;
 use crate::app::{
     AppError, create_from_template, diagnostics_for_validate, diagnostics_have_errors,
-    ensure_parseable, load_document, select_document,
+    ensure_parseable, load_document, resolve_anchor_path, select_document,
 };
 use crate::export::export_document;
 use crate::interactive::run_interactive;
 use crate::query::{
-    find_matches, link_entries, metadata_rows, relation_entries, relation_entries_for_anchor,
+    find_matches, link_entries, metadata_rows, relation_entries, relation_entries_for_path,
     tag_counts,
 };
 use crate::render::{
@@ -274,8 +274,9 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             ensure_parseable(&loaded).map_err(CliError::from_app)?;
             let rows = match loaded.target.anchor.as_deref() {
                 Some(anchor) => {
-                    select_document(&loaded).map_err(CliError::from_app)?;
-                    relation_entries_for_anchor(&loaded.document, anchor)
+                    let path = resolve_anchor_path(&loaded.document, anchor)
+                        .map_err(CliError::from_app)?;
+                    relation_entries_for_path(&loaded.document, &path)
                 }
                 None => relation_entries(&select_document(&loaded).map_err(CliError::from_app)?),
             };

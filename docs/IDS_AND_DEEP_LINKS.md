@@ -86,6 +86,15 @@ mdm export roadmap.md#product/api-design --format json
 
 This is especially useful in docs, scripts, or notes where you want to point at one exact branch instead of a whole map.
 
+If no explicit id matches, `mdm` and `mdmind` can also fall back to a label path:
+
+```bash
+mdmind roadmap.md#Product Idea/Tasks
+mdm view roadmap.md#Product Idea/Tasks
+```
+
+That fallback is useful for quick exploration and early maps. For durable references, ids are still the better choice because label paths can become ambiguous or drift when labels change.
+
 ## Troubleshooting
 
 If a deep link fails:

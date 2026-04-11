@@ -167,6 +167,7 @@ pub struct UiSettings {
     pub motion_enabled: bool,
     pub ascii_accents: bool,
     pub minimal_mode: bool,
+    pub reading_mode: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -176,6 +177,7 @@ struct RawUiSettings {
     reduced_motion: Option<bool>,
     ascii_accents: Option<bool>,
     minimal_mode: Option<bool>,
+    reading_mode: Option<bool>,
 }
 
 impl<'de> Deserialize<'de> for UiSettings {
@@ -191,6 +193,7 @@ impl<'de> Deserialize<'de> for UiSettings {
                 .unwrap_or_else(|| raw.reduced_motion.map(|reduced| !reduced).unwrap_or(true)),
             ascii_accents: raw.ascii_accents.unwrap_or(false),
             minimal_mode: raw.minimal_mode.unwrap_or(false),
+            reading_mode: raw.reading_mode.unwrap_or(false),
         })
     }
 }
@@ -202,6 +205,7 @@ impl Default for UiSettings {
             motion_enabled: true,
             ascii_accents: false,
             minimal_mode: false,
+            reading_mode: false,
         }
     }
 }

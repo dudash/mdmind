@@ -8,8 +8,52 @@
         ],
         "id": "glass-archive/plot"
       },
-      "visits": 28,
-      "last_seen": 211
+      "visits": 48,
+      "last_seen": 342
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          5
+        ],
+        "id": "glass-archive/themes"
+      },
+      "visits": 37,
+      "last_seen": 343
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3
+        ],
+        "id": "glass-archive/places"
+      },
+      "visits": 36,
+      "last_seen": 341
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          6
+        ],
+        "id": "glass-archive/research"
+      },
+      "visits": 36,
+      "last_seen": 337
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          7
+        ],
+        "id": "glass-archive/quotes"
+      },
+      "visits": 32,
+      "last_seen": 336
     },
     {
       "anchor": {
@@ -20,63 +64,8 @@
         ],
         "id": "glass-archive/plot/main"
       },
-      "visits": 22,
-      "last_seen": 193
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          7
-        ],
-        "id": "glass-archive/quotes"
-      },
-      "visits": 21,
-      "last_seen": 206
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          3
-        ],
-        "id": "glass-archive/places"
-      },
-      "visits": 21,
-      "last_seen": 195
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          5
-        ],
-        "id": "glass-archive/themes"
-      },
-      "visits": 20,
-      "last_seen": 210
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          6
-        ],
-        "id": "glass-archive/research"
-      },
-      "visits": 20,
-      "last_seen": 209
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          8
-        ],
-        "id": "glass-archive/chapters"
-      },
-      "visits": 14,
-      "last_seen": 205
+      "visits": 31,
+      "last_seen": 262
     },
     {
       "anchor": {
@@ -86,8 +75,8 @@
         ],
         "id": "glass-archive/revision"
       },
-      "visits": 14,
-      "last_seen": 204
+      "visits": 28,
+      "last_seen": 334
     },
     {
       "anchor": {
@@ -97,8 +86,19 @@
         ],
         "id": "glass-archive/workflow"
       },
-      "visits": 10,
-      "last_seen": 203
+      "visits": 26,
+      "last_seen": 333
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          8
+        ],
+        "id": "glass-archive/chapters"
+      },
+      "visits": 25,
+      "last_seen": 335
     },
     {
       "anchor": {
@@ -110,8 +110,22 @@
         ],
         "id": "glass-archive/plot/main/act-1"
       },
-      "visits": 6,
-      "last_seen": 192
+      "visits": 8,
+      "last_seen": 226
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4,
+          0,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 4,
+      "last_seen": 225
     },
     {
       "anchor": {
@@ -175,20 +189,6 @@
       },
       "visits": 3,
       "last_seen": 71
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          4,
-          0,
-          1,
-          0
-        ],
-        "id": null
-      },
-      "visits": 3,
-      "last_seen": 66
     }
   ]
 }
