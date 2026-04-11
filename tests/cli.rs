@@ -244,3 +244,56 @@ fn version_command_prints_the_cli_version() {
         format!("mdm {}\n", env!("CARGO_PKG_VERSION"))
     );
 }
+
+#[test]
+fn examples_list_shows_bundled_examples() {
+    let output = run_mdm(&["examples", "list"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("Bundled examples:"));
+    assert!(stdout.contains("demo"));
+    assert!(stdout.contains("novel-research-writing-map"));
+}
+
+#[test]
+fn examples_copy_one_writes_requested_map() {
+    let destination = temp_file("examples-one");
+    let destination_str = destination.to_string_lossy().into_owned();
+    let output = run_mdm(&["examples", "copy", "demo", "--to", &destination_str]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+
+    let copied = destination.join("demo.md");
+    let contents = std::fs::read_to_string(&copied).expect("copied example should exist");
+    assert!(contents.contains("- mdmind Demo [id:demo]"));
+
+    std::fs::remove_file(copied).expect("copied example should be removable");
+    std::fs::remove_dir(destination).expect("temp directory should be removable");
+}
+
+#[test]
+fn examples_copy_all_writes_gallery_and_maps() {
+    let destination = temp_file("examples-all");
+    let destination_str = destination.to_string_lossy().into_owned();
+    let output = run_mdm(&["examples", "copy", "all", "--to", &destination_str]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+
+    assert!(destination.join("README.md").is_file());
+    assert!(destination.join("demo.md").is_file());
+    assert!(destination.join("product-status.md").is_file());
+
+    std::fs::remove_file(destination.join("README.md")).expect("README should be removable");
+    for file_name in [
+        "demo.md",
+        "product-status.md",
+        "lantern-studio-map.md",
+        "game-world-moonwake.md",
+        "novel-research-writing-map.md",
+        "team-project-board.md",
+        "prompt-ops.md",
+        "decision-log.md",
+    ] {
+        std::fs::remove_file(destination.join(file_name))
+            .unwrap_or_else(|error| panic!("could not remove {file_name}: {error}"));
+    }
+    std::fs::remove_dir(destination).expect("temp directory should be removable");
+}

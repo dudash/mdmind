@@ -178,9 +178,11 @@ jobs:
           artifact="mdmind-${TAG_NAME}-${{ matrix.target }}.${{ matrix.archive_ext }}"
           staging="mdmind-${TAG_NAME}-${{ matrix.target }}"
           mkdir -p "${staging}"
+          mkdir -p "${staging}/examples"
           cp "target/${{ matrix.target }}/release/mdm" "${staging}/"
           cp "target/${{ matrix.target }}/release/mdmind" "${staging}/"
           cp README.md "${staging}/"
+          cp examples/*.md "${staging}/examples/"
           tar -czf "${artifact}" "${staging}"
           echo "ASSET=${artifact}" >> "${GITHUB_ENV}"
 
@@ -193,9 +195,11 @@ jobs:
           $artifact = "mdmind-$env:TAG_NAME-${{ matrix.target }}.${{ matrix.archive_ext }}"
           $staging = "mdmind-$env:TAG_NAME-${{ matrix.target }}"
           New-Item -ItemType Directory -Path $staging | Out-Null
+          New-Item -ItemType Directory -Path "$staging/examples" | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/mdm.exe" "$staging/"
           Copy-Item "target/${{ matrix.target }}/release/mdmind.exe" "$staging/"
           Copy-Item "README.md" "$staging/"
+          Copy-Item "examples/*.md" "$staging/examples/"
           Compress-Archive -Path "$staging/*" -DestinationPath $artifact
           "ASSET=$artifact" | Out-File -FilePath $env:GITHUB_ENV -Append
 
@@ -204,3 +208,86 @@ jobs:
         with:
           tag_name: ${{ needs.prepare-release.outputs.tag_name }}
           files: ${{ env.ASSET }}
+
+  install-metadata:
+    name: Generate install metadata
+    needs:
+      - prepare-release
+      - build-release
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG_NAME: ${{ needs.prepare-release.outputs.tag_name }}
+      VERSION: ${{ needs.prepare-release.outputs.version }}
+      REPOSITORY: ${{ github.repository }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag_name }}
+
+      - name: Download release archives
+        shell: bash
+        run: |
+          gh release download "${TAG_NAME}" \
+            --pattern "mdmind-${TAG_NAME}-x86_64-unknown-linux-gnu.tar.gz" \
+            --pattern "mdmind-${TAG_NAME}-x86_64-apple-darwin.tar.gz" \
+            --pattern "mdmind-${TAG_NAME}-aarch64-apple-darwin.tar.gz" \
+            --pattern "mdmind-${TAG_NAME}-x86_64-pc-windows-msvc.zip"
+
+      - name: Build checksum manifest
+        shell: bash
+        run: |
+          sha256sum \
+            "mdmind-${TAG_NAME}-x86_64-unknown-linux-gnu.tar.gz" \
+            "mdmind-${TAG_NAME}-x86_64-apple-darwin.tar.gz" \
+            "mdmind-${TAG_NAME}-aarch64-apple-darwin.tar.gz" \
+            "mdmind-${TAG_NAME}-x86_64-pc-windows-msvc.zip" \
+            > "mdmind-${TAG_NAME}-checksums.txt"
+
+      - name: Render Homebrew formula
+        shell: bash
+        run: |
+          linux_sha="$(awk '/x86_64-unknown-linux-gnu/ {print $1}' "mdmind-${TAG_NAME}-checksums.txt")"
+          darwin_amd64_sha="$(awk '/x86_64-apple-darwin/ {print $1}' "mdmind-${TAG_NAME}-checksums.txt")"
+          darwin_arm64_sha="$(awk '/aarch64-apple-darwin/ {print $1}' "mdmind-${TAG_NAME}-checksums.txt")"
+          bash scripts/render-homebrew-formula.sh \
+            --version "${VERSION}" \
+            --repo "${REPOSITORY}" \
+            --darwin-amd64-sha "${darwin_amd64_sha}" \
+            --darwin-arm64-sha "${darwin_arm64_sha}" \
+            --linux-amd64-sha "${linux_sha}" \
+            > mdmind.rb
+
+      - name: Upload install metadata to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.tag_name }}
+          files: |
+            mdmind.rb
+            mdmind-${{ needs.prepare-release.outputs.tag_name }}-checksums.txt
+
+      - name: Publish Homebrew tap
+        if: ${{ vars.HOMEBREW_TAP_REPO != '' && secrets.HOMEBREW_TAP_TOKEN != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.HOMEBREW_TAP_REPO }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Commit updated formula to tap
+        if: ${{ vars.HOMEBREW_TAP_REPO != '' && secrets.HOMEBREW_TAP_TOKEN != '' }}
+        shell: bash
+        run: |
+          mkdir -p tap/Formula
+          cp mdmind.rb tap/Formula/mdmind.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/mdmind.rb
+          if git diff --cached --quiet -- Formula/mdmind.rb; then
+            echo "Homebrew formula already up to date"
+            exit 0
+          fi
+          git commit -m "mdmind ${TAG_NAME}"
+          git push

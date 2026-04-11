@@ -4,6 +4,7 @@ pub mod app;
 pub mod checkpoints;
 pub mod cli;
 pub mod editor;
+pub mod examples;
 pub mod export;
 pub mod interactive;
 pub mod locations;

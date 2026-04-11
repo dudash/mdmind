@@ -87,6 +87,14 @@ That installs:
 - `mdm`
 - `mdmind`
 
+For tagged releases, the GitHub release page is the source of truth:
+
+- macOS: Homebrew via `brew tap dudash/tap && brew install mdmind`, backed by the release tarballs
+- Linux: release tarball
+- Windows: release zip
+
+Installer and tap details live in [docs/INSTALL_AND_RELEASE.md](docs/INSTALL_AND_RELEASE.md).
+
 ## CLI Quick Start
 
 Create a new map from a starter template:
@@ -147,6 +155,15 @@ Open the interactive TUI:
 ```bash
 mdm open roadmap.md
 mdm open roadmap.md#product/mvp --autosave
+```
+
+Copy bundled example maps onto your machine:
+
+```bash
+mdm examples list
+mdm examples copy demo
+mdm examples copy all
+mdm examples path
 ```
 
 ## TUI Quick Start
@@ -263,6 +280,7 @@ User-facing guides:
 - [docs/PALETTE_AND_HELP.md](docs/PALETTE_AND_HELP.md)
 - [docs/SAFETY_AND_HISTORY.md](docs/SAFETY_AND_HISTORY.md)
 - [docs/TEMPLATES.md](docs/TEMPLATES.md)
+- [docs/INSTALL_AND_RELEASE.md](docs/INSTALL_AND_RELEASE.md)
 - [docs/NODE_DETAILS.md](docs/NODE_DETAILS.md)
 - [docs/QUERY_LANGUAGE.md](docs/QUERY_LANGUAGE.md)
 - [docs/IDS_AND_DEEP_LINKS.md](docs/IDS_AND_DEEP_LINKS.md)

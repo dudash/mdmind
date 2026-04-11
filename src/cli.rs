@@ -10,6 +10,10 @@ use crate::app::{
     AppError, create_from_template, diagnostics_for_validate, diagnostics_have_errors,
     ensure_parseable, load_document, resolve_anchor_path, select_document,
 };
+use crate::examples::{
+    all as bundled_examples, discover_examples_dir, find as find_example,
+    readme_contents as examples_readme_contents,
+};
 use crate::export::export_document;
 use crate::interactive::run_interactive;
 use crate::query::{
@@ -115,6 +119,11 @@ enum Commands {
         #[arg(long, action = ArgAction::SetTrue)]
         force: bool,
     },
+    #[command(about = "List, locate, or copy the bundled example maps.")]
+    Examples {
+        #[command(subcommand)]
+        command: ExampleCommands,
+    },
     #[command(about = "Open a map or deep link in the interactive navigator.")]
     Open {
         target: String,
@@ -129,6 +138,22 @@ enum Commands {
     },
     #[command(about = "Print the mdm version.")]
     Version,
+}
+
+#[derive(Debug, Subcommand)]
+enum ExampleCommands {
+    #[command(about = "List the bundled example maps.")]
+    List,
+    #[command(about = "Print the installed on-disk examples directory, when available.")]
+    Path,
+    #[command(about = "Copy one bundled example, or all examples, into a directory.")]
+    Copy {
+        name: String,
+        #[arg(long)]
+        to: Option<PathBuf>,
+        #[arg(long, action = ArgAction::SetTrue)]
+        force: bool,
+    },
 }
 
 #[derive(Debug, Parser)]
@@ -333,6 +358,7 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             println!("{}", path.display());
             Ok(())
         }
+        Commands::Examples { command } => dispatch_examples(command),
         Commands::Open {
             target,
             preview,
@@ -351,6 +377,91 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             Ok(())
         }
     }
+}
+
+fn dispatch_examples(command: ExampleCommands) -> Result<(), CliError> {
+    match command {
+        ExampleCommands::List => {
+            println!("Bundled examples:");
+            for asset in bundled_examples() {
+                println!(
+                    "- {:<28} {:<34} {}",
+                    asset.name, asset.file_name, asset.description
+                );
+            }
+            Ok(())
+        }
+        ExampleCommands::Path => {
+            let Some(path) = discover_examples_dir() else {
+                return Err(CliError::runtime(
+                    "No installed examples directory was found. Use `mdm examples copy all` to materialize local copies.",
+                ));
+            };
+            println!("{}", path.display());
+            Ok(())
+        }
+        ExampleCommands::Copy { name, to, force } => copy_examples(&name, to, force),
+    }
+}
+
+fn copy_examples(name: &str, to: Option<PathBuf>, force: bool) -> Result<(), CliError> {
+    if name.eq_ignore_ascii_case("all") {
+        let destination = to.unwrap_or_else(|| PathBuf::from("mdmind-examples"));
+        std::fs::create_dir_all(&destination).map_err(|error| {
+            CliError::runtime(format!(
+                "Could not create examples directory '{}': {error}",
+                destination.display()
+            ))
+        })?;
+
+        let readme_path = destination.join("README.md");
+        write_asset_file(&readme_path, examples_readme_contents(), force)?;
+
+        for asset in bundled_examples() {
+            let path = destination.join(asset.file_name);
+            write_asset_file(&path, asset.contents, force)?;
+        }
+
+        println!("{}", destination.display());
+        return Ok(());
+    }
+
+    let asset = find_example(name).ok_or_else(|| {
+        let available = bundled_examples()
+            .iter()
+            .map(|asset| asset.name)
+            .collect::<Vec<_>>()
+            .join(", ");
+        CliError::runtime(format!(
+            "Unknown example '{name}'. Try one of: {available}, or use `all`."
+        ))
+    })?;
+
+    let destination_dir = to.unwrap_or_else(|| PathBuf::from("."));
+    std::fs::create_dir_all(&destination_dir).map_err(|error| {
+        CliError::runtime(format!(
+            "Could not create destination directory '{}': {error}",
+            destination_dir.display()
+        ))
+    })?;
+    let destination = destination_dir.join(asset.file_name);
+    write_asset_file(&destination, asset.contents, force)?;
+    println!("{}", destination.display());
+    Ok(())
+}
+
+fn write_asset_file(path: &std::path::Path, contents: &str, force: bool) -> Result<(), CliError> {
+    if path.exists() && !force {
+        return Err(CliError::runtime(format!(
+            "Refusing to overwrite '{}'. Use --force to replace it.",
+            path.display()
+        )));
+    }
+
+    std::fs::write(path, contents).map_err(|error| {
+        CliError::runtime(format!("Could not write '{}': {error}", path.display()))
+    })?;
+    Ok(())
 }
 
 fn dispatch_tui_preview(cli: TuiPreviewCli) -> Result<(), CliError> {

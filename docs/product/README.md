@@ -42,5 +42,6 @@ If you want the product status map:
 - [docs/NODE_DETAILS.md](/Users/jason/Documents/Programming/mdmind/docs/NODE_DETAILS.md)
 - [docs/SAFETY_AND_HISTORY.md](/Users/jason/Documents/Programming/mdmind/docs/SAFETY_AND_HISTORY.md)
 - [docs/TEMPLATES.md](/Users/jason/Documents/Programming/mdmind/docs/TEMPLATES.md)
+- [docs/INSTALL_AND_RELEASE.md](/Users/jason/Documents/Programming/mdmind/docs/INSTALL_AND_RELEASE.md)
 
 Older top-level docs still matter, especially where they hold deeper design notes. This product tree is just the easier status-oriented map.
