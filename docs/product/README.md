@@ -1,47 +1,41 @@
 # Product Docs
 
-This is the cleaner front door for product documentation.
+This part of the docs answers a specific question:
 
-The rest of `docs/` now has two jobs:
+What is already real in the product, what is still moving, and what is only planned?
 
-- longer user guides
-- deeper design notes
+Use `docs/product/` when you want status and feature shape.
+Use the rest of `docs/` when you want tutorials, deeper how-to guides, or design notes.
 
-This `docs/product/` tree has a different job:
+## Best Paths
 
-- show what is shipped
-- show what is still moving
-- show what is only planned
+If you want the shortest product-status route:
 
-## Start Here
+1. [features/finished/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/README.md)
+2. [features/inwork/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/inwork/README.md)
+3. [features/future/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/README.md)
 
-If you are learning the product:
+If you are learning the product and only want the status shelves as a companion:
 
 - [docs/USER_GUIDE.md](/Users/jason/Documents/Programming/mdmind/docs/USER_GUIDE.md)
 - [docs/TUI_WORKFLOWS.md](/Users/jason/Documents/Programming/mdmind/docs/TUI_WORKFLOWS.md)
-
-If you want the product status map:
-
 - [features/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/README.md)
-- [features/finished/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/README.md)
-- [features/inwork/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/inwork/README.md)
-- [features/future/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/README.md)
 
 ## How To Read The Shelves
 
-- `finished`: safe to treat as real product behavior today
-- `inwork`: meaningful shipped pieces exist, but the story is still incomplete
-- `future`: planned capability, not something a user should expect yet
+- `finished`: safe to treat as current product behavior
+- `inwork`: meaningful shipped pieces exist, but the final shape is still moving
+- `future`: roadmap only
 
 ## Good Companion Docs
 
-- [docs/PALETTE_AND_HELP.md](/Users/jason/Documents/Programming/mdmind/docs/PALETTE_AND_HELP.md)
+These are the best follow-up guides once a shelf points you toward an area:
+
 - [docs/QUERY_LANGUAGE.md](/Users/jason/Documents/Programming/mdmind/docs/QUERY_LANGUAGE.md)
 - [docs/IDS_AND_DEEP_LINKS.md](/Users/jason/Documents/Programming/mdmind/docs/IDS_AND_DEEP_LINKS.md)
 - [docs/CROSS_LINKS_AND_BACKLINKS.md](/Users/jason/Documents/Programming/mdmind/docs/CROSS_LINKS_AND_BACKLINKS.md)
 - [docs/NODE_DETAILS.md](/Users/jason/Documents/Programming/mdmind/docs/NODE_DETAILS.md)
+- [docs/PALETTE_AND_HELP.md](/Users/jason/Documents/Programming/mdmind/docs/PALETTE_AND_HELP.md)
 - [docs/SAFETY_AND_HISTORY.md](/Users/jason/Documents/Programming/mdmind/docs/SAFETY_AND_HISTORY.md)
 - [docs/TEMPLATES.md](/Users/jason/Documents/Programming/mdmind/docs/TEMPLATES.md)
 - [docs/INSTALL_AND_RELEASE.md](/Users/jason/Documents/Programming/mdmind/docs/INSTALL_AND_RELEASE.md)
-
-Older top-level docs still matter, especially where they hold deeper design notes. This product tree is just the easier status-oriented map.

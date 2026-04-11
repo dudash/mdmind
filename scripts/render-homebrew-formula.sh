@@ -92,11 +92,16 @@ cat <<EOF
   end
 
   def install
-    bin.install Dir["*/mdm"].first => "mdm"
-    bin.install Dir["*/mdmind"].first => "mdmind"
-    doc.install Dir["*/README.md"].first
-    examples_dir = Dir["*/examples"].first
-    pkgshare.install examples_dir if examples_dir
+    root = Dir["mdmind-*"].find { |path| File.directory?(path) } || "."
+
+    bin.install File.join(root, "mdm")
+    bin.install File.join(root, "mdmind")
+
+    readme = File.join(root, "README.md")
+    doc.install readme if File.exist?(readme)
+
+    examples_dir = File.join(root, "examples")
+    pkgshare.install examples_dir if Dir.exist?(examples_dir)
   end
 
   test do

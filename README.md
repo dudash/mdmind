@@ -123,6 +123,7 @@ mdm examples copy all
 
 If you are new:
 
+- [docs/README.md](docs/README.md)
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
 - [docs/TUI_WORKFLOWS.md](docs/TUI_WORKFLOWS.md)
 - [docs/USING_MDMIND_AS_OUTLINER.md](docs/USING_MDMIND_AS_OUTLINER.md)

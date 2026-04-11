@@ -1,6 +1,18 @@
 # Finished Features
 
-These features are already in the product and worth documenting as first-class capabilities.
+These are the product areas that are solid enough to describe as current behavior, not aspiration.
+
+## Best Starting Points
+
+If you want the fastest read on what makes `mdmind` feel distinct today:
+
+- [command-palette.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/command-palette.md)
+- [focused-views.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/focused-views.md)
+- [ids-and-deep-links.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/ids-and-deep-links.md)
+- [relations-and-backlinks.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/relations-and-backlinks.md)
+- [node-details.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/node-details.md)
+
+## By Area
 
 Navigation and structure:
 
@@ -22,9 +34,4 @@ Surface and guidance:
 - [built-in-help.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/built-in-help.md)
 - [themes-and-minimal-mode.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/themes-and-minimal-mode.md)
 - [visual-mindmap.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/visual-mindmap.md)
-
-Getting started:
-
 - [templates-and-examples.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/templates-and-examples.md)
-
-If you only want the “what can this app do today?” answer, this is the right shelf.
