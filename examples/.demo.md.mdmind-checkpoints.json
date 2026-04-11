@@ -1,17 +1,20 @@
 {
   "checkpoints": [
     {
-      "name": "Safety checkpoint: delete · peer node **collaboration moat** — the backend primitives that make Dev2 fundamentally different from \"another AI chat + canvas tool\" — is now **100% implemented** across all 8 features (Phases 0–4). These are the traceable intent primitives defined in the [Feature PRDs](../01-product/feature-d",
+      "name": "Safety checkpoint: delete · four is good",
       "document": {
         "nodes": [
           {
             "text": "mdmind Demo",
+            "detail": [],
             "tags": [],
             "metadata": [],
             "id": "demo",
+            "relations": [],
             "children": [
               {
                 "text": "Product Direction",
+                "detail": [],
                 "tags": [
                   "#idea"
                 ],
@@ -22,20 +25,25 @@
                   }
                 ],
                 "id": "demo/direction",
+                "relations": [],
                 "children": [
                   {
                     "text": "CLI-first MVP",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 3
                   },
                   {
                     "text": "TUI later",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 4
                   }
@@ -44,33 +52,41 @@
               },
               {
                 "text": "Tasks",
+                "detail": [],
                 "tags": [
                   "#todo"
                 ],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "I need to build the parser",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 6
                   },
                   {
                     "text": "Add templates",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 7
                   },
                   {
                     "text": "Ship test now please",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 8
                   }
@@ -79,6 +95,7 @@
               },
               {
                 "text": "Prompts",
+                "detail": [],
                 "tags": [
                   "#prompt"
                 ],
@@ -89,12 +106,15 @@
                   }
                 ],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "Explore command help tone",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 10
                   }
@@ -103,77 +123,1527 @@
               },
               {
                 "text": "This is something I need to sort",
+                "detail": [],
                 "tags": [],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "one",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 12
                   },
                   {
                     "text": "two",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 13
                   },
                   {
                     "text": "three",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 14
                   },
                   {
                     "text": "four is good",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [
                       {
                         "text": "five is alive",
+                        "detail": [],
                         "tags": [],
                         "metadata": [],
                         "id": null,
+                        "relations": [],
+                        "children": [],
+                        "line": 16
+                      }
+                    ],
+                    "line": 15
+                  }
+                ],
+                "line": 11
+              }
+            ],
+            "line": 1
+          }
+        ]
+      },
+      "focus_path": [
+        0,
+        3,
+        3
+      ],
+      "dirty": true,
+      "expanded_paths": [
+        [
+          0,
+          3,
+          3,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          0
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0
+        ],
+        [
+          0
+        ],
+        [
+          0,
+          3,
+          3
+        ]
+      ],
+      "view_mode": "full-map",
+      "subtree_root": null,
+      "filter_query": null
+    },
+    {
+      "name": "Safety checkpoint: delete · jaosn",
+      "document": {
+        "nodes": [
+          {
+            "text": "mdmind Demo",
+            "detail": [],
+            "tags": [],
+            "metadata": [],
+            "id": "demo",
+            "relations": [],
+            "children": [
+              {
+                "text": "Product Direction",
+                "detail": [],
+                "tags": [
+                  "#idea"
+                ],
+                "metadata": [
+                  {
+                    "key": "status",
+                    "value": "active"
+                  }
+                ],
+                "id": "demo/direction",
+                "relations": [],
+                "children": [
+                  {
+                    "text": "CLI-first MVP",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 3
+                  },
+                  {
+                    "text": "TUI later",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 4
+                  }
+                ],
+                "line": 2
+              },
+              {
+                "text": "Tasks",
+                "detail": [],
+                "tags": [
+                  "#todo"
+                ],
+                "metadata": [],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "I need to build the parser",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 6
+                  },
+                  {
+                    "text": "Add templates",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 7
+                  },
+                  {
+                    "text": "Ship test now please",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 8
+                  }
+                ],
+                "line": 5
+              },
+              {
+                "text": "Prompts",
+                "detail": [],
+                "tags": [
+                  "#prompt"
+                ],
+                "metadata": [
+                  {
+                    "key": "owner",
+                    "value": "jason"
+                  }
+                ],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "Explore command help tone",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 10
+                  }
+                ],
+                "line": 9
+              },
+              {
+                "text": "This is something I need to sort",
+                "detail": [],
+                "tags": [],
+                "metadata": [],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "one",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 12
+                  },
+                  {
+                    "text": "two",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 13
+                  },
+                  {
+                    "text": "three",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 14
+                  },
+                  {
+                    "text": "four is good",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [
+                      {
+                        "text": "five is alive",
+                        "detail": [],
+                        "tags": [],
+                        "metadata": [],
+                        "id": null,
+                        "relations": [],
                         "children": [
                           {
                             "text": "jaosn",
+                            "detail": [],
                             "tags": [],
                             "metadata": [],
                             "id": null,
+                            "relations": [],
+                            "children": [],
+                            "line": 17
+                          }
+                        ],
+                        "line": 16
+                      }
+                    ],
+                    "line": 15
+                  }
+                ],
+                "line": 11
+              }
+            ],
+            "line": 1
+          }
+        ]
+      },
+      "focus_path": [
+        0,
+        3,
+        3,
+        0,
+        0
+      ],
+      "dirty": true,
+      "expanded_paths": [
+        [
+          0,
+          3,
+          3,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          0
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0
+        ],
+        [
+          0
+        ],
+        [
+          0,
+          3,
+          3
+        ]
+      ],
+      "view_mode": "full-map",
+      "subtree_root": null,
+      "filter_query": null
+    },
+    {
+      "name": "Safety checkpoint: delete · is",
+      "document": {
+        "nodes": [
+          {
+            "text": "mdmind Demo",
+            "detail": [],
+            "tags": [],
+            "metadata": [],
+            "id": "demo",
+            "relations": [],
+            "children": [
+              {
+                "text": "Product Direction",
+                "detail": [],
+                "tags": [
+                  "#idea"
+                ],
+                "metadata": [
+                  {
+                    "key": "status",
+                    "value": "active"
+                  }
+                ],
+                "id": "demo/direction",
+                "relations": [],
+                "children": [
+                  {
+                    "text": "CLI-first MVP",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 3
+                  },
+                  {
+                    "text": "TUI later",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 4
+                  }
+                ],
+                "line": 2
+              },
+              {
+                "text": "Tasks",
+                "detail": [],
+                "tags": [
+                  "#todo"
+                ],
+                "metadata": [],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "I need to build the parser",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 6
+                  },
+                  {
+                    "text": "Add templates",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 7
+                  },
+                  {
+                    "text": "Ship test now please",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 8
+                  }
+                ],
+                "line": 5
+              },
+              {
+                "text": "Prompts",
+                "detail": [],
+                "tags": [
+                  "#prompt"
+                ],
+                "metadata": [
+                  {
+                    "key": "owner",
+                    "value": "jason"
+                  }
+                ],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "Explore command help tone",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 10
+                  }
+                ],
+                "line": 9
+              },
+              {
+                "text": "This is something I need to sort",
+                "detail": [],
+                "tags": [],
+                "metadata": [],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "one",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 12
+                  },
+                  {
+                    "text": "two",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 13
+                  },
+                  {
+                    "text": "three",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 14
+                  },
+                  {
+                    "text": "four is good",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [
+                      {
+                        "text": "five is alive",
+                        "detail": [],
+                        "tags": [],
+                        "metadata": [],
+                        "id": null,
+                        "relations": [],
+                        "children": [
+                          {
+                            "text": "jaosn",
+                            "detail": [],
+                            "tags": [],
+                            "metadata": [],
+                            "id": null,
+                            "relations": [],
                             "children": [
                               {
                                 "text": "is",
+                                "detail": [],
                                 "tags": [],
                                 "metadata": [],
                                 "id": null,
+                                "relations": [],
                                 "children": [
                                   {
                                     "text": "this is a deep node with a long set of text to provide",
-                                    "tags": [],
-                                    "metadata": [],
-                                    "id": null,
+                                    "detail": [],
+                                    "tags": [
+                                      "#yum"
+                                    ],
+                                    "metadata": [
+                                      {
+                                        "key": "owner",
+                                        "value": "jason"
+                                      }
+                                    ],
+                                    "id": "deeplink",
+                                    "relations": [],
+                                    "children": [],
+                                    "line": 19
+                                  }
+                                ],
+                                "line": 18
+                              }
+                            ],
+                            "line": 17
+                          }
+                        ],
+                        "line": 16
+                      }
+                    ],
+                    "line": 15
+                  }
+                ],
+                "line": 11
+              }
+            ],
+            "line": 1
+          }
+        ]
+      },
+      "focus_path": [
+        0,
+        3,
+        3,
+        0,
+        0,
+        0
+      ],
+      "dirty": true,
+      "expanded_paths": [
+        [
+          0,
+          3,
+          3,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          0
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0
+        ],
+        [
+          0
+        ],
+        [
+          0,
+          3,
+          3
+        ]
+      ],
+      "view_mode": "full-map",
+      "subtree_root": null,
+      "filter_query": null
+    },
+    {
+      "name": "Safety checkpoint: delete · can we get something even better here",
+      "document": {
+        "nodes": [
+          {
+            "text": "mdmind Demo",
+            "detail": [],
+            "tags": [],
+            "metadata": [],
+            "id": "demo",
+            "relations": [],
+            "children": [
+              {
+                "text": "Product Direction",
+                "detail": [],
+                "tags": [
+                  "#idea"
+                ],
+                "metadata": [
+                  {
+                    "key": "status",
+                    "value": "active"
+                  }
+                ],
+                "id": "demo/direction",
+                "relations": [],
+                "children": [
+                  {
+                    "text": "CLI-first MVP",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 3
+                  },
+                  {
+                    "text": "TUI later",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 4
+                  }
+                ],
+                "line": 2
+              },
+              {
+                "text": "Tasks",
+                "detail": [],
+                "tags": [
+                  "#todo"
+                ],
+                "metadata": [],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "I need to build the parser",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 6
+                  },
+                  {
+                    "text": "Add templates",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 7
+                  },
+                  {
+                    "text": "Ship test now please",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 8
+                  }
+                ],
+                "line": 5
+              },
+              {
+                "text": "Prompts",
+                "detail": [],
+                "tags": [
+                  "#prompt"
+                ],
+                "metadata": [
+                  {
+                    "key": "owner",
+                    "value": "jason"
+                  }
+                ],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "Explore command help tone",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 10
+                  }
+                ],
+                "line": 9
+              },
+              {
+                "text": "This is something I need to sort",
+                "detail": [],
+                "tags": [],
+                "metadata": [],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "one",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 12
+                  },
+                  {
+                    "text": "two",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 13
+                  },
+                  {
+                    "text": "three",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 14
+                  },
+                  {
+                    "text": "four is good",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [
+                      {
+                        "text": "five is alive",
+                        "detail": [],
+                        "tags": [],
+                        "metadata": [],
+                        "id": null,
+                        "relations": [],
+                        "children": [
+                          {
+                            "text": "jaosn",
+                            "detail": [],
+                            "tags": [],
+                            "metadata": [],
+                            "id": null,
+                            "relations": [],
+                            "children": [
+                              {
+                                "text": "is",
+                                "detail": [],
+                                "tags": [],
+                                "metadata": [],
+                                "id": null,
+                                "relations": [],
+                                "children": [
+                                  {
+                                    "text": "this is a deep node with a long set of text to provide",
+                                    "detail": [],
+                                    "tags": [
+                                      "#yum"
+                                    ],
+                                    "metadata": [
+                                      {
+                                        "key": "owner",
+                                        "value": "jason"
+                                      }
+                                    ],
+                                    "id": "deeplink",
+                                    "relations": [],
                                     "children": [
                                       {
                                         "text": "can we get something even better here",
+                                        "detail": [],
                                         "tags": [],
                                         "metadata": [],
                                         "id": null,
+                                        "relations": [],
+                                        "children": [],
+                                        "line": 20
+                                      }
+                                    ],
+                                    "line": 19
+                                  }
+                                ],
+                                "line": 18
+                              }
+                            ],
+                            "line": 17
+                          }
+                        ],
+                        "line": 16
+                      }
+                    ],
+                    "line": 15
+                  }
+                ],
+                "line": 11
+              }
+            ],
+            "line": 1
+          }
+        ]
+      },
+      "focus_path": [
+        0,
+        3,
+        3,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "dirty": true,
+      "expanded_paths": [
+        [
+          0,
+          3,
+          3,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          0
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0
+        ],
+        [
+          0
+        ],
+        [
+          0,
+          3,
+          3
+        ]
+      ],
+      "view_mode": "full-map",
+      "subtree_root": null,
+      "filter_query": null
+    },
+    {
+      "name": "Safety checkpoint: delete · peer node **collaboration moat** — the backend primitives that make Dev2 fundamentally different from \"another AI chat + canvas tool\" — is now **100% implemented** across all 8 features (Phases 0–4). These are the traceable intent primitives defined in the [Feature PRDs](../01-product/feature-detail/README.md) and backed by [ADRs 018–025](../02-adr/00-INDEX.md). Each feature ties back to one of three [Killer Features](../01-product/KILLER_FEATURES.md).",
+      "document": {
+        "nodes": [
+          {
+            "text": "mdmind Demo",
+            "detail": [],
+            "tags": [],
+            "metadata": [],
+            "id": "demo",
+            "relations": [],
+            "children": [
+              {
+                "text": "Product Direction",
+                "detail": [],
+                "tags": [
+                  "#idea"
+                ],
+                "metadata": [
+                  {
+                    "key": "status",
+                    "value": "active"
+                  }
+                ],
+                "id": "demo/direction",
+                "relations": [],
+                "children": [
+                  {
+                    "text": "CLI-first MVP",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 3
+                  },
+                  {
+                    "text": "TUI later",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 4
+                  }
+                ],
+                "line": 2
+              },
+              {
+                "text": "Tasks",
+                "detail": [],
+                "tags": [
+                  "#todo"
+                ],
+                "metadata": [],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "I need to build the parser",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 6
+                  },
+                  {
+                    "text": "Add templates",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 7
+                  },
+                  {
+                    "text": "Ship test now please",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 8
+                  }
+                ],
+                "line": 5
+              },
+              {
+                "text": "Prompts",
+                "detail": [],
+                "tags": [
+                  "#prompt"
+                ],
+                "metadata": [
+                  {
+                    "key": "owner",
+                    "value": "jason"
+                  }
+                ],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "Explore command help tone",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 10
+                  }
+                ],
+                "line": 9
+              },
+              {
+                "text": "This is something I need to sort",
+                "detail": [],
+                "tags": [],
+                "metadata": [],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "one",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 12
+                  },
+                  {
+                    "text": "two",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 13
+                  },
+                  {
+                    "text": "three",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 14
+                  },
+                  {
+                    "text": "four is good",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [
+                      {
+                        "text": "five is alive",
+                        "detail": [],
+                        "tags": [],
+                        "metadata": [],
+                        "id": null,
+                        "relations": [],
+                        "children": [
+                          {
+                            "text": "jaosn",
+                            "detail": [],
+                            "tags": [],
+                            "metadata": [],
+                            "id": null,
+                            "relations": [],
+                            "children": [
+                              {
+                                "text": "is",
+                                "detail": [],
+                                "tags": [],
+                                "metadata": [],
+                                "id": null,
+                                "relations": [],
+                                "children": [
+                                  {
+                                    "text": "this is a deep node with a long set of text to provide",
+                                    "detail": [],
+                                    "tags": [
+                                      "#yum"
+                                    ],
+                                    "metadata": [
+                                      {
+                                        "key": "owner",
+                                        "value": "jason"
+                                      }
+                                    ],
+                                    "id": "deeplink",
+                                    "relations": [],
+                                    "children": [
+                                      {
+                                        "text": "can we get something even better here",
+                                        "detail": [],
+                                        "tags": [],
+                                        "metadata": [],
+                                        "id": null,
+                                        "relations": [],
+                                        "children": [],
+                                        "line": 20
+                                      },
+                                      {
+                                        "text": "peer node **collaboration moat** — the backend primitives that make Dev2 fundamentally different from \"another AI chat + canvas tool\" — is now **100% implemented** across all 8 features (Phases 0–4). These are the traceable intent primitives defined in the [Feature PRDs](../01-product/feature-detail/README.md) and backed by [ADRs 018–025](../02-adr/00-INDEX.md). Each feature ties back to one of three [Killer Features](../01-product/KILLER_FEATURES.md).",
+                                        "detail": [],
+                                        "tags": [],
+                                        "metadata": [],
+                                        "id": null,
+                                        "relations": [],
+                                        "children": [],
+                                        "line": 21
+                                      }
+                                    ],
+                                    "line": 19
+                                  }
+                                ],
+                                "line": 18
+                              }
+                            ],
+                            "line": 17
+                          }
+                        ],
+                        "line": 16
+                      }
+                    ],
+                    "line": 15
+                  }
+                ],
+                "line": 11
+              }
+            ],
+            "line": 1
+          }
+        ]
+      },
+      "focus_path": [
+        0,
+        3,
+        3,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "dirty": false,
+      "expanded_paths": [
+        [
+          0,
+          3,
+          3,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0
+        ],
+        [
+          0,
+          3,
+          3
+        ],
+        [
+          0,
+          3,
+          3,
+          0,
+          0
+        ]
+      ],
+      "view_mode": "full-map",
+      "subtree_root": null,
+      "filter_query": null
+    },
+    {
+      "name": "Safety checkpoint: delete · peer node **collaboration moat** — the backend primitives that make Dev2 fundamentally different from \"another AI chat + canvas tool\" — is now **100% implemented** across all 8 features (Phases 0–4). These are the traceable intent primitives defined in the [Feature PRDs](../01-product/feature-d",
+      "document": {
+        "nodes": [
+          {
+            "text": "mdmind Demo",
+            "detail": [],
+            "tags": [],
+            "metadata": [],
+            "id": "demo",
+            "relations": [],
+            "children": [
+              {
+                "text": "Product Direction",
+                "detail": [],
+                "tags": [
+                  "#idea"
+                ],
+                "metadata": [
+                  {
+                    "key": "status",
+                    "value": "active"
+                  }
+                ],
+                "id": "demo/direction",
+                "relations": [],
+                "children": [
+                  {
+                    "text": "CLI-first MVP",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 3
+                  },
+                  {
+                    "text": "TUI later",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 4
+                  }
+                ],
+                "line": 2
+              },
+              {
+                "text": "Tasks",
+                "detail": [],
+                "tags": [
+                  "#todo"
+                ],
+                "metadata": [],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "I need to build the parser",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 6
+                  },
+                  {
+                    "text": "Add templates",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 7
+                  },
+                  {
+                    "text": "Ship test now please",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 8
+                  }
+                ],
+                "line": 5
+              },
+              {
+                "text": "Prompts",
+                "detail": [],
+                "tags": [
+                  "#prompt"
+                ],
+                "metadata": [
+                  {
+                    "key": "owner",
+                    "value": "jason"
+                  }
+                ],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "Explore command help tone",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 10
+                  }
+                ],
+                "line": 9
+              },
+              {
+                "text": "This is something I need to sort",
+                "detail": [],
+                "tags": [],
+                "metadata": [],
+                "id": null,
+                "relations": [],
+                "children": [
+                  {
+                    "text": "one",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 12
+                  },
+                  {
+                    "text": "two",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 13
+                  },
+                  {
+                    "text": "three",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [],
+                    "line": 14
+                  },
+                  {
+                    "text": "four is good",
+                    "detail": [],
+                    "tags": [],
+                    "metadata": [],
+                    "id": null,
+                    "relations": [],
+                    "children": [
+                      {
+                        "text": "five is alive",
+                        "detail": [],
+                        "tags": [],
+                        "metadata": [],
+                        "id": null,
+                        "relations": [],
+                        "children": [
+                          {
+                            "text": "jaosn",
+                            "detail": [],
+                            "tags": [],
+                            "metadata": [],
+                            "id": null,
+                            "relations": [],
+                            "children": [
+                              {
+                                "text": "is",
+                                "detail": [],
+                                "tags": [],
+                                "metadata": [],
+                                "id": null,
+                                "relations": [],
+                                "children": [
+                                  {
+                                    "text": "this is a deep node with a long set of text to provide",
+                                    "detail": [],
+                                    "tags": [],
+                                    "metadata": [],
+                                    "id": null,
+                                    "relations": [],
+                                    "children": [
+                                      {
+                                        "text": "can we get something even better here",
+                                        "detail": [],
+                                        "tags": [],
+                                        "metadata": [],
+                                        "id": null,
+                                        "relations": [],
                                         "children": [],
                                         "line": 20
                                       },
                                       {
                                         "text": "peer node **collaboration moat** — the backend primitives that make Dev2 fundamentally different from \"another AI chat + canvas tool\" — is now **100% implemented** across all 8 features (Phases 0–4). These are the traceable intent primitives defined in the [Feature PRDs](../01-product/feature-d",
+                                        "detail": [],
                                         "tags": [],
                                         "metadata": [],
                                         "id": null,
+                                        "relations": [],
                                         "children": [],
                                         "line": 21
                                       }
@@ -285,12 +1755,15 @@
         "nodes": [
           {
             "text": "mdmind Demo",
+            "detail": [],
             "tags": [],
             "metadata": [],
             "id": "demo",
+            "relations": [],
             "children": [
               {
                 "text": "Product Direction",
+                "detail": [],
                 "tags": [
                   "#idea"
                 ],
@@ -301,20 +1774,25 @@
                   }
                 ],
                 "id": "demo/direction",
+                "relations": [],
                 "children": [
                   {
                     "text": "CLI-first MVP",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 3
                   },
                   {
                     "text": "TUI later",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 4
                   }
@@ -323,33 +1801,41 @@
               },
               {
                 "text": "Tasks",
+                "detail": [],
                 "tags": [
                   "#todo"
                 ],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "I need to build the parser",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 6
                   },
                   {
                     "text": "Add templates",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 7
                   },
                   {
                     "text": "Ship test now please",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 8
                   }
@@ -358,6 +1844,7 @@
               },
               {
                 "text": "Prompts",
+                "detail": [],
                 "tags": [
                   "#prompt"
                 ],
@@ -368,12 +1855,15 @@
                   }
                 ],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "Explore command help tone",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 10
                   }
@@ -382,85 +1872,109 @@
               },
               {
                 "text": "This is something I need to sort",
+                "detail": [],
                 "tags": [],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "one",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 12
                   },
                   {
                     "text": "two",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 13
                   },
                   {
                     "text": "three",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 14
                   },
                   {
                     "text": "four is good",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [
                       {
                         "text": "five is alive",
+                        "detail": [],
                         "tags": [],
                         "metadata": [],
                         "id": null,
+                        "relations": [],
                         "children": [
                           {
                             "text": "jaosn",
+                            "detail": [],
                             "tags": [],
                             "metadata": [],
                             "id": null,
+                            "relations": [],
                             "children": [
                               {
                                 "text": "is",
+                                "detail": [],
                                 "tags": [],
                                 "metadata": [],
                                 "id": null,
+                                "relations": [],
                                 "children": [
                                   {
                                     "text": "this is a deep node with a long set of text to provide",
+                                    "detail": [],
                                     "tags": [],
                                     "metadata": [],
                                     "id": null,
+                                    "relations": [],
                                     "children": [
                                       {
                                         "text": "can we get something even better here",
+                                        "detail": [],
                                         "tags": [],
                                         "metadata": [],
                                         "id": null,
+                                        "relations": [],
                                         "children": [],
                                         "line": 20
                                       },
                                       {
                                         "text": "peer node **collaboration moat** — the backend primitives that make Dev2 fundamentally different from \"another AI chat + canvas tool\" — is now **100% implemented** across all 8 features (Phases 0–4). These are the traceable intent primitives defined in the [Feature PRDs](../01-product/feature-detail/README.md) and backed by [ADRs 018–025](../02-adr/00-INDEX.md). Each feature ties back to one of three [Killer Features](../01-product/KILLER_FEATURES.md).",
+                                        "detail": [],
                                         "tags": [],
                                         "metadata": [],
                                         "id": null,
+                                        "relations": [],
                                         "children": [],
                                         "line": 21
                                       },
                                       {
                                         "text": "t remains:** frontend integration, background pipelines, and polish. This document tracks the build order, dependencies, and remaining work.",
+                                        "detail": [],
                                         "tags": [],
                                         "metadata": [],
                                         "id": null,
+                                        "relations": [],
                                         "children": [],
                                         "line": 22
                                       }
@@ -636,12 +2150,15 @@
         "nodes": [
           {
             "text": "mdmind Demo",
+            "detail": [],
             "tags": [],
             "metadata": [],
             "id": "demo",
+            "relations": [],
             "children": [
               {
                 "text": "Product Direction",
+                "detail": [],
                 "tags": [
                   "#idea"
                 ],
@@ -652,20 +2169,25 @@
                   }
                 ],
                 "id": "demo/direction",
+                "relations": [],
                 "children": [
                   {
                     "text": "CLI-first MVP",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 3
                   },
                   {
                     "text": "TUI later",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 4
                   }
@@ -674,33 +2196,41 @@
               },
               {
                 "text": "Tasks",
+                "detail": [],
                 "tags": [
                   "#todo"
                 ],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "I need to build the parser",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 6
                   },
                   {
                     "text": "Add templates",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 7
                   },
                   {
                     "text": "Ship test now please",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 8
                   }
@@ -709,6 +2239,7 @@
               },
               {
                 "text": "Prompts",
+                "detail": [],
                 "tags": [
                   "#prompt"
                 ],
@@ -719,12 +2250,15 @@
                   }
                 ],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "Explore command help tone",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 10
                   }
@@ -733,83 +2267,107 @@
               },
               {
                 "text": "This is something I need to sort",
+                "detail": [],
                 "tags": [],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "one",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 12
                   },
                   {
                     "text": "two",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 13
                   },
                   {
                     "text": "three",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 14
                   },
                   {
                     "text": "four is good",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [
                       {
                         "text": "five is alive",
+                        "detail": [],
                         "tags": [],
                         "metadata": [],
                         "id": null,
+                        "relations": [],
                         "children": [
                           {
                             "text": "jaosn",
+                            "detail": [],
                             "tags": [],
                             "metadata": [],
                             "id": null,
+                            "relations": [],
                             "children": [
                               {
                                 "text": "is",
+                                "detail": [],
                                 "tags": [],
                                 "metadata": [],
                                 "id": null,
+                                "relations": [],
                                 "children": [
                                   {
                                     "text": "this is a deep node with a long set of text to provide",
+                                    "detail": [],
                                     "tags": [],
                                     "metadata": [],
                                     "id": null,
+                                    "relations": [],
                                     "children": [
                                       {
                                         "text": "can we get something even better here",
+                                        "detail": [],
                                         "tags": [],
                                         "metadata": [],
                                         "id": null,
+                                        "relations": [],
                                         "children": [],
                                         "line": 20
                                       },
                                       {
                                         "text": "peer node **collaboration moat** — the backend primitives that make Dev2 fundamentally different from \"another AI chat + canvas tool\" — is now **100% implemented** across all 8 features (Phases 0–4). These are the traceable intent primitives defined in the [Feature PRDs](../01-product/feature-detail/README.md) and backed by [ADRs 018–025](../02-adr/00-INDEX.md). Each feature ties back to one of three [Killer Features](../01-product/KILLER_FEATURES.md).",
+                                        "detail": [],
                                         "tags": [],
                                         "metadata": [],
                                         "id": null,
+                                        "relations": [],
                                         "children": [
                                           {
                                             "text": "Dev2 has a solid **platform foundation** (~85% complete): tldraw canvas, Socket.IO real-time, contextual chat, AI personas with tool calling, MinIO file storage, MCP protocol, OpenTelemetry observability, dual authentication.",
+                                            "detail": [],
                                             "tags": [],
                                             "metadata": [],
                                             "id": null,
+                                            "relations": [],
                                             "children": [],
                                             "line": 22
                                           }
@@ -818,9 +2376,11 @@
                                       },
                                       {
                                         "text": "t remains:** frontend integration, background pipelines, and polish. This document tracks the build order, dependencies, and remaining work.",
+                                        "detail": [],
                                         "tags": [],
                                         "metadata": [],
                                         "id": null,
+                                        "relations": [],
                                         "children": [],
                                         "line": 23
                                       }
@@ -997,12 +2557,15 @@
         "nodes": [
           {
             "text": "mdmind Demo",
+            "detail": [],
             "tags": [],
             "metadata": [],
             "id": "demo",
+            "relations": [],
             "children": [
               {
                 "text": "Product Direction",
+                "detail": [],
                 "tags": [
                   "#idea"
                 ],
@@ -1013,20 +2576,25 @@
                   }
                 ],
                 "id": "demo/direction",
+                "relations": [],
                 "children": [
                   {
                     "text": "CLI-first MVP",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 3
                   },
                   {
                     "text": "TUI later",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 4
                   }
@@ -1035,41 +2603,51 @@
               },
               {
                 "text": "Tasks",
+                "detail": [],
                 "tags": [
                   "#todo"
                 ],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "I need to build the parser",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 6
                   },
                   {
                     "text": "Add templates",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 7
                   },
                   {
                     "text": "Ship tests now",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 8
                   },
                   {
                     "text": "one more thing",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 9
                   }
@@ -1078,6 +2656,7 @@
               },
               {
                 "text": "Prompts",
+                "detail": [],
                 "tags": [
                   "#prompt"
                 ],
@@ -1088,12 +2667,15 @@
                   }
                 ],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "Explore command help tone",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 11
                   }
@@ -1102,33 +2684,43 @@
               },
               {
                 "text": "This is something I need to sort",
+                "detail": [],
                 "tags": [],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "one",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [
                       {
                         "text": "two",
+                        "detail": [],
                         "tags": [],
                         "metadata": [],
                         "id": null,
+                        "relations": [],
                         "children": [
                           {
                             "text": "three",
+                            "detail": [],
                             "tags": [],
                             "metadata": [],
                             "id": null,
+                            "relations": [],
                             "children": [
                               {
                                 "text": "four",
+                                "detail": [],
                                 "tags": [],
                                 "metadata": [],
                                 "id": null,
+                                "relations": [],
                                 "children": [],
                                 "line": 16
                               }
@@ -1231,12 +2823,15 @@
         "nodes": [
           {
             "text": "mdmind Demo",
+            "detail": [],
             "tags": [],
             "metadata": [],
             "id": "demo",
+            "relations": [],
             "children": [
               {
                 "text": "Product Direction",
+                "detail": [],
                 "tags": [
                   "#idea"
                 ],
@@ -1247,20 +2842,25 @@
                   }
                 ],
                 "id": "demo/direction",
+                "relations": [],
                 "children": [
                   {
                     "text": "CLI-first MVP",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 3
                   },
                   {
                     "text": "TUI later",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 4
                   }
@@ -1269,41 +2869,51 @@
               },
               {
                 "text": "Tasks",
+                "detail": [],
                 "tags": [
                   "#todo"
                 ],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "I need to build the parser",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 6
                   },
                   {
                     "text": "Add templates",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 7
                   },
                   {
                     "text": "Ship tests now",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 8
                   },
                   {
                     "text": "one more thing",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 9
                   }
@@ -1312,6 +2922,7 @@
               },
               {
                 "text": "Prompts",
+                "detail": [],
                 "tags": [
                   "#prompt"
                 ],
@@ -1322,12 +2933,15 @@
                   }
                 ],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "Explore command help tone",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 11
                   }
@@ -1336,35 +2950,45 @@
               },
               {
                 "text": "This is something I need to sort",
+                "detail": [],
                 "tags": [],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "one",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [
                       {
                         "text": "two",
+                        "detail": [],
                         "tags": [],
                         "metadata": [],
                         "id": null,
+                        "relations": [],
                         "children": [
                           {
                             "text": "three",
+                            "detail": [],
                             "tags": [],
                             "metadata": [],
                             "id": null,
+                            "relations": [],
                             "children": [],
                             "line": 15
                           },
                           {
                             "text": "four",
+                            "detail": [],
                             "tags": [],
                             "metadata": [],
                             "id": null,
+                            "relations": [],
                             "children": [],
                             "line": 16
                           }
@@ -1465,12 +3089,15 @@
         "nodes": [
           {
             "text": "mdmind Demo",
+            "detail": [],
             "tags": [],
             "metadata": [],
             "id": "demo",
+            "relations": [],
             "children": [
               {
                 "text": "Product Direction",
+                "detail": [],
                 "tags": [
                   "#idea"
                 ],
@@ -1481,20 +3108,25 @@
                   }
                 ],
                 "id": "demo/direction",
+                "relations": [],
                 "children": [
                   {
                     "text": "CLI-first MVP",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 3
                   },
                   {
                     "text": "TUI later",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 4
                   }
@@ -1503,41 +3135,51 @@
               },
               {
                 "text": "Tasks",
+                "detail": [],
                 "tags": [
                   "#todo"
                 ],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "I need to build the parser",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 6
                   },
                   {
                     "text": "Add templates",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 7
                   },
                   {
                     "text": "Ship tests now",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 8
                   },
                   {
                     "text": "one more thing",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 9
                   }
@@ -1546,6 +3188,7 @@
               },
               {
                 "text": "Prompts",
+                "detail": [],
                 "tags": [
                   "#prompt"
                 ],
@@ -1556,12 +3199,15 @@
                   }
                 ],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "Explore command help tone",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 11
                   }
@@ -1570,33 +3216,43 @@
               },
               {
                 "text": "This is something I need to sort",
+                "detail": [],
                 "tags": [],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "one",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [
                       {
                         "text": "two",
+                        "detail": [],
                         "tags": [],
                         "metadata": [],
                         "id": null,
+                        "relations": [],
                         "children": [
                           {
                             "text": "three",
+                            "detail": [],
                             "tags": [],
                             "metadata": [],
                             "id": null,
+                            "relations": [],
                             "children": [
                               {
                                 "text": "four",
+                                "detail": [],
                                 "tags": [],
                                 "metadata": [],
                                 "id": null,
+                                "relations": [],
                                 "children": [],
                                 "line": 16
                               }
@@ -1701,12 +3357,15 @@
         "nodes": [
           {
             "text": "mdmind Demo",
+            "detail": [],
             "tags": [],
             "metadata": [],
             "id": "demo",
+            "relations": [],
             "children": [
               {
                 "text": "Product Direction",
+                "detail": [],
                 "tags": [
                   "#idea"
                 ],
@@ -1717,20 +3376,25 @@
                   }
                 ],
                 "id": "demo/direction",
+                "relations": [],
                 "children": [
                   {
                     "text": "CLI-first MVP",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 3
                   },
                   {
                     "text": "TUI later",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 4
                   }
@@ -1739,41 +3403,51 @@
               },
               {
                 "text": "Tasks",
+                "detail": [],
                 "tags": [
                   "#todo"
                 ],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "I need to build the parser",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 6
                   },
                   {
                     "text": "Add templates",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 7
                   },
                   {
                     "text": "Ship tests now",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 8
                   },
                   {
                     "text": "one more thing",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 9
                   }
@@ -1782,6 +3456,7 @@
               },
               {
                 "text": "Prompts",
+                "detail": [],
                 "tags": [
                   "#prompt"
                 ],
@@ -1792,12 +3467,15 @@
                   }
                 ],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "Explore command help tone",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [],
                     "line": 11
                   }
@@ -1806,33 +3484,43 @@
               },
               {
                 "text": "This is something I need to sort",
+                "detail": [],
                 "tags": [],
                 "metadata": [],
                 "id": null,
+                "relations": [],
                 "children": [
                   {
                     "text": "one",
+                    "detail": [],
                     "tags": [],
                     "metadata": [],
                     "id": null,
+                    "relations": [],
                     "children": [
                       {
                         "text": "two",
+                        "detail": [],
                         "tags": [],
                         "metadata": [],
                         "id": null,
+                        "relations": [],
                         "children": [
                           {
                             "text": "three",
+                            "detail": [],
                             "tags": [],
                             "metadata": [],
                             "id": null,
+                            "relations": [],
                             "children": [
                               {
                                 "text": "four",
+                                "detail": [],
                                 "tags": [],
                                 "metadata": [],
                                 "id": null,
+                                "relations": [],
                                 "children": [],
                                 "line": 16
                               }
@@ -1924,1080 +3612,6 @@
           3,
           0,
           0,
-          0
-        ]
-      ],
-      "view_mode": "full-map",
-      "subtree_root": null,
-      "filter_query": null
-    },
-    {
-      "name": "Safety checkpoint: reparent · four",
-      "document": {
-        "nodes": [
-          {
-            "text": "mdmind Demo",
-            "tags": [],
-            "metadata": [],
-            "id": "demo",
-            "children": [
-              {
-                "text": "Product Direction",
-                "tags": [
-                  "#idea"
-                ],
-                "metadata": [
-                  {
-                    "key": "status",
-                    "value": "active"
-                  }
-                ],
-                "id": "demo/direction",
-                "children": [
-                  {
-                    "text": "CLI-first MVP",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 3
-                  },
-                  {
-                    "text": "TUI later",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 4
-                  }
-                ],
-                "line": 2
-              },
-              {
-                "text": "Tasks",
-                "tags": [
-                  "#todo"
-                ],
-                "metadata": [],
-                "id": null,
-                "children": [
-                  {
-                    "text": "I need to build the parser",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 6
-                  },
-                  {
-                    "text": "Add templates",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 7
-                  },
-                  {
-                    "text": "Ship tests now",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 8
-                  },
-                  {
-                    "text": "one more thing",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 9
-                  }
-                ],
-                "line": 5
-              },
-              {
-                "text": "Prompts",
-                "tags": [
-                  "#prompt"
-                ],
-                "metadata": [
-                  {
-                    "key": "owner",
-                    "value": "jason"
-                  }
-                ],
-                "id": null,
-                "children": [
-                  {
-                    "text": "Explore command help tone",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 11
-                  }
-                ],
-                "line": 10
-              },
-              {
-                "text": "This is something I need to sort",
-                "tags": [],
-                "metadata": [],
-                "id": null,
-                "children": [
-                  {
-                    "text": "one",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [
-                      {
-                        "text": "two",
-                        "tags": [],
-                        "metadata": [],
-                        "id": null,
-                        "children": [
-                          {
-                            "text": "three",
-                            "tags": [],
-                            "metadata": [],
-                            "id": null,
-                            "children": [],
-                            "line": 15
-                          },
-                          {
-                            "text": "four",
-                            "tags": [],
-                            "metadata": [],
-                            "id": null,
-                            "children": [],
-                            "line": 16
-                          }
-                        ],
-                        "line": 14
-                      }
-                    ],
-                    "line": 13
-                  }
-                ],
-                "line": 12
-              }
-            ],
-            "line": 1
-          }
-        ]
-      },
-      "focus_path": [
-        0,
-        3,
-        0,
-        0,
-        1
-      ],
-      "dirty": true,
-      "expanded_paths": [
-        [
-          0,
-          3,
-          0,
-          1
-        ],
-        [
-          0,
-          0
-        ],
-        [
-          0
-        ],
-        [
-          0,
-          1,
-          3
-        ],
-        [
-          0,
-          3
-        ],
-        [
-          0,
-          2
-        ],
-        [
-          0,
-          3,
-          0,
-          0
-        ],
-        [
-          0,
-          3,
-          0,
-          0,
-          1
-        ],
-        [
-          0,
-          1
-        ],
-        [
-          0,
-          3,
-          0
-        ],
-        [
-          0,
-          3,
-          0,
-          0,
-          0
-        ]
-      ],
-      "view_mode": "full-map",
-      "subtree_root": null,
-      "filter_query": null
-    },
-    {
-      "name": "Safety checkpoint: reparent · four",
-      "document": {
-        "nodes": [
-          {
-            "text": "mdmind Demo",
-            "tags": [],
-            "metadata": [],
-            "id": "demo",
-            "children": [
-              {
-                "text": "Product Direction",
-                "tags": [
-                  "#idea"
-                ],
-                "metadata": [
-                  {
-                    "key": "status",
-                    "value": "active"
-                  }
-                ],
-                "id": "demo/direction",
-                "children": [
-                  {
-                    "text": "CLI-first MVP",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 3
-                  },
-                  {
-                    "text": "TUI later",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 4
-                  }
-                ],
-                "line": 2
-              },
-              {
-                "text": "Tasks",
-                "tags": [
-                  "#todo"
-                ],
-                "metadata": [],
-                "id": null,
-                "children": [
-                  {
-                    "text": "I need to build the parser",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 6
-                  },
-                  {
-                    "text": "Add templates",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 7
-                  },
-                  {
-                    "text": "Ship tests now",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 8
-                  },
-                  {
-                    "text": "one more thing",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 9
-                  }
-                ],
-                "line": 5
-              },
-              {
-                "text": "Prompts",
-                "tags": [
-                  "#prompt"
-                ],
-                "metadata": [
-                  {
-                    "key": "owner",
-                    "value": "jason"
-                  }
-                ],
-                "id": null,
-                "children": [
-                  {
-                    "text": "Explore command help tone",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 11
-                  }
-                ],
-                "line": 10
-              },
-              {
-                "text": "This is something I need to sort",
-                "tags": [],
-                "metadata": [],
-                "id": null,
-                "children": [
-                  {
-                    "text": "one",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [
-                      {
-                        "text": "two",
-                        "tags": [],
-                        "metadata": [],
-                        "id": null,
-                        "children": [
-                          {
-                            "text": "three",
-                            "tags": [],
-                            "metadata": [],
-                            "id": null,
-                            "children": [],
-                            "line": 15
-                          }
-                        ],
-                        "line": 14
-                      },
-                      {
-                        "text": "four",
-                        "tags": [],
-                        "metadata": [],
-                        "id": null,
-                        "children": [],
-                        "line": 16
-                      }
-                    ],
-                    "line": 13
-                  }
-                ],
-                "line": 12
-              }
-            ],
-            "line": 1
-          }
-        ]
-      },
-      "focus_path": [
-        0,
-        3,
-        0,
-        1
-      ],
-      "dirty": true,
-      "expanded_paths": [
-        [
-          0,
-          3,
-          0,
-          1
-        ],
-        [
-          0,
-          0
-        ],
-        [
-          0
-        ],
-        [
-          0,
-          1,
-          3
-        ],
-        [
-          0,
-          3
-        ],
-        [
-          0,
-          2
-        ],
-        [
-          0,
-          3,
-          0,
-          0
-        ],
-        [
-          0,
-          1
-        ],
-        [
-          0,
-          3,
-          0
-        ],
-        [
-          0,
-          3,
-          0,
-          0,
-          0
-        ]
-      ],
-      "view_mode": "full-map",
-      "subtree_root": null,
-      "filter_query": null
-    },
-    {
-      "name": "Safety checkpoint: reparent · four",
-      "document": {
-        "nodes": [
-          {
-            "text": "mdmind Demo",
-            "tags": [],
-            "metadata": [],
-            "id": "demo",
-            "children": [
-              {
-                "text": "Product Direction",
-                "tags": [
-                  "#idea"
-                ],
-                "metadata": [
-                  {
-                    "key": "status",
-                    "value": "active"
-                  }
-                ],
-                "id": "demo/direction",
-                "children": [
-                  {
-                    "text": "CLI-first MVP",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 3
-                  },
-                  {
-                    "text": "TUI later",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 4
-                  }
-                ],
-                "line": 2
-              },
-              {
-                "text": "Tasks",
-                "tags": [
-                  "#todo"
-                ],
-                "metadata": [],
-                "id": null,
-                "children": [
-                  {
-                    "text": "I need to build the parser",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 6
-                  },
-                  {
-                    "text": "Add templates",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 7
-                  },
-                  {
-                    "text": "Ship tests now",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 8
-                  },
-                  {
-                    "text": "one more thing",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 9
-                  }
-                ],
-                "line": 5
-              },
-              {
-                "text": "Prompts",
-                "tags": [
-                  "#prompt"
-                ],
-                "metadata": [
-                  {
-                    "key": "owner",
-                    "value": "jason"
-                  }
-                ],
-                "id": null,
-                "children": [
-                  {
-                    "text": "Explore command help tone",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 11
-                  }
-                ],
-                "line": 10
-              },
-              {
-                "text": "This is something I need to sort",
-                "tags": [],
-                "metadata": [],
-                "id": null,
-                "children": [
-                  {
-                    "text": "one",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [
-                      {
-                        "text": "two",
-                        "tags": [],
-                        "metadata": [],
-                        "id": null,
-                        "children": [
-                          {
-                            "text": "three",
-                            "tags": [],
-                            "metadata": [],
-                            "id": null,
-                            "children": [],
-                            "line": 15
-                          }
-                        ],
-                        "line": 14
-                      }
-                    ],
-                    "line": 13
-                  },
-                  {
-                    "text": "four",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 16
-                  }
-                ],
-                "line": 12
-              }
-            ],
-            "line": 1
-          }
-        ]
-      },
-      "focus_path": [
-        0,
-        3,
-        1
-      ],
-      "dirty": true,
-      "expanded_paths": [
-        [
-          0,
-          3,
-          0,
-          1
-        ],
-        [
-          0,
-          0
-        ],
-        [
-          0
-        ],
-        [
-          0,
-          1,
-          3
-        ],
-        [
-          0,
-          3
-        ],
-        [
-          0,
-          2
-        ],
-        [
-          0,
-          3,
-          0,
-          0
-        ],
-        [
-          0,
-          1
-        ],
-        [
-          0,
-          3,
-          0
-        ],
-        [
-          0,
-          3,
-          0,
-          0,
-          0
-        ]
-      ],
-      "view_mode": "full-map",
-      "subtree_root": null,
-      "filter_query": null
-    },
-    {
-      "name": "Safety checkpoint: reparent · three",
-      "document": {
-        "nodes": [
-          {
-            "text": "mdmind Demo",
-            "tags": [],
-            "metadata": [],
-            "id": "demo",
-            "children": [
-              {
-                "text": "Product Direction",
-                "tags": [
-                  "#idea"
-                ],
-                "metadata": [
-                  {
-                    "key": "status",
-                    "value": "active"
-                  }
-                ],
-                "id": "demo/direction",
-                "children": [
-                  {
-                    "text": "CLI-first MVP",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 3
-                  },
-                  {
-                    "text": "TUI later",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 4
-                  }
-                ],
-                "line": 2
-              },
-              {
-                "text": "Tasks",
-                "tags": [
-                  "#todo"
-                ],
-                "metadata": [],
-                "id": null,
-                "children": [
-                  {
-                    "text": "I need to build the parser",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 6
-                  },
-                  {
-                    "text": "Add templates",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 7
-                  },
-                  {
-                    "text": "Ship tests now",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 8
-                  },
-                  {
-                    "text": "one more thing",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 9
-                  }
-                ],
-                "line": 5
-              },
-              {
-                "text": "Prompts",
-                "tags": [
-                  "#prompt"
-                ],
-                "metadata": [
-                  {
-                    "key": "owner",
-                    "value": "jason"
-                  }
-                ],
-                "id": null,
-                "children": [
-                  {
-                    "text": "Explore command help tone",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 11
-                  }
-                ],
-                "line": 10
-              },
-              {
-                "text": "This is something I need to sort",
-                "tags": [],
-                "metadata": [],
-                "id": null,
-                "children": [
-                  {
-                    "text": "one",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [
-                      {
-                        "text": "two",
-                        "tags": [],
-                        "metadata": [],
-                        "id": null,
-                        "children": [],
-                        "line": 14
-                      },
-                      {
-                        "text": "three",
-                        "tags": [],
-                        "metadata": [],
-                        "id": null,
-                        "children": [],
-                        "line": 15
-                      }
-                    ],
-                    "line": 13
-                  },
-                  {
-                    "text": "four",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 16
-                  }
-                ],
-                "line": 12
-              }
-            ],
-            "line": 1
-          }
-        ]
-      },
-      "focus_path": [
-        0,
-        3,
-        0,
-        1
-      ],
-      "dirty": true,
-      "expanded_paths": [
-        [
-          0,
-          3,
-          0,
-          1
-        ],
-        [
-          0,
-          0
-        ],
-        [
-          0
-        ],
-        [
-          0,
-          1,
-          3
-        ],
-        [
-          0,
-          3
-        ],
-        [
-          0,
-          2
-        ],
-        [
-          0,
-          3,
-          0,
-          0
-        ],
-        [
-          0,
-          1
-        ],
-        [
-          0,
-          3,
-          0
-        ]
-      ],
-      "view_mode": "full-map",
-      "subtree_root": null,
-      "filter_query": null
-    },
-    {
-      "name": "Safety checkpoint: reparent · three",
-      "document": {
-        "nodes": [
-          {
-            "text": "mdmind Demo",
-            "tags": [],
-            "metadata": [],
-            "id": "demo",
-            "children": [
-              {
-                "text": "Product Direction",
-                "tags": [
-                  "#idea"
-                ],
-                "metadata": [
-                  {
-                    "key": "status",
-                    "value": "active"
-                  }
-                ],
-                "id": "demo/direction",
-                "children": [
-                  {
-                    "text": "CLI-first MVP",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 3
-                  },
-                  {
-                    "text": "TUI later",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 4
-                  }
-                ],
-                "line": 2
-              },
-              {
-                "text": "Tasks",
-                "tags": [
-                  "#todo"
-                ],
-                "metadata": [],
-                "id": null,
-                "children": [
-                  {
-                    "text": "I need to build the parser",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 6
-                  },
-                  {
-                    "text": "Add templates",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 7
-                  },
-                  {
-                    "text": "Ship tests now",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 8
-                  },
-                  {
-                    "text": "one more thing",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 9
-                  }
-                ],
-                "line": 5
-              },
-              {
-                "text": "Prompts",
-                "tags": [
-                  "#prompt"
-                ],
-                "metadata": [
-                  {
-                    "key": "owner",
-                    "value": "jason"
-                  }
-                ],
-                "id": null,
-                "children": [
-                  {
-                    "text": "Explore command help tone",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 11
-                  }
-                ],
-                "line": 10
-              },
-              {
-                "text": "This is something I need to sort",
-                "tags": [],
-                "metadata": [],
-                "id": null,
-                "children": [
-                  {
-                    "text": "one",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [
-                      {
-                        "text": "two",
-                        "tags": [],
-                        "metadata": [],
-                        "id": null,
-                        "children": [],
-                        "line": 14
-                      }
-                    ],
-                    "line": 13
-                  },
-                  {
-                    "text": "three",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 15
-                  },
-                  {
-                    "text": "four",
-                    "tags": [],
-                    "metadata": [],
-                    "id": null,
-                    "children": [],
-                    "line": 16
-                  }
-                ],
-                "line": 12
-              }
-            ],
-            "line": 1
-          }
-        ]
-      },
-      "focus_path": [
-        0,
-        3,
-        1
-      ],
-      "dirty": true,
-      "expanded_paths": [
-        [
-          0,
-          0
-        ],
-        [
-          0
-        ],
-        [
-          0,
-          1,
-          3
-        ],
-        [
-          0,
-          3
-        ],
-        [
-          0,
-          2
-        ],
-        [
-          0,
-          3,
-          0,
-          0
-        ],
-        [
-          0,
-          1
-        ],
-        [
-          0,
-          3,
           0
         ]
       ],
