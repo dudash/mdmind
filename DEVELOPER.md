@@ -117,6 +117,14 @@ Recommended path:
 3. The workflow updates the crate version, verifies the repo, commits, tags, and pushes.
 4. The same workflow creates the GitHub Release and uploads binary archives for each supported platform.
 5. GitHub will also show its default source `.zip` and `.tar.gz` archives for the tag.
+6. The install-metadata job generates checksums and the Homebrew formula, then publishes the formula to `dudash/homebrew-tap` when the tap settings are configured.
+
+Useful local validation:
+
+```bash
+scripts/validate-release-installers.sh --tag v0.2.0 --tap-repo ../homebrew-tap
+scripts/validate-release-installers.sh --tag v0.2.0 --tap-repo ../homebrew-tap --check-brew
+```
 
 Manual fallback:
 
@@ -155,7 +163,8 @@ Recommended Homebrew shape:
 - install command:
 
 ```bash
-brew install dudash/tap/mdmind
+brew tap dudash/tap
+brew install mdmind
 ```
 
 Current release targets:

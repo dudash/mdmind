@@ -1,15 +1,34 @@
 # mdmind
 
-`mdmind` is a local-first mind mapping tool for structured thinking in plain text.
+`mdmind` is a local-first thinking tool for structured maps in plain text.
 
-It gives you two interfaces over the same map format:
+It gives you two interfaces over the same file:
 
-- `mdm`: a CLI for viewing, searching, validating, and exporting maps
+- `mdm`: a CLI for viewing, searching, validating, exporting, and copying examples
 - `mdmind`: a full-screen TUI for navigating, filtering, editing, and reshaping maps
 
-The goal is not to mimic a whiteboard app. The goal is to make large idea trees feel fast, searchable, and safe to edit with a keyboard.
+The goal is not to mimic a whiteboard app. The goal is to make large idea trees feel calm, searchable, and safe to edit with a keyboard.
 
 License: Apache-2.0
+
+![mdmind screenshot](docs/assets/novel-focus-branch.png)
+
+## Why mdmind
+
+`mdmind` is good for:
+
+- product and feature planning
+- research and writing maps
+- prompt libraries
+- project breakdowns
+- backlog shaping
+- keyboard-first personal planning
+
+It is intentionally not:
+
+- a rich document editor
+- a team wiki
+- a freeform diagram canvas
 
 ## What A Map Looks Like
 
@@ -19,17 +38,7 @@ Maps are plain-text tree files with lightweight inline structure:
 - `@key:value` for structured metadata
 - `[id:path/to/node]` for stable deep links
 - `[[target/id]]` or `[[rel:kind->target/id]]` for cross-branch references
-- `| detail text` on indented lines for longer notes attached to a node
-
-Compatibility notes:
-
-- these files stay valid, readable plain text in normal Markdown tools
-- `[id:...]` and `[[...]]` are mdmind conventions, so ordinary Markdown renderers usually show them as literal inline text
-- tools that already support wiki-link syntax may also interpret `[[target]]` as a link, which is usually compatible with the intent
-- the simplest mental model is:
-  - `[id:...]` gives a node a stable address
-  - `[[target]]` points at that address
-  - `[[rel:kind->target]]` adds meaning to that cross-link
+- `| detail text` for longer notes attached to a node
 
 Example:
 
@@ -44,286 +53,97 @@ Example:
   - Prompt Library #prompt [id:prompts/library]
 ```
 
-That gives you:
-
-- human-readable files
-- deep links like `ideas.md#product/tasks`
-- filterable tags and metadata
-- editable maps that still work well in git
-
-## What mdmind Is Good For
-
-- product and feature planning
-- project breakdowns
-- prompt libraries
-- backlog shaping
-- idea exploration
-- keyboard-first personal planning
-
-It is intentionally not a rich document editor, team wiki, or freeform diagramming canvas.
+These files stay readable in normal Markdown tools. `mdmind` adds structure and navigation on top of that plain-text shape.
 
 ## Install
 
-For local development from this repo:
+For public installs, GitHub Releases are the source of truth.
+
+- macOS:
 
 ```bash
-cargo run --bin mdm -- version
-cargo run --bin mdm -- --help
-cargo run --bin mdmind -- examples/demo.md
-cargo run --bin mdmind -- examples/product-status.md
-cargo run --bin mdmind -- examples/lantern-studio-map.md
-cargo run --bin mdmind -- examples/game-world-moonwake.md
-cargo run --bin mdmind -- examples/novel-research-writing-map.md
+brew tap dudash/tap
+brew install mdmind
 ```
 
-To install the binaries locally:
+- Linux: install from the release tarball
+- Windows: install from the release zip
+
+For local development from this repo:
 
 ```bash
 cargo install --path .
 ```
 
-That installs:
+That installs both:
 
 - `mdm`
 - `mdmind`
 
-For tagged releases, the GitHub release page is the source of truth:
+More install and release detail lives in [docs/INSTALL_AND_RELEASE.md](docs/INSTALL_AND_RELEASE.md).
 
-- macOS: Homebrew via `brew tap dudash/tap && brew install mdmind`, backed by the release tarballs
-- Linux: release tarball
-- Windows: release zip
+## Quick Start
 
-Installer and tap details live in [docs/INSTALL_AND_RELEASE.md](docs/INSTALL_AND_RELEASE.md).
-
-## CLI Quick Start
-
-Create a new map from a starter template:
+Create a map from a starter template:
 
 ```bash
 mdm init roadmap.md --template product
 ```
 
-View a map:
+Open the TUI:
+
+```bash
+mdmind roadmap.md
+```
+
+Inspect a map from the CLI:
 
 ```bash
 mdm view roadmap.md
-mdm view roadmap.md#product/mvp
-```
-
-Search by text, tag, or metadata:
-
-```bash
-mdm find roadmap.md "rate limit"
 mdm find roadmap.md "#todo"
-mdm find roadmap.md "@status:blocked"
-mdm find roadmap.md "#todo @owner:jason"
-```
-
-Inspect structure:
-
-```bash
-mdm tags roadmap.md
-mdm kv roadmap.md --keys status,owner
 mdm links roadmap.md
-mdm relations roadmap.md
-mdm validate roadmap.md
-mdm export roadmap.md --format json
-mdm export roadmap.md --format mermaid
-mdm export roadmap.md#product/mvp --format opml
-```
-
-Inspect the bundled example maps from the CLI:
-
-```bash
-mdm find examples/lantern-studio-map.md "@owner:mira" --plain
-mdm kv examples/game-world-moonwake.md --keys owner,region --plain
-mdm tags examples/novel-research-writing-map.md --plain
-mdm links examples/lantern-studio-map.md --plain
-```
-
-These are useful for learning the map language in read-only mode:
-
-- `find` shows matching labels, ids, tags, and metadata in context
-- `kv` is good for auditing shared fields like `owner`, `status`, or `region`
-- `tags` gives you the vocabulary and shape of a map quickly
-- `links` lists stable ids you can deep-link to from `view`, `open`, or `export`
-- `relations` shows outgoing references across the map, or outgoing plus incoming backlinks for a deep-linked node
-- deep links prefer explicit ids, but `mdm` and `mdmind` can now fall back to label paths like `map.md#Product Idea/Tasks` when no id exists
-
-Open the interactive TUI:
-
-```bash
-mdm open roadmap.md
-mdm open roadmap.md#product/mvp --autosave
 ```
 
 Copy bundled example maps onto your machine:
 
 ```bash
 mdm examples list
-mdm examples copy demo
 mdm examples copy all
-mdm examples path
 ```
 
-## TUI Quick Start
+## Core Ideas
 
-Run:
+- one plain-text map format, two interfaces
+- local-first files with small sidecars for session state, views, checkpoints, navigation memory, and UI settings
+- focused views for working inside large maps without losing structure
+- built-in search, browse, saved views, ids, relations, and detail notes
+- safe editing with undo, redo, checkpoints, and autosave/manual save modes
 
-```bash
-mdmind roadmap.md
-```
+## Read Next
 
-Core navigation:
+If you are new:
 
-- `↑` / `↓`: move through visible nodes
-- `←` / `→`: collapse/expand or move between parent and child
-- `Enter`: toggle branch expansion
-- `z` / `Z`: collapse or expand the current working scope
-- `g`: jump to root
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+- [docs/TUI_WORKFLOWS.md](docs/TUI_WORKFLOWS.md)
+- [docs/USING_MDMIND_AS_OUTLINER.md](docs/USING_MDMIND_AS_OUTLINER.md)
 
-Editing:
+If you want specific features:
 
-- `a`: add child
-- `A`: add sibling
-- `Shift+R`: add root
-- `e`: edit selected node
-- `d`: edit longer details for the selected node
-- add/edit prompts now preview parsed `#tags`, `@key:value`, `[id:...]`, and duplicate-id issues before `Enter`
-- detail editing uses a larger text area; `Enter` adds a new line and `Ctrl+S` saves
-- `x`: delete selected node, confirmed on second press
-- `u` / `U`: undo or redo the last structural change
+- [docs/QUERY_LANGUAGE.md](docs/QUERY_LANGUAGE.md)
+- [docs/IDS_AND_DEEP_LINKS.md](docs/IDS_AND_DEEP_LINKS.md)
+- [docs/CROSS_LINKS_AND_BACKLINKS.md](docs/CROSS_LINKS_AND_BACKLINKS.md)
+- [docs/NODE_DETAILS.md](docs/NODE_DETAILS.md)
+- [docs/SAFETY_AND_HISTORY.md](docs/SAFETY_AND_HISTORY.md)
+- [docs/TEMPLATES.md](docs/TEMPLATES.md)
+- [examples/README.md](examples/README.md)
 
-Reshaping:
-
-- `Alt+↑` / `Alt+↓`: move node among siblings
-- `Alt+←`: move node out one level
-- `Alt+→`: indent node into previous sibling
-
-Search and large-map workflows:
-
-- `:` / `Ctrl+P`: open the command palette
-- inside the palette, type `tasks` or another branch name to jump to nodes, `#todo` or `@status:active` to apply inline filters, `product/tasks` or `[id:product/tasks]` to jump by id, relation kinds or target ids like `supports`, `prompts/library`, or `backlink` to jump across cross-links, `review todo` or `work inside branch` to run built-in workflows, `owner` or `status` to surface contextual review recipes when those fields exist in the current map, revisit recent locations and frequent places, type `undo` or `redo` to browse recent actions, `checkpoint` to find manual checkpoints, `safety` to find automatic safety snapshots, `theme` to preview themes like `violet`, `monograph`, or `paper`, `ascii` to toggle terminal-style accents, or `motion` to control attention-guiding focus, filter, and input motion
-- `]`: follow the next outgoing relation on the focused node
-- `[`: follow the next backlink into the focused node
-- type `minimal` in the palette to switch to a quieter pro layout with a condensed shell, no keybar, a wider main tree, and fewer right-side context lanes
-- type `reading` in the palette when you want the current node to expand inline into a larger, calmer document-style reading block without changing the active view mode
-- `?`: open searchable built-in help with user guides, command reference, and tips
-- `/`: open unified search
-- `b`: open browse for tags, metadata, and ids
-- `w`: open saved views
-- `v` / `V`: cycle focused view modes forward or backward
-- `g`: jump to the map root, or back to the subtree root while `Subtree Only` is active
-- `m`: open the visual mindmap overlay
-- `↑` / `↓` / `←` / `→` inside the overlay: pan the camera
-- `0` inside the overlay: recenter on the focused node
-- `p` inside the overlay: export the current rendered view to `map-name.mindmap.png`
-- when both endpoints are visible, the mindmap also draws cross-link relation edges between related branches
-- `Tab`: switch between `Query`, `Browse`, and `Saved Views`
-- `←` / `→` inside browse: switch `Tags`, `Keys`, `Values`, `Ids`
-- `n` / `N`: move to next or previous match
-- `c`: clear active filter
-
-Saving:
-
-- `s`: save now
-- `S`: toggle autosave
-- `r`: reload from disk and discard unsaved in-memory changes
-- `q`: quit
-- `?`: help
-
-## Local-First Behavior
-
-`mdmind` writes your map back to the original file. It also keeps small hidden sidecar files next to the map:
-
-- session restore: `.<map-file>.mdmind-session.json`
-- saved views: `.<map-file>.mdmind-views.json`
-- checkpoints: `.<map-file>.mdmind-checkpoints.json`
-- navigation memory: `.<map-file>.mdmind-locations.json`
-- UI settings: `.<map-file>.mdmind-ui.json`
-
-These keep editor state local without changing the map format itself. The UI settings sidecar stores the active theme plus per-map surface preferences such as attention-guiding motion and ASCII accents.
-
-## Project Templates
-
-Starter templates live in `templates/` and are the actual files used by `mdm init`:
-
-- `product`
-- `feature`
-- `prompts`
-- `backlog`
-- `writing`
-
-Each starter is intentionally small but not empty. They already include ids, tags, metadata, and at least one example cross-link so the map language is visible from the first edit.
-
-Example:
-
-```bash
-mdm init prompts.md --template prompts
-mdm init novel.md --template writing
-```
-
-## Repo Docs
-
-Start here:
+If you want product status and roadmap shelves:
 
 - [docs/product/README.md](docs/product/README.md)
 - [docs/product/features/finished/README.md](docs/product/features/finished/README.md)
 - [docs/product/features/inwork/README.md](docs/product/features/inwork/README.md)
 - [docs/product/features/future/README.md](docs/product/features/future/README.md)
 
-User-facing guides:
-
-- [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
-- [docs/USING_MDMIND_AS_OUTLINER.md](docs/USING_MDMIND_AS_OUTLINER.md)
-- [docs/TUI_WORKFLOWS.md](docs/TUI_WORKFLOWS.md)
-- [docs/PALETTE_AND_HELP.md](docs/PALETTE_AND_HELP.md)
-- [docs/SAFETY_AND_HISTORY.md](docs/SAFETY_AND_HISTORY.md)
-- [docs/TEMPLATES.md](docs/TEMPLATES.md)
-- [docs/INSTALL_AND_RELEASE.md](docs/INSTALL_AND_RELEASE.md)
-- [docs/NODE_DETAILS.md](docs/NODE_DETAILS.md)
-- [docs/QUERY_LANGUAGE.md](docs/QUERY_LANGUAGE.md)
-- [docs/IDS_AND_DEEP_LINKS.md](docs/IDS_AND_DEEP_LINKS.md)
-- [docs/CROSS_LINKS_AND_BACKLINKS.md](docs/CROSS_LINKS_AND_BACKLINKS.md)
-
-Design notes and roadmap docs:
-
-- [docs/FUTURE_FEATURES.md](docs/FUTURE_FEATURES.md)
-- [docs/TERMINAL_EXPERIENCE.md](docs/TERMINAL_EXPERIENCE.md)
-- [docs/DOCUMENTATION_STRATEGY.md](docs/DOCUMENTATION_STRATEGY.md)
-- [docs/UX_DESIGN_REVIEW.md](docs/UX_DESIGN_REVIEW.md)
-- [docs/IMPORT_AND_INGESTION.md](docs/IMPORT_AND_INGESTION.md)
-- [docs/SPATIAL_CANVAS.md](docs/SPATIAL_CANVAS.md)
-- [docs/COMMAND_PALETTE.md](docs/COMMAND_PALETTE.md)
-
-Example maps you can open directly in `mdmind`:
-
-- [examples/README.md](examples/README.md)
-- [examples/demo.md](examples/demo.md)
-- [examples/product-status.md](examples/product-status.md)
-- [examples/lantern-studio-map.md](examples/lantern-studio-map.md)
-- [examples/game-world-moonwake.md](examples/game-world-moonwake.md)
-- [examples/novel-research-writing-map.md](examples/novel-research-writing-map.md)
-- [examples/team-project-board.md](examples/team-project-board.md)
-- [examples/prompt-ops.md](examples/prompt-ops.md)
-- [examples/decision-log.md](examples/decision-log.md)
-
-Developer workflow, testing, CI, and release notes:
+If you are working on the repo:
 
 - [DEVELOPER.md](DEVELOPER.md)
-
-## Current Status
-
-The app is already useful for:
-
-- authoring and editing structured map files
-- deep-linking into a map by node id
-- filtering large maps by text, tags, and metadata
-- calming large maps with full-map, focus-branch, subtree-only, and filtered-focus views
-- exporting full maps or deep-linked subtrees as JSON, Mermaid, and OPML
-- saving and reopening named filtered views
-- opening a visual bubble-style mindmap overlay from the current working set
-- exporting that visual mindmap view as a PNG
-- keyboard-first restructuring of nodes in the tree
-
-The next major UX leap is a stronger command palette and then a more ambitious spatial canvas beyond the current overlay.

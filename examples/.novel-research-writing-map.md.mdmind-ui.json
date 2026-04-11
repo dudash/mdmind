@@ -1,7 +1,7 @@
 {
   "theme": "paper",
-  "motion_enabled": true,
+  "motion_enabled": false,
   "ascii_accents": false,
   "minimal_mode": false,
-  "reading_mode": true
+  "reading_mode": false
 }

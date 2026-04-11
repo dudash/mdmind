@@ -220,6 +220,8 @@ jobs:
       TAG_NAME: ${{ needs.prepare-release.outputs.tag_name }}
       VERSION: ${{ needs.prepare-release.outputs.version }}
       REPOSITORY: ${{ github.repository }}
+      HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - name: Checkout release tag
         uses: actions/checkout@v4
@@ -268,15 +270,15 @@ jobs:
             mdmind-${{ needs.prepare-release.outputs.tag_name }}-checksums.txt
 
       - name: Publish Homebrew tap
-        if: ${{ vars.HOMEBREW_TAP_REPO != '' && secrets.HOMEBREW_TAP_TOKEN != '' }}
+        if: ${{ env.HOMEBREW_TAP_REPO != '' && env.HOMEBREW_TAP_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
-          repository: ${{ vars.HOMEBREW_TAP_REPO }}
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          repository: ${{ env.HOMEBREW_TAP_REPO }}
+          token: ${{ env.HOMEBREW_TAP_TOKEN }}
           path: tap
 
       - name: Commit updated formula to tap
-        if: ${{ vars.HOMEBREW_TAP_REPO != '' && secrets.HOMEBREW_TAP_TOKEN != '' }}
+        if: ${{ env.HOMEBREW_TAP_REPO != '' && env.HOMEBREW_TAP_TOKEN != '' }}
         shell: bash
         run: |
           mkdir -p tap/Formula
