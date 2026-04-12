@@ -106,6 +106,7 @@ pre {
 
 .hero,
 .proof-strip,
+.audience-strip,
 .feature-band,
 .showcase-card,
 .split-callout,
@@ -187,6 +188,35 @@ p {
   flex-wrap: wrap;
   gap: 14px;
   margin-top: 26px;
+}
+
+.hero-install {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(95, 70, 130, 0.12);
+  color: var(--ink-soft);
+  width: fit-content;
+}
+
+.hero-install-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--violet-soft);
+  color: var(--violet-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .button {
@@ -323,6 +353,7 @@ p {
 
 .feature-band,
 .proof-strip,
+.audience-strip,
 .downloads-hero,
 .download-note,
 .final-cta,
@@ -337,6 +368,29 @@ p {
   gap: 16px;
   padding: 18px;
   animation: fade-slide-up 760ms cubic-bezier(0.2, 0.8, 0.2, 1) 220ms both;
+}
+
+.audience-strip {
+  display: grid;
+  grid-template-columns: 0.95fr 1.05fr;
+  gap: 24px;
+  align-items: center;
+  animation: fade-slide-up 760ms cubic-bezier(0.2, 0.8, 0.2, 1) 260ms both;
+}
+
+.audience-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.audience-tags span {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(95, 70, 130, 0.12);
+  color: var(--ink-soft);
+  font-weight: 600;
 }
 
 .mini-grid,
@@ -577,6 +631,7 @@ pre code {
 @media (max-width: 1080px) {
   .hero,
   .proof-strip,
+  .audience-strip,
   .showcase-card,
   .split-callout,
   .downloads-grid,
