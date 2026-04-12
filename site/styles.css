@@ -105,9 +105,7 @@ pre {
 }
 
 .hero,
-.proof-strip,
 .audience-strip,
-.feature-band,
 .showcase-card,
 .split-callout,
 .support-strip,
@@ -351,8 +349,6 @@ p {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.feature-band,
-.proof-strip,
 .audience-strip,
 .downloads-hero,
 .download-note,
@@ -362,81 +358,36 @@ p {
   padding: 34px;
 }
 
-.proof-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-  padding: 18px;
-  animation: fade-slide-up 760ms cubic-bezier(0.2, 0.8, 0.2, 1) 220ms both;
-}
-
 .audience-strip {
-  display: grid;
-  grid-template-columns: 0.95fr 1.05fr;
-  gap: 24px;
-  align-items: center;
+  display: block;
+  padding: 26px 34px 28px;
   animation: fade-slide-up 760ms cubic-bezier(0.2, 0.8, 0.2, 1) 260ms both;
 }
 
-.audience-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+.audience-strip h2 {
+  margin-bottom: 10px;
 }
 
-.audience-tags span {
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(95, 70, 130, 0.12);
-  color: var(--ink-soft);
-  font-weight: 600;
+.audience-text {
+  max-width: 72ch;
+  font-size: 1.02rem;
 }
 
-.mini-grid,
 .downloads-grid,
 .feature-grid {
   display: grid;
   gap: 18px;
 }
 
-.mini-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 26px;
-}
-
-.mini-card,
 .feature-card,
 .download-card,
-.callout-panel,
-.proof-chip {
+.callout-panel {
   background: var(--panel-strong);
   border: 1px solid rgba(95, 70, 130, 0.1);
   border-radius: var(--radius-md);
   padding: 24px;
 }
 
-.proof-chip {
-  padding: 18px 20px;
-}
-
-.proof-label {
-  display: block;
-  margin-bottom: 8px;
-  color: var(--ink-soft);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.proof-chip strong {
-  display: block;
-  font-size: 1rem;
-  line-height: 1.4;
-}
-
-.mini-card p,
 .feature-card p,
 .download-card p {
   font-size: 0.98rem;
@@ -444,6 +395,11 @@ p {
 
 .section-heading {
   margin: 42px 0 22px;
+}
+
+.section-heading p {
+  max-width: 70ch;
+  font-size: 1.02rem;
 }
 
 .feature-grid {
@@ -630,12 +586,11 @@ pre code {
 
 @media (max-width: 1080px) {
   .hero,
-  .proof-strip,
   .audience-strip,
   .showcase-card,
   .split-callout,
   .downloads-grid,
-  .mini-grid {
+  .feature-grid {
     grid-template-columns: 1fr;
   }
 
@@ -656,7 +611,7 @@ pre code {
 
   .feature-card,
   .feature-card-wide {
-    grid-column: span 12;
+    grid-column: auto;
   }
 }
 
@@ -673,7 +628,6 @@ pre code {
   }
 
   .hero,
-  .feature-band,
   .showcase-card,
   .downloads-hero,
   .download-note,
