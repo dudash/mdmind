@@ -1,0 +1,146 @@
+{
+  "frequent": [
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 11
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1
+        ],
+        "id": "meeting/info"
+      },
+      "visits": 2,
+      "last_seen": 10
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          2
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 7
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          3,
+          0
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 15
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          3
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 14
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          2
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 13
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 12
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          2,
+          0
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 6
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          1
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 4
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          0
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 3
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0
+        ],
+        "id": "meeting/start"
+      },
+      "visits": 1,
+      "last_seen": 2
+    },
+    {
+      "anchor": {
+        "path": [
+          0
+        ],
+        "id": "meeting"
+      },
+      "visits": 1,
+      "last_seen": 1
+    }
+  ]
+}

@@ -17,6 +17,7 @@ If you want the fastest read on what makes `mdmind` feel distinct today:
 Navigation and structure:
 
 - [command-palette.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/command-palette.md)
+- [branch-index.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/branch-index.md)
 - [search-and-browse.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/search-and-browse.md)
 - [focused-views.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/focused-views.md)
 - [ids-and-deep-links.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/ids-and-deep-links.md)

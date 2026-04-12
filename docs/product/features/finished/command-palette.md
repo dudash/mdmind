@@ -6,6 +6,7 @@ Open it with `:` or `Ctrl+P`.
 
 What it does today:
 
+- jump to major sections in large maps
 - jump to branches by label or id
 - jump across outgoing relations and backlinks
 - reopen recent places and frequent places
@@ -23,6 +24,7 @@ Why it matters:
 
 Good example queries:
 
+- `browse sections`
 - `tasks`
 - `product/tasks`
 - `#todo`

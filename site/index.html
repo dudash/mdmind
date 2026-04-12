@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>mdmind | Plain-text maps for structured thinking</title>
+    <meta
+      name="description"
+      content="mdmind is a local-first plain-text mapping tool with a CLI and full-screen TUI for planning, writing, research, and large structured outlines."
+    >
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="./">
+          <span class="brand-mark">md</span>
+          <span class="brand-name">mdmind</span>
+        </a>
+        <nav class="site-nav">
+          <a href="#features">Features</a>
+          <a href="#why">Why</a>
+          <a href="./downloads/">Downloads</a>
+          <a href="https://github.com/dudash/mdmind" target="_blank" rel="noreferrer">GitHub</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="hero-copy">
+            <div class="eyebrow">Local-first. Plain text. Keyboard-first.</div>
+            <h1>Structured thinking that still lives in normal Markdown files.</h1>
+            <p class="hero-text">
+              <strong>mdmind</strong> gives you two interfaces over the same map:
+              <code>mdm</code> for CLI inspection and export, and <code>mdmind</code> for a calm
+              full-screen TUI. It is built for outlines, plans, writing maps, research trees,
+              prompt libraries, and large idea structures that need to stay searchable and safe to edit.
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="./downloads/">Download mdmind</a>
+              <a class="button button-secondary" href="https://github.com/dudash/mdmind" target="_blank" rel="noreferrer">View on GitHub</a>
+            </div>
+            <div class="hero-meta">
+              <span>Apache 2.0</span>
+              <span>Free</span>
+              <span>Open source</span>
+              <span>macOS, Linux, Windows</span>
+            </div>
+          </div>
+          <div class="hero-visual">
+            <div class="hero-visual-stack">
+              <div class="screen-card screen-card-hero">
+                <div class="screen-toolbar">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <img
+                  src="./assets/palette-ui.png"
+                  alt="mdmind screenshot showing the main outline and focus layout in the terminal"
+                >
+              </div>
+              <div class="floating-shot floating-shot-reader">
+                <div class="screen-card screen-card-paper screen-card-float">
+                  <div class="screen-toolbar">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <img
+                    src="./assets/reader-ui.png"
+                    alt="mdmind screenshot showing inline reading mode with attached notes"
+                  >
+                </div>
+              </div>
+              <div class="floating-shot floating-shot-map">
+                <div class="screen-card screen-card-float">
+                  <div class="screen-toolbar">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <img
+                    src="./assets/hero-ui.png"
+                    alt="mdmind screenshot showing the visual mindmap view"
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="proof-strip">
+          <article class="proof-chip">
+            <span class="proof-label">Works in plain text</span>
+            <strong>Readable Markdown map files</strong>
+          </article>
+          <article class="proof-chip">
+            <span class="proof-label">Findable structure</span>
+            <strong>Tags, metadata, ids, backlinks</strong>
+          </article>
+          <article class="proof-chip">
+            <span class="proof-label">Multiple lenses</span>
+            <strong>Outline, reading mode, visual map</strong>
+          </article>
+          <article class="proof-chip">
+            <span class="proof-label">Built for durability</span>
+            <strong>CLI, exports, examples, recovery</strong>
+          </article>
+        </section>
+
+        <section class="feature-band" id="why">
+          <div class="band-copy">
+            <div class="eyebrow">Why it feels different</div>
+            <h2>Not a whiteboard clone. Not a note dump.</h2>
+            <p>
+              mdmind keeps the tree primary. It uses lightweight syntax for structure,
+              view modes to reduce noise, and a real safety layer so large maps feel editable
+              instead of fragile.
+            </p>
+          </div>
+          <div class="mini-grid">
+            <article class="mini-card">
+              <h3>Normal Markdown shape</h3>
+              <p>Maps stay readable as plain text with tags, metadata, ids, relations, and attached detail lines.</p>
+            </article>
+            <article class="mini-card">
+              <h3>One format, two tools</h3>
+              <p><code>mdm</code> handles validation, search, export, and examples. <code>mdmind</code> handles the live working flow.</p>
+            </article>
+            <article class="mini-card">
+              <h3>Built for real outlines</h3>
+              <p>Works for project plans, decision trees, research synthesis, writing maps, and keyboard-first personal systems.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="features" id="features">
+          <div class="section-heading">
+            <div class="eyebrow">Core features</div>
+            <h2>The things that matter in daily use</h2>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature-card feature-card-wide">
+              <span class="feature-kicker">Map language</span>
+              <h3>Tags, metadata, ids, and cross-links inside plain text</h3>
+              <p>
+                Use <code>#tags</code> for grouping, <code>@key:value</code> for structure,
+                <code>[id:...]</code> for stable deep links, <code>[[target]]</code> for references,
+                and <code>| details</code> for longer notes attached to a branch.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-kicker">Navigation</span>
+              <h3>View modes and section jumps</h3>
+              <p>
+                Work in <em>Full Map</em>, <em>Focus Branch</em>, <em>Subtree Only</em>, or
+                <em>Filtered Focus</em>, then jump by major branch through the command palette’s
+                section index.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-kicker">Search</span>
+              <h3>Query, browse, saved views</h3>
+              <p>
+                Search by text, browse existing tags, metadata, and ids, reopen saved working sets,
+                and use recipes when you know the workflow but do not want to remember the filter.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-kicker">Relations</span>
+              <h3>Backlinks and lateral structure</h3>
+              <p>
+                Add cross-branch references without turning your map into a graph-first mess.
+                Follow outgoing links, jump by backlink, and see relation edges in the visual map.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-kicker">Details</span>
+              <h3>Long-form notes without bloating labels</h3>
+              <p>
+                Keep node titles short. Attach rationale, quotes, scene notes, meeting context,
+                or research snippets underneath the branch they belong to.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-kicker">Visuals</span>
+              <h3>Visual mindmap as a second lens</h3>
+              <p>
+                Open the current working set as a visual mindmap, keep it aligned with your active
+                view and filter, and export a polished PNG when the tree needs a presentation surface.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-kicker">Safety</span>
+              <h3>Undo, redo, checkpoints, restore history</h3>
+              <p>
+                Large structural edits stay reversible. mdmind includes a real recovery layer,
+                not just “hope you saved before that.”
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-kicker">Surface</span>
+              <h3>Themes, minimal mode, reading mode</h3>
+              <p>
+                Switch from a fuller guided surface to a quieter expert layout, tune the theme,
+                and expand long-form notes inline when you want a more editorial outliner feel.
+              </p>
+            </article>
+
+            <article class="feature-card feature-card-wide">
+              <span class="feature-kicker">Agent-friendly</span>
+              <h3>Useful for AI-generated handoff maps, not just human typing</h3>
+              <p>
+                mdmind works well when agents need to produce structured outlines for humans to refine.
+                The format gives agents a small, explicit vocabulary while staying readable and durable
+                for the person who opens the file later.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="showcase-grid">
+          <article class="showcase-card">
+            <div class="showcase-copy">
+              <div class="eyebrow">Focused views</div>
+              <h2>Large maps stay navigable without becoming a mess.</h2>
+              <p>
+                Full Map, Focus Branch, Subtree Only, and Filtered Focus give you different
+                working scopes over the same file. The command palette can also jump by major
+                branch through the section index when the map gets large.
+              </p>
+            </div>
+            <div class="screen-card">
+              <div class="screen-toolbar">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <img
+                src="./assets/mindmap-ui.png"
+                alt="mdmind screenshot showing the main outline and focus layout"
+              >
+            </div>
+          </article>
+
+          <article class="showcase-card showcase-card-reverse">
+            <div class="showcase-copy">
+              <div class="eyebrow">Reading mode</div>
+              <h2>Long-form notes stay attached to the branch they belong to.</h2>
+              <p>
+                Reading mode expands detail content inline instead of turning the outline into a separate editor.
+                That makes writing, research, scene notes, and rationale feel natural without losing structure.
+              </p>
+            </div>
+            <div class="screen-card screen-card-paper">
+              <div class="screen-toolbar">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <img
+                src="./assets/reader-ui.png"
+                alt="mdmind screenshot showing inline reading mode with attached notes"
+              >
+            </div>
+          </article>
+
+          <article class="showcase-card">
+            <div class="showcase-copy">
+              <div class="eyebrow">Second lens</div>
+              <h2>Visual maps are there when the tree stops being enough.</h2>
+              <p>
+                The visual mindmap follows your current scope instead of inventing a separate truth.
+                Use it for cluster recognition, presentations, and understanding branch shape.
+              </p>
+            </div>
+            <div class="screen-card">
+              <div class="screen-toolbar">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <img
+                src="./assets/hero-ui.png"
+                alt="mdmind screenshot showing the visual mindmap view"
+              >
+            </div>
+          </article>
+        </section>
+
+        <section class="split-callout">
+          <div class="callout-panel">
+            <div class="eyebrow">CLI + TUI</div>
+            <h2>One map file. Two strong surfaces.</h2>
+            <ul class="feature-list">
+              <li><strong>mdm</strong> validates, views, filters, exports, and copies examples.</li>
+              <li><strong>mdmind</strong> handles navigation, editing, search, views, help, and visual maps.</li>
+              <li>Both operate on the same plain-text file format.</li>
+            </ul>
+          </div>
+          <div class="callout-panel">
+            <div class="eyebrow">Open and free</div>
+            <h2>Apache 2.0 licensed and fully local-first.</h2>
+            <ul class="feature-list">
+              <li>No hosted dependency required.</li>
+              <li>No subscription to unlock core features.</li>
+              <li>Normal files, Git-friendly workflows, and inspectable release artifacts.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="support-strip">
+          <div>
+            <div class="eyebrow">Support the project</div>
+            <h2>If mdmind is useful, help fund more time on it.</h2>
+          </div>
+          <div class="support-actions">
+            <a class="button button-secondary" href="https://github.com/sponsors/dudash" target="_blank" rel="noreferrer">GitHub Sponsors</a>
+            <a class="button button-secondary" href="https://buymeacoffee.com/dudash" target="_blank" rel="noreferrer">Buy Me a Coffee</a>
+          </div>
+        </section>
+
+        <section class="final-cta">
+          <div class="eyebrow">Get started</div>
+          <h2>Download the latest release or install with Homebrew.</h2>
+          <p>
+            The downloads page points to the latest GitHub release and the current install paths for
+            macOS, Linux, Windows, and local development.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="./downloads/">Open downloads</a>
+            <a class="button button-secondary" href="https://github.com/dudash/mdmind/releases/latest" target="_blank" rel="noreferrer">Latest release</a>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

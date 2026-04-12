@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>mdmind Downloads</title>
+    <meta
+      name="description"
+      content="Download mdmind from GitHub releases or install on macOS with Homebrew."
+    >
+    <link rel="stylesheet" href="../styles.css">
+  </head>
+  <body>
+    <div class="page-shell page-shell-narrow">
+      <header class="site-header">
+        <a class="brand" href="../">
+          <span class="brand-mark">md</span>
+          <span class="brand-name">mdmind</span>
+        </a>
+        <nav class="site-nav">
+          <a href="../">Overview</a>
+          <a href="./">Downloads</a>
+          <a href="https://github.com/dudash/mdmind" target="_blank" rel="noreferrer">GitHub</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="downloads-hero">
+          <div class="eyebrow">Downloads</div>
+          <h1>Install mdmind or grab the latest release.</h1>
+          <p>
+            GitHub Releases are the source of truth for public installs. Every release bundles both
+            <code>mdm</code> and <code>mdmind</code>, plus the example map pack.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://github.com/dudash/mdmind/releases/latest" target="_blank" rel="noreferrer">Latest release on GitHub</a>
+            <a class="button button-secondary" href="https://github.com/dudash/mdmind" target="_blank" rel="noreferrer">Repository</a>
+          </div>
+        </section>
+
+        <section class="downloads-grid">
+          <article class="download-card">
+            <div class="eyebrow">macOS</div>
+            <h2>Homebrew</h2>
+            <p>The cleanest public install path on macOS.</p>
+            <pre><code>brew tap dudash/tap
+brew install mdmind</code></pre>
+          </article>
+
+          <article class="download-card">
+            <div class="eyebrow">Linux</div>
+            <h2>Release tarball</h2>
+            <p>Download the latest archive from the GitHub release page and put the binaries on your path.</p>
+            <a class="text-link" href="https://github.com/dudash/mdmind/releases/latest" target="_blank" rel="noreferrer">Open latest release</a>
+          </article>
+
+          <article class="download-card">
+            <div class="eyebrow">Windows</div>
+            <h2>Release zip</h2>
+            <p>Grab the latest Windows zip from GitHub releases and extract both binaries together.</p>
+            <a class="text-link" href="https://github.com/dudash/mdmind/releases/latest" target="_blank" rel="noreferrer">Open latest release</a>
+          </article>
+
+          <article class="download-card">
+            <div class="eyebrow">Development</div>
+            <h2>Install from source</h2>
+            <p>For local development or testing directly from the repo:</p>
+            <pre><code>cargo install --path .</code></pre>
+          </article>
+        </section>
+
+        <section class="download-note">
+          <div class="eyebrow">What is included</div>
+          <ul class="feature-list">
+            <li><code>mdm</code> for CLI validation, search, export, and examples.</li>
+            <li><code>mdmind</code> for the full-screen TUI.</li>
+            <li>Bundled example maps for product planning, writing, worldbuilding, agent handoff, and more.</li>
+          </ul>
+        </section>
+
+        <section class="download-note">
+          <div class="eyebrow">Need more detail?</div>
+          <p>
+            The repo has a fuller operator guide for release packaging and install flows in
+            <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/docs/INSTALL_AND_RELEASE.md" target="_blank" rel="noreferrer">INSTALL_AND_RELEASE.md</a>.
+          </p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

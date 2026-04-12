@@ -15,6 +15,7 @@ The palette is best when you already know your intent.
 
 Good palette use cases:
 
+- jump to a major section in a large map
 - jump to a branch by name
 - jump to an id
 - open a saved view
@@ -26,6 +27,10 @@ Good palette use cases:
 - open a help topic
 
 The palette is not just an action menu. It is the universal “take me there” surface.
+
+If you open it with an empty query, the top of the home surface now includes a small `Sections` shelf so large maps are easier to re-enter without typing a perfect search first.
+
+If you want that shelf explicitly, search the palette for `browse sections`. That action reopens the palette with the section index selected first.
 
 ## What To Type
 

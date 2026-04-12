@@ -65,6 +65,19 @@
       "anchor": {
         "path": [
           0,
+          0,
+          1,
+          1
+        ],
+        "id": null
+      },
+      "visits": 4,
+      "last_seen": 121
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
           1,
           1,
           2
@@ -143,6 +156,19 @@
       "anchor": {
         "path": [
           0,
+          0,
+          1,
+          2
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 122
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
           1,
           2
         ],
@@ -175,32 +201,6 @@
       },
       "visits": 2,
       "last_seen": 101
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          0,
-          1,
-          2
-        ],
-        "id": null
-      },
-      "visits": 2,
-      "last_seen": 12
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          0,
-          1,
-          1
-        ],
-        "id": null
-      },
-      "visits": 2,
-      "last_seen": 11
     }
   ]
 }

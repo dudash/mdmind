@@ -43,6 +43,7 @@ As the outline gets larger, you do not have to rely on memory.
 You can use:
 
 - search for text, tags, or metadata
+- the palette `Sections` shelf to jump by major branch
 - browse to inspect tags, values, and ids
 - saved views for recurring review slices
 - focused views to work inside one branch without manual collapse chores

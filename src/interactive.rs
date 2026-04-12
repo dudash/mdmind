@@ -405,6 +405,7 @@ enum PaletteItemKind {
     Setting,
     Relation,
     Inline,
+    Section,
     Frequent,
     Location,
     Node,
@@ -424,6 +425,7 @@ impl PaletteItemKind {
             Self::Setting => "Setting",
             Self::Relation => "Relation",
             Self::Inline => "Inline",
+            Self::Section => "Section",
             Self::Frequent => "Frequent",
             Self::Location => "Location",
             Self::Node => "Node",
@@ -612,7 +614,7 @@ impl HelpTopic {
                 "View modes are not just cosmetic. They change how much of the map stays visible so you can switch between orientation, local focus, and filtered work without manually collapsing half the tree."
             }
             Self::Palette => {
-                "The command palette is the fastest way to act when you already know what you want. It pulls actions, jumps, saved views, recipes, relations, history, and help into one place."
+                "The command palette is the fastest way to act when you already know what you want. It pulls section jumps, actions, saved views, recipes, relations, history, and help into one place."
             }
             Self::Safety => {
                 "Safety should make you bolder, not slower. Undo, redo, checkpoints, and restore history are there so you can reshape real maps without treating every edit like a one-shot risk."
@@ -674,7 +676,7 @@ impl HelpTopic {
                 "The important mental model is that view mode changes the visible projection, not the underlying document. You are not rewriting the map when you isolate a branch, only changing what the interface chooses to show you.",
             ],
             Self::Palette => &[
-                "Use the palette when you already know what you want: a branch, an id, an action, a saved view, a recent location, a checkpoint, a help topic, or a workflow recipe. It is less about browsing and more about intention.",
+                "Use the palette when you already know what you want: a section, a branch, an id, an action, a saved view, a recent location, a checkpoint, a help topic, or a workflow recipe. It is less about browsing and more about intention.",
                 "The palette also makes advanced features feel casual. You do not have to remember a special relation mode, history mode, or settings panel. Typing a few words is often enough to reach the right thing.",
             ],
             Self::Safety => &[
@@ -814,6 +816,11 @@ impl HelpTopic {
             ],
             Self::Palette => &[
                 (": / Ctrl+P", "Open the command palette"),
+                (
+                    "browse sections",
+                    "Open the palette on the section index shelf",
+                ),
+                ("section name", "Jump to a major branch or section"),
                 ("branch or id", "Jump straight to a place in the map"),
                 ("recipe query", "Run built-in or contextual workflows"),
                 ("checkpoint / undo / redo", "Browse recovery targets"),
@@ -948,6 +955,7 @@ impl HelpTopic {
             Self::Palette => &[
                 "If you already know the target, use the palette instead of scrolling there manually.",
                 "Think of the palette as the universal jump surface, not just an action launcher.",
+                "The empty-query palette now shows a Sections shelf for large-map orientation before you type anything.",
                 "Typing a workflow like 'review todo' is often faster than remembering the exact filter.",
             ],
             Self::Safety => &[
@@ -1061,6 +1069,7 @@ impl HelpTopic {
 enum PaletteAction {
     Undo,
     Redo,
+    BrowseSections,
     AddChild,
     AddSibling,
     AddRoot,
@@ -2924,8 +2933,18 @@ impl TuiApp {
         self.trigger_motion(MotionTarget::PaletteInput);
         self.set_status(
             StatusTone::Info,
-            "Palette open. Start with recent places, views, and related jumps up top, or arrow through actions, recipes, setup, recovery, and help below. Type any time to filter.",
+            "Palette open. Start with recent places, sections, views, and related jumps up top, or arrow through actions, recipes, setup, recovery, and help below. Type any time to filter.",
         );
+    }
+
+    fn open_palette_at_kind(&mut self, kind: PaletteItemKind) {
+        self.open_palette();
+        let items = self.palette_home_items();
+        if let Some(index) = items.iter().position(|item| item.kind == kind)
+            && let Some(state) = self.palette.as_mut()
+        {
+            state.selected = index;
+        }
     }
 
     fn open_help(&mut self, topic: Option<HelpTopic>) {
@@ -3033,6 +3052,13 @@ impl TuiApp {
             PaletteTarget::Action(action) => match action {
                 PaletteAction::Undo => self.undo()?,
                 PaletteAction::Redo => self.redo()?,
+                PaletteAction::BrowseSections => {
+                    self.open_palette_at_kind(PaletteItemKind::Section);
+                    self.set_status(
+                        StatusTone::Info,
+                        "Palette open on Sections. Jump by major branch first, then type to narrow deeper sections.",
+                    );
+                }
                 PaletteAction::AddChild => self.begin_prompt(PromptMode::AddChild, String::new()),
                 PaletteAction::AddSibling => {
                     self.begin_prompt(PromptMode::AddSibling, String::new())
@@ -3391,6 +3417,7 @@ impl TuiApp {
         items.extend(self.palette_theme_items(&query));
         items.extend(self.palette_setting_items(&query));
         items.extend(self.palette_relation_items(&query));
+        items.extend(self.palette_branch_index_items(&query));
         items.extend(self.palette_inline_items(&query));
         items.extend(self.palette_frequent_location_items(&query));
         items.extend(self.palette_recent_location_items(&query));
@@ -3416,6 +3443,7 @@ impl TuiApp {
         let mut items = Vec::new();
         items.extend(self.palette_frequent_location_items("").into_iter().take(3));
         items.extend(self.palette_recent_location_items("").into_iter().take(4));
+        items.extend(self.palette_branch_index_items("").into_iter().take(6));
         items.extend(self.palette_saved_view_items("").into_iter().take(4));
         items.extend(self.palette_relation_items("").into_iter().take(4));
         items.extend(self.palette_recipe_items(""));
@@ -3453,6 +3481,27 @@ impl TuiApp {
             .collect()
     }
 
+    fn palette_branch_index_items(&self, query: &str) -> Vec<PaletteItem> {
+        collect_branch_index_entries(
+            self.editor.document(),
+            self.editor.focus_path(),
+            query.is_empty(),
+        )
+        .into_iter()
+        .filter_map(|entry| {
+            let boost = if query.is_empty() { 355 } else { 372 };
+            palette_match_score(query, &entry.title, &entry.haystack).map(|score| PaletteItem {
+                kind: PaletteItemKind::Section,
+                title: entry.title,
+                subtitle: entry.subtitle,
+                preview: entry.preview,
+                score: score + boost + entry.score_boost,
+                target: PaletteTarget::NodePath(entry.path),
+            })
+        })
+        .collect()
+    }
+
     fn palette_action_items(&self, query: &str) -> Vec<PaletteItem> {
         let actions = vec![
             (
@@ -3466,6 +3515,12 @@ impl TuiApp {
                 "Reapply the last undone structural change",
                 "redo restore undone edit change history",
                 PaletteAction::Redo,
+            ),
+            (
+                "Browse Sections",
+                "Open the palette on the section index for major branch jumps",
+                "browse sections section index major branches outline jump",
+                PaletteAction::BrowseSections,
             ),
             (
                 "Add Child",
@@ -7996,6 +8051,16 @@ struct PaletteNodeEntry {
 }
 
 #[derive(Debug, Clone)]
+struct PaletteSectionEntry {
+    path: Vec<usize>,
+    title: String,
+    subtitle: String,
+    preview: String,
+    haystack: String,
+    score_boost: i64,
+}
+
+#[derive(Debug, Clone)]
 struct PaletteRelationEntry {
     path: Vec<usize>,
     title: String,
@@ -8013,20 +8078,22 @@ fn palette_kind_rank(kind: PaletteItemKind) -> u8 {
         PaletteItemKind::Setting => 3,
         PaletteItemKind::Relation => 4,
         PaletteItemKind::Inline => 5,
-        PaletteItemKind::Frequent => 6,
-        PaletteItemKind::Location => 7,
-        PaletteItemKind::History => 8,
-        PaletteItemKind::Checkpoint => 9,
-        PaletteItemKind::Safety => 10,
-        PaletteItemKind::Node => 11,
-        PaletteItemKind::SavedView => 12,
-        PaletteItemKind::Help => 13,
+        PaletteItemKind::Section => 6,
+        PaletteItemKind::Frequent => 7,
+        PaletteItemKind::Location => 8,
+        PaletteItemKind::History => 9,
+        PaletteItemKind::Checkpoint => 10,
+        PaletteItemKind::Safety => 11,
+        PaletteItemKind::Node => 12,
+        PaletteItemKind::SavedView => 13,
+        PaletteItemKind::Help => 14,
     }
 }
 
 fn palette_home_group_label(kind: PaletteItemKind) -> &'static str {
     match kind {
         PaletteItemKind::Location | PaletteItemKind::Frequent => "Recent",
+        PaletteItemKind::Section => "Sections",
         PaletteItemKind::SavedView => "Views",
         PaletteItemKind::Relation => "Related",
         PaletteItemKind::Recipe => "Recipes",
@@ -8051,6 +8118,7 @@ fn palette_group_color(kind: PaletteItemKind, palette: Palette, home_mode: bool)
     if home_mode {
         match palette_home_group_label(kind) {
             "Recent" => palette.sky,
+            "Sections" => palette.accent,
             "Views" => palette.accent,
             "Related" => palette.warn,
             "Recipes" => palette.accent,
@@ -8067,6 +8135,7 @@ fn palette_group_color(kind: PaletteItemKind, palette: Palette, home_mode: bool)
             PaletteItemKind::Theme | PaletteItemKind::Setting => palette.border,
             PaletteItemKind::Relation => palette.warn,
             PaletteItemKind::Inline => palette.accent,
+            PaletteItemKind::Section => palette.accent,
             PaletteItemKind::Frequent | PaletteItemKind::Location | PaletteItemKind::SavedView => {
                 palette.sky
             }
@@ -8229,6 +8298,123 @@ fn collect_palette_nodes(document: &Document) -> Vec<PaletteNodeEntry> {
     let mut entries = Vec::new();
     collect_palette_nodes_from(&document.nodes, &mut entries, Vec::new(), &mut Vec::new());
     entries
+}
+
+fn collect_branch_index_entries(
+    document: &Document,
+    focus_path: &[usize],
+    home_mode: bool,
+) -> Vec<PaletteSectionEntry> {
+    let focused_root_index = focus_path.first().copied();
+    let mut entries = Vec::new();
+
+    for (index, node) in document.nodes.iter().enumerate() {
+        let path = vec![index];
+        let label = palette_branch_index_label(node);
+        let subtitle = if let Some(id) = &node.id {
+            format!(
+                "root section · {} child branch{} · {id}",
+                node.children.len(),
+                if node.children.len() == 1 { "" } else { "es" }
+            )
+        } else {
+            format!(
+                "root section · {} child branch{}",
+                node.children.len(),
+                if node.children.len() == 1 { "" } else { "es" }
+            )
+        };
+        let preview = format!(
+            "Section index.\n{}\n{}",
+            breadcrumb_for_path(document, &path),
+            if node.children.is_empty() {
+                "No child branches yet."
+            } else {
+                "Good for orienting quickly in a large map."
+            }
+        );
+        let haystack = format!(
+            "{label} {subtitle} {} root section branch index top level major branch",
+            breadcrumb_for_path(document, &path)
+        );
+        entries.push((
+            focused_root_index == Some(index),
+            PaletteSectionEntry {
+                path,
+                title: label,
+                subtitle,
+                preview,
+                haystack,
+                score_boost: if focused_root_index == Some(index) {
+                    70
+                } else {
+                    25
+                },
+            },
+        ));
+
+        if !home_mode {
+            for (child_index, child) in node.children.iter().enumerate() {
+                if !node_qualifies_for_branch_index(child) {
+                    continue;
+                }
+                let child_path = vec![index, child_index];
+                let child_label = palette_branch_index_label(child);
+                let child_subtitle = if let Some(id) = &child.id {
+                    format!("{} section · {id}", palette_branch_index_label(node))
+                } else {
+                    format!("{} section", palette_branch_index_label(node))
+                };
+                let child_preview = format!(
+                    "Section index.\n{}\n{} child branch{} below it.",
+                    breadcrumb_for_path(document, &child_path),
+                    child.children.len(),
+                    if child.children.len() == 1 { "" } else { "es" }
+                );
+                let child_haystack = format!(
+                    "{child_label} {child_subtitle} {} section branch index subsection",
+                    breadcrumb_for_path(document, &child_path)
+                );
+                entries.push((
+                    focused_root_index == Some(index),
+                    PaletteSectionEntry {
+                        path: child_path,
+                        title: child_label,
+                        subtitle: child_subtitle,
+                        preview: child_preview,
+                        haystack: child_haystack,
+                        score_boost: if focused_root_index == Some(index) {
+                            40
+                        } else {
+                            10
+                        },
+                    },
+                ));
+            }
+        }
+    }
+
+    entries.sort_by(|left, right| {
+        right
+            .0
+            .cmp(&left.0)
+            .then_with(|| left.1.path.len().cmp(&right.1.path.len()))
+            .then_with(|| left.1.path.cmp(&right.1.path))
+    });
+
+    entries.into_iter().map(|(_, entry)| entry).collect()
+}
+
+fn node_qualifies_for_branch_index(node: &Node) -> bool {
+    !node.children.is_empty() || node.id.is_some()
+}
+
+fn palette_branch_index_label(node: &Node) -> String {
+    if node.text.is_empty() {
+        "(empty)".to_string()
+    } else {
+        node.text.clone()
+    }
 }
 
 fn collect_relation_palette_entries(
@@ -10446,7 +10632,8 @@ mod tests {
             items.iter().any(|item| {
                 matches!(
                     item.kind,
-                    PaletteItemKind::Location
+                    PaletteItemKind::Section
+                        | PaletteItemKind::Location
                         | PaletteItemKind::Frequent
                         | PaletteItemKind::Recipe
                         | PaletteItemKind::SavedView
@@ -10456,6 +10643,12 @@ mod tests {
                 )
             }),
             "home palette should include contextual, non-action results"
+        );
+        assert!(
+            items
+                .iter()
+                .any(|item| item.kind == PaletteItemKind::Section),
+            "home palette should include section jumps for large-map orientation"
         );
         assert!(
             items.iter().any(|item| item.kind == PaletteItemKind::Help),
@@ -10600,6 +10793,30 @@ mod tests {
             .find(|item| item.kind == PaletteItemKind::Recipe)
             .expect("recipe result should appear for review todo");
         assert_eq!(recipe.title, "Review Todo Work");
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn command_palette_can_open_on_sections() {
+        let map_path = temp_map_path("palette-browse-sections.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.execute_palette_target(PaletteTarget::Action(PaletteAction::BrowseSections))
+            .expect("browse sections action should open the palette");
+
+        let palette = app.palette.as_ref().expect("palette should be open");
+        let items = app.palette_items(&palette.query);
+        assert!(!items.is_empty(), "home palette should not be empty");
+        assert_eq!(items[palette.selected].kind, PaletteItemKind::Section);
 
         cleanup_sidecars(&map_path);
     }
@@ -12737,11 +12954,19 @@ mod tests {
                 target: PaletteTarget::RecentLocation(vec![0, 1]),
             },
             PaletteItem {
+                kind: PaletteItemKind::Section,
+                title: "Product Idea".to_string(),
+                subtitle: "root section · product".to_string(),
+                preview: String::new(),
+                score: 9,
+                target: PaletteTarget::NodePath(vec![0]),
+            },
+            PaletteItem {
                 kind: PaletteItemKind::Recipe,
                 title: "Review Todo Work".to_string(),
                 subtitle: "Apply #todo".to_string(),
                 preview: String::new(),
-                score: 9,
+                score: 8,
                 target: PaletteTarget::Recipe(PaletteRecipe::ReviewTodo),
             },
             PaletteItem {
@@ -12749,7 +12974,7 @@ mod tests {
                 title: "Checkpoint · Planning milestone".to_string(),
                 subtitle: "manual snapshot".to_string(),
                 preview: String::new(),
-                score: 8,
+                score: 7,
                 target: PaletteTarget::Checkpoint(0),
             },
             PaletteItem {
@@ -12757,19 +12982,43 @@ mod tests {
                 title: "Start Here".to_string(),
                 subtitle: "Learn the core mental model".to_string(),
                 preview: String::new(),
-                score: 7,
+                score: 6,
                 target: PaletteTarget::HelpTopic(HelpTopic::StartHere),
             },
         ];
 
         assert_eq!(
             palette_group_summary_with_mode(&items, 1, true),
-            "Recent · [Recipes] · Recovery · Help"
+            "Recent · [Sections] · Recipes · Recovery · Help"
         );
         assert_eq!(
             palette_group_starts_with_mode(&items, true),
-            vec![true, true, true, true]
+            vec![true, true, true, true, true]
         );
+    }
+
+    #[test]
+    fn palette_branch_index_search_returns_section_items() {
+        let map_path = temp_map_path("palette-section-search.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let items = app.palette_items("direction");
+        assert!(
+            items
+                .iter()
+                .any(|item| { item.kind == PaletteItemKind::Section && item.title == "Direction" }),
+            "typed palette queries should surface matching section jumps"
+        );
+
+        cleanup_sidecars(&map_path);
     }
 
     #[test]

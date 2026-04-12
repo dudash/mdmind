@@ -2,6 +2,6 @@
   "theme": "paper",
   "motion_enabled": false,
   "ascii_accents": false,
-  "minimal_mode": false,
-  "reading_mode": false
+  "minimal_mode": true,
+  "reading_mode": true
 }

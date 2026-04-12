@@ -6,7 +6,6 @@ If a feature is here, it should not be described anywhere else as already real.
 
 ## Nearer-Term Ideas
 
-- [branch-index.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/branch-index.md)
 - [checklist-semantics.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/checklist-semantics.md)
 - [document-and-branch-stats.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/document-and-branch-stats.md)
 
