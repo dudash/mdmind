@@ -1,0 +1,7 @@
+interface:
+  display_name: "mdmind Map Authoring"
+  short_description: "Create durable native mdmind maps"
+  default_prompt: "Use $mdmind-map-authoring to turn these notes into a concise native mdmind map with sensible ids, metadata, and validation."
+
+policy:
+  allow_implicit_invocation: true
