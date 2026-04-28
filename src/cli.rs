@@ -25,6 +25,7 @@ use crate::render::{
     render_metadata_plain, render_relations, render_relations_plain, render_tags,
     render_tags_plain, render_tree, render_validate, render_validate_plain,
 };
+use crate::startup::choose_startup_target;
 use crate::templates::TemplateKind;
 
 #[derive(Debug, Parser)]
@@ -165,7 +166,7 @@ enum ExampleCommands {
     about = "Navigate and edit a map in a focused interactive terminal flow."
 )]
 struct TuiPreviewCli {
-    target: String,
+    target: Option<String>,
     #[arg(long)]
     preview: bool,
     #[arg(long)]
@@ -174,6 +175,7 @@ struct TuiPreviewCli {
     max_depth: Option<usize>,
 }
 
+#[derive(Debug)]
 struct CliError {
     message: Option<String>,
     exit_code: u8,
@@ -484,10 +486,23 @@ fn write_asset_file(path: &std::path::Path, contents: &str, force: bool) -> Resu
 }
 
 fn dispatch_tui_preview(cli: TuiPreviewCli) -> Result<(), CliError> {
+    let target = match cli.target {
+        Some(target) => target,
+        None => {
+            if cli.preview {
+                return Err(CliError::runtime("`mdmind --preview` needs a target path."));
+            }
+            let Some(target) = choose_startup_target().map_err(CliError::from_app)? else {
+                return Err(CliError::silent(0));
+            };
+            target
+        }
+    };
+
     if cli.preview {
-        render_view_like(&cli.target, false, cli.max_depth)
+        render_view_like(&target, false, cli.max_depth)
     } else {
-        run_interactive(&cli.target, cli.autosave).map_err(CliError::from_app)
+        run_interactive(&target, cli.autosave).map_err(CliError::from_app)
     }
 }
 
@@ -532,13 +547,7 @@ fn print_output<T: serde::Serialize>(
 }
 
 fn template_name(template: TemplateKind) -> &'static str {
-    match template {
-        TemplateKind::Product => "product",
-        TemplateKind::Feature => "feature",
-        TemplateKind::Prompts => "prompts",
-        TemplateKind::Backlog => "backlog",
-        TemplateKind::Writing => "writing",
-    }
+    template.name()
 }
 
 fn finish(result: Result<(), CliError>) -> ExitCode {

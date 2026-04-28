@@ -267,6 +267,27 @@ fn mdmind_binary_falls_back_to_preview() {
 }
 
 #[test]
+fn mdmind_preview_without_a_target_returns_a_runtime_error() {
+    let output = Command::new(env!("CARGO_BIN_EXE_mdmind"))
+        .arg("--preview")
+        .output()
+        .expect("mdmind command should run");
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("`mdmind --preview` needs a target path."));
+}
+
+#[test]
+fn mdmind_without_a_target_requires_an_interactive_terminal_for_startup() {
+    let output = Command::new(env!("CARGO_BIN_EXE_mdmind"))
+        .output()
+        .expect("mdmind command should run");
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains(
+        "No target was provided. Run `mdmind path/to/map.md`, or start `mdmind` in an interactive terminal to create one."
+    ));
+}
+
+#[test]
 fn version_command_prints_the_cli_version() {
     let output = run_mdm(&["version"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));

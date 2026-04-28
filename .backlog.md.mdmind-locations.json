@@ -1,0 +1,105 @@
+{
+  "frequent": [
+    {
+      "anchor": {
+        "path": [
+          0,
+          2
+        ],
+        "id": "backlog/context"
+      },
+      "visits": 3,
+      "last_seen": 18
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4
+        ],
+        "id": "backlog/done"
+      },
+      "visits": 3,
+      "last_seen": 14
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1
+        ],
+        "id": "backlog/next"
+      },
+      "visits": 2,
+      "last_seen": 17
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0
+        ],
+        "id": "backlog/now"
+      },
+      "visits": 2,
+      "last_seen": 16
+    },
+    {
+      "anchor": {
+        "path": [
+          0
+        ],
+        "id": "backlog"
+      },
+      "visits": 2,
+      "last_seen": 15
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          0
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 13
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3
+        ],
+        "id": "backlog/blocked"
+      },
+      "visits": 2,
+      "last_seen": 8
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4,
+          0
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 11
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          2,
+          0
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 7
+    }
+  ]
+}

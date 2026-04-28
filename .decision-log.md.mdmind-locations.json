@@ -1,0 +1,118 @@
+{
+  "frequent": [
+    {
+      "anchor": {
+        "path": [
+          0,
+          1
+        ],
+        "id": "example/decisions/options"
+      },
+      "visits": 3,
+      "last_seen": 17
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1
+        ],
+        "id": "example/decisions/options/aligned"
+      },
+      "visits": 3,
+      "last_seen": 15
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          0
+        ],
+        "id": "example/decisions/options/generated"
+      },
+      "visits": 2,
+      "last_seen": 16
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          2
+        ],
+        "id": "example/decisions/recommendation"
+      },
+      "visits": 2,
+      "last_seen": 8
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3
+        ],
+        "id": "example/decisions/evidence"
+      },
+      "visits": 2,
+      "last_seen": 7
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 1,
+      "last_seen": 14
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          2
+        ],
+        "id": "example/decisions/options/manual"
+      },
+      "visits": 1,
+      "last_seen": 12
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4
+        ],
+        "id": "example/decisions/links"
+      },
+      "visits": 1,
+      "last_seen": 6
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0
+        ],
+        "id": "example/decisions/current"
+      },
+      "visits": 1,
+      "last_seen": 2
+    },
+    {
+      "anchor": {
+        "path": [
+          0
+        ],
+        "id": "example/decisions"
+      },
+      "visits": 1,
+      "last_seen": 1
+    }
+  ]
+}

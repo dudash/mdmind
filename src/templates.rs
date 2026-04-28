@@ -8,6 +8,16 @@ pub enum TemplateKind {
 }
 
 impl TemplateKind {
+    pub fn all() -> &'static [Self] {
+        &[
+            Self::Product,
+            Self::Feature,
+            Self::Prompts,
+            Self::Backlog,
+            Self::Writing,
+        ]
+    }
+
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "product" => Some(Self::Product),
@@ -21,6 +31,36 @@ impl TemplateKind {
 
     pub fn names() -> &'static [&'static str] {
         &["product", "feature", "prompts", "backlog", "writing"]
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Product => "product",
+            Self::Feature => "feature",
+            Self::Prompts => "prompts",
+            Self::Backlog => "backlog",
+            Self::Writing => "writing",
+        }
+    }
+
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::Product => "Product roadmap, requirements, milestones, and supporting links.",
+            Self::Feature => "Feature spec with goals, scope, risks, delivery, and open questions.",
+            Self::Prompts => "Prompt library, evaluation notes, and operational prompt workflows.",
+            Self::Backlog => "Backlog-oriented planning with now, next, later, and blocked work.",
+            Self::Writing => "Writing and research structure for stories, notes, and chapter work.",
+        }
+    }
+
+    pub fn default_file_name(self) -> &'static str {
+        match self {
+            Self::Product => "product.md",
+            Self::Feature => "feature.md",
+            Self::Prompts => "prompts.md",
+            Self::Backlog => "backlog.md",
+            Self::Writing => "writing.md",
+        }
     }
 
     pub fn file_contents(self) -> &'static str {

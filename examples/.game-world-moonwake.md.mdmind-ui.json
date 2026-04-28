@@ -2,6 +2,6 @@
   "theme": "calm",
   "motion_enabled": true,
   "ascii_accents": false,
-  "minimal_mode": true,
+  "minimal_mode": false,
   "reading_mode": false
 }

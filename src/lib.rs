@@ -15,6 +15,7 @@ pub mod query;
 pub mod render;
 pub mod serializer;
 pub mod session;
+pub mod startup;
 pub mod templates;
 pub mod ui_settings;
 pub mod validate;

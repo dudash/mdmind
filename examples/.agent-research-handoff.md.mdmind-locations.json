@@ -4,25 +4,13 @@
       "anchor": {
         "path": [
           0,
-          3,
-          2
+          6,
+          1
         ],
-        "id": null
+        "id": "agent-handoff/actions/community-brief"
       },
-      "visits": 35,
-      "last_seen": 276
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          3,
-          3
-        ],
-        "id": null
-      },
-      "visits": 33,
-      "last_seen": 271
+      "visits": 9,
+      "last_seen": 94
     },
     {
       "anchor": {
@@ -31,22 +19,10 @@
           3,
           1
         ],
-        "id": null
+        "id": "agent-handoff/themes/trust"
       },
-      "visits": 32,
-      "last_seen": 274
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          3,
-          0
-        ],
-        "id": null
-      },
-      "visits": 31,
-      "last_seen": 273
+      "visits": 9,
+      "last_seen": 76
     },
     {
       "anchor": {
@@ -54,34 +30,10 @@
           0,
           3
         ],
-        "id": null
+        "id": "agent-handoff/themes"
       },
-      "visits": 27,
-      "last_seen": 260
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          3,
-          3,
-          0
-        ],
-        "id": null
-      },
-      "visits": 23,
-      "last_seen": 270
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          2
-        ],
-        "id": null
-      },
-      "visits": 20,
-      "last_seen": 258
+      "visits": 5,
+      "last_seen": 58
     },
     {
       "anchor": {
@@ -90,46 +42,34 @@
           2,
           0
         ],
-        "id": null
+        "id": "agent-handoff/thesis/core"
       },
-      "visits": 19,
-      "last_seen": 259
+      "visits": 5,
+      "last_seen": 57
     },
     {
       "anchor": {
         "path": [
           0,
-          1,
           2
         ],
-        "id": null
+        "id": "agent-handoff/thesis"
       },
-      "visits": 11,
-      "last_seen": 257
+      "visits": 5,
+      "last_seen": 56
     },
     {
       "anchor": {
         "path": [
           0,
-          1,
-          1
-        ],
-        "id": null
-      },
-      "visits": 9,
-      "last_seen": 256
-    },
-    {
-      "anchor": {
-        "path": [
+          2,
           0,
-          1,
           0
         ],
         "id": null
       },
-      "visits": 9,
-      "last_seen": 255
+      "visits": 5,
+      "last_seen": 34
     },
     {
       "anchor": {
@@ -137,55 +77,120 @@
           0,
           1
         ],
-        "id": null
+        "id": "agent-handoff/brief"
       },
-      "visits": 9,
-      "last_seen": 254
+      "visits": 4,
+      "last_seen": 55
     },
     {
       "anchor": {
         "path": [
           0,
-          0
+          6
         ],
-        "id": "demo/direction"
+        "id": "agent-handoff/actions"
       },
-      "visits": 5,
-      "last_seen": 88
-    },
-    {
-      "anchor": {
-        "path": [
-          0
-        ],
-        "id": "demo"
-      },
-      "visits": 5,
+      "visits": 3,
       "last_seen": 87
     },
     {
       "anchor": {
         "path": [
           0,
+          5
+        ],
+        "id": "agent-handoff/questions"
+      },
+      "visits": 3,
+      "last_seen": 86
+    },
+    {
+      "anchor": {
+        "path": [
           0,
+          4,
+          1,
           1
         ],
         "id": null
       },
-      "visits": 4,
+      "visits": 3,
+      "last_seen": 83
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          6,
+          0,
+          2
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 95
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          6,
+          0
+        ],
+        "id": "agent-handoff/actions/operating-model"
+      },
+      "visits": 2,
       "last_seen": 90
     },
     {
       "anchor": {
         "path": [
           0,
+          4,
+          1,
+          2
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 84
+    },
+    {
+      "anchor": {
+        "path": [
           0,
+          4,
+          1,
           0
         ],
         "id": null
       },
-      "visits": 4,
-      "last_seen": 89
+      "visits": 2,
+      "last_seen": 82
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          2,
+          0,
+          1
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 35
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4
+        ],
+        "id": "agent-handoff/evidence"
+      },
+      "visits": 2,
+      "last_seen": 12
     }
   ]
 }

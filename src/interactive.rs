@@ -6446,7 +6446,7 @@ fn keybar_spans(app: &TuiApp) -> Vec<Span<'static>> {
         separator_span(),
         key_hint("⌥↑↓", "swap"),
         separator_span(),
-        key_hint("a", "add"),
+        key_hint("a/A", "add"),
         separator_span(),
         key_hint("e", "edit"),
         separator_span(),
@@ -13035,6 +13035,7 @@ mod tests {
         );
 
         let rendered = keybar_text(&app);
+        assert!(rendered.contains("a/A"));
         assert!(!rendered.contains("n/N"));
         assert!(!rendered.contains("[ ]"));
         assert!(!rendered.contains("m:mindmap"));
