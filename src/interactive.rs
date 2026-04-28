@@ -2219,10 +2219,8 @@ impl TuiApp {
             KeyCode::Up | KeyCode::Char('k') => {
                 picker.selected = picker.selected.saturating_sub(1);
             }
-            KeyCode::Down | KeyCode::Char('j') => {
-                if !picker.items.is_empty() {
-                    picker.selected = (picker.selected + 1).min(picker.items.len() - 1);
-                }
+            KeyCode::Down | KeyCode::Char('j') if !picker.items.is_empty() => {
+                picker.selected = (picker.selected + 1).min(picker.items.len() - 1);
             }
             KeyCode::Enter => {
                 if let Some(item) = picker.items.get(picker.selected).cloned() {
@@ -4535,7 +4533,7 @@ impl TuiApp {
         }
         self.saved_views
             .views
-            .sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+            .sort_by_key(|left| left.name.to_lowercase());
         let selected = self
             .saved_views
             .views

@@ -92,7 +92,7 @@ pub fn ensure_parseable(loaded: &LoadedDocument) -> Result<(), AppError> {
 pub fn diagnostics_for_validate(loaded: &LoadedDocument) -> Vec<Diagnostic> {
     let mut diagnostics = loaded.parser_diagnostics.clone();
     diagnostics.extend(loaded.validation_diagnostics.clone());
-    diagnostics.sort_by(|left, right| left.line.cmp(&right.line));
+    diagnostics.sort_by_key(|left| left.line);
     diagnostics
 }
 
