@@ -1,0 +1,4 @@
+These skill files are provided under the same license as the mdmind repository unless
+you explicitly choose a different distribution license later.
+
+See the repository root LICENSE file for the governing terms.

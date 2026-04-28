@@ -1,0 +1,7 @@
+interface:
+  display_name: "mdm CLI Inspection"
+  short_description: "Validate, query, and export mdmind maps"
+  default_prompt: "Use $mdm-cli-inspection to validate this map and find the branches I care about with the right mdm commands."
+
+policy:
+  allow_implicit_invocation: true
