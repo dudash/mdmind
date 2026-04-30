@@ -1,4 +1,3 @@
-These skill files are provided under the same license as the mdmind repository unless
-you explicitly choose a different distribution license later.
+These skill files are licensed under Apache-2.0.
 
-See the repository root LICENSE file for the governing terms.
+See the repository root LICENSE file for the full license text.

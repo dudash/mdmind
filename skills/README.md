@@ -2,6 +2,9 @@
 
 Portable skill packages for agents that work with `mdmind` maps and the `mdm` CLI.
 
+These skills track the `mdmind` repo release and include an informational `metadata.version`
+field in each `SKILL.md`.
+
 ## Included Skills
 
 ### `mdmind-map-authoring`
@@ -49,26 +52,75 @@ If both are needed, author first and inspect second.
 
 ## Installation
 
-The exact install path depends on the agent product.
+Install one or both skill folders:
 
-Portable default:
+- `mdmind-map-authoring`
+- `mdm-cli-inspection`
 
-1. Copy one or both skill folders into the agent’s global or user-level skills directory.
-2. Keep the folder names intact:
-   - `mdmind-map-authoring`
-   - `mdm-cli-inspection`
-3. Preserve the internal structure:
-   - `SKILL.md`
-   - `references/`
-   - `agents/openai.yaml` when supported
+### Portable Layout
 
-For Codex-style setups, that usually means placing the skill folders under a configured skills root and restarting the tool if needed.
+If your agent supports the shared Agent Skills convention:
 
-For other agent systems, install them according to that system’s skill/package instructions.
+```bash
+mkdir -p ~/.agents/skills
+cp -R skills/mdmind-map-authoring ~/.agents/skills/
+cp -R skills/mdm-cli-inspection ~/.agents/skills/
+```
+
+This is the most portable layout.
+
+### Codex
+
+Copy the folders to:
+
+```bash
+mkdir -p ~/.codex/skills
+cp -R skills/mdmind-map-authoring ~/.codex/skills/
+cp -R skills/mdm-cli-inspection ~/.codex/skills/
+```
+
+Then restart Codex.
+
+Optional: install from GitHub with Codex's built-in installer:
+
+```text
+$skill-installer install https://github.com/dudash/mdmind/tree/main/skills/mdmind-map-authoring
+$skill-installer install https://github.com/dudash/mdmind/tree/main/skills/mdm-cli-inspection
+```
+
+### Claude Code
+
+Install for all projects:
+
+```bash
+mkdir -p ~/.claude/skills
+cp -R skills/mdmind-map-authoring ~/.claude/skills/
+cp -R skills/mdm-cli-inspection ~/.claude/skills/
+```
+
+Install for one project only:
+
+```bash
+mkdir -p .claude/skills
+cp -R skills/mdmind-map-authoring .claude/skills/
+cp -R skills/mdm-cli-inspection .claude/skills/
+```
+
+Claude usually picks up skill edits live once the skills directory already exists.
 
 ## Quick Validation
 
 Before sharing the skills broadly, test them with realistic prompts.
+
+For an isolated Codex test home, run:
+
+```bash
+scripts/test-skills.sh --skill mdmind-map-authoring
+scripts/test-skills.sh --skill mdm-cli-inspection
+```
+
+That script copies the selected skill into a clean `CODEX_HOME`-style directory and
+prints the exact `codex` launch command plus the prompt file to use.
 
 Suggested prompts live in:
 

@@ -22,5 +22,5 @@ That distinction matters because web and PDF sources are useful, but inherently 
 
 Related docs:
 
-- [IMPORT_AND_INGESTION.md](/Users/jason/Documents/Programming/mdmind/docs/IMPORT_AND_INGESTION.md)
-- [EXPORT_TARGETS.md](/Users/jason/Documents/Programming/mdmind/docs/EXPORT_TARGETS.md)
+- [IMPORT_AND_INGESTION.md](../../../IMPORT_AND_INGESTION.md)
+- [EXPORT_TARGETS.md](../../../EXPORT_TARGETS.md)

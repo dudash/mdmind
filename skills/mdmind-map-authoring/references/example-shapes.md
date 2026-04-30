@@ -1,100 +1,80 @@
-# Example Output Shapes
-
-These are starter shapes, not rigid templates.
-
-## Meeting Follow-Up Map
-
-- root branch for the meeting
-- agenda or context
-- decisions
-- action items
-- open questions
-- parking lot or follow-up
-
-Good defaults:
-
-- `#decision` on confirmed decisions
-- `#todo` on follow-up work
-- `@owner` and `@status` on actions
-- details for rationale, quotes, or meeting context
-
-## Research Synthesis Map
-
-- root branch for the topic
-- themes
-- evidence
-- open questions
-- actions or next steps
-
-Good defaults:
-
-- `#theme`, `#question`, `#todo`
-- `@source` when evidence comes from named material
-- ids on major themes and evidence clusters
-- details for quotes or nuanced findings
-
-## Product Or Project Map
-
-- root branch for the initiative
-- goals or outcomes
-- requirements
-- workstreams
-- risks or blockers
-- decisions
-- current execution lane
-
-Good defaults:
-
-- `@status`, `@owner`, `@priority`, `@area`
-- ids on durable branches like workstreams, major requirements, and risks
-- relations for blockers, dependencies, or supporting evidence
-
-## Writing Or Story Map
-
-- root branch for the work
-- characters
-- places
-- plot or acts
-- themes
-- research
-- drafting or revision workflow
-
-Good defaults:
-
-- `#plot`, `#theme`, `#chapter`, `#todo`
-- `@status` on active versus future branches
-- ids on major entities, acts, and reusable anchors
-- details for scene notes, quotes, and rationale
-
-## Decision Map
-
-- root branch for the decision
-- current decision statement
-- options
-- recommendation
-- evidence
-- risks or tradeoffs
-- follow-up
-
-Good defaults:
-
-- `#decision`, `#idea`, `#risk`, `#todo`
-- `@status` for option maturity
-- ids on options and recommendation branches
-- relations for evidence that supports or blocks an option
-
-## General Planning Map
-
-- root branch for the topic
-- current state
-- desired outcome
-- workstreams
-- risks
-- questions
-- next actions
-
-Good defaults:
-
-- start with labels, `#todo`, `@status`, and `@owner`
-- add ids only to branches likely to be revisited
-- keep relations rare unless dependencies are central
+- Example Output Shapes #guide @audience:agents @surface:skills [id:skill/mdmind/example-shapes]
+  - These are starter shapes, not rigid templates
+  - Meeting follow-up map #recipe [id:skill/mdmind/example-shapes/meeting]
+    - shape #reference [id:skill/mdmind/example-shapes/meeting/shape]
+      - root branch for the meeting
+      - agenda or context
+      - decisions
+      - action items
+      - open questions
+      - parking lot or follow-up
+    - good defaults #reference [id:skill/mdmind/example-shapes/meeting/defaults]
+      - tags can mark decision or follow-up branches if that helps
+      - metadata can mark ownership or state if that helps
+      - use details for rationale, quotes, or meeting context
+  - Research synthesis map #recipe [id:skill/mdmind/example-shapes/research]
+    - shape #reference [id:skill/mdmind/example-shapes/research/shape]
+      - root branch for the topic
+      - themes
+      - evidence
+      - open questions
+      - actions or next steps
+    - good defaults #reference [id:skill/mdmind/example-shapes/research/defaults]
+      - tags can mark themes, questions, or follow-up work if that helps
+      - metadata can record sources when useful
+      - add ids on major themes and evidence clusters when durable anchors will help
+      - use details for quotes or nuanced findings
+  - Product or project map #recipe [id:skill/mdmind/example-shapes/product]
+    - shape #reference [id:skill/mdmind/example-shapes/product/shape]
+      - root branch for the initiative
+      - goals or outcomes
+      - requirements
+      - workstreams
+      - risks or blockers
+      - decisions
+      - current execution lane
+    - good defaults #reference [id:skill/mdmind/example-shapes/product/defaults]
+      - metadata can mark ownership, state, or priority when that helps
+      - add ids on durable branches like workstreams, major requirements, and risks when anchors will help
+      - use relations for blockers, dependencies, or supporting evidence
+  - Writing or story map #recipe [id:skill/mdmind/example-shapes/writing]
+    - shape #reference [id:skill/mdmind/example-shapes/writing/shape]
+      - root branch for the work
+      - characters
+      - places
+      - plot or acts
+      - themes
+      - research
+      - drafting or revision workflow
+    - good defaults #reference [id:skill/mdmind/example-shapes/writing/defaults]
+      - tags can mark plot, theme, chapter, or active work when useful
+      - metadata can mark state when that helps
+      - add ids on major entities, acts, and reusable anchors when durable links will help
+      - use details for scene notes, quotes, and rationale
+  - Decision map #recipe [id:skill/mdmind/example-shapes/decision]
+    - shape #reference [id:skill/mdmind/example-shapes/decision/shape]
+      - root branch for the decision
+      - current decision statement
+      - options
+      - recommendation
+      - evidence
+      - risks or tradeoffs
+      - follow-up
+    - good defaults #reference [id:skill/mdmind/example-shapes/decision/defaults]
+      - tags can distinguish decisions, ideas, risks, or follow-up work if that helps
+      - metadata can reflect option state when useful
+      - add ids on options and recommendation branches when durable anchors will help
+      - use relations for evidence that supports or blocks an option
+  - General planning map #recipe [id:skill/mdmind/example-shapes/planning]
+    - shape #reference [id:skill/mdmind/example-shapes/planning/shape]
+      - root branch for the topic
+      - current state
+      - desired outcome
+      - workstreams
+      - risks
+      - questions
+      - next actions
+    - good defaults #reference [id:skill/mdmind/example-shapes/planning/defaults]
+      - start with labels and add tags or metadata only when they help
+      - add ids only to branches likely to be revisited
+      - keep relations rare unless dependencies are central

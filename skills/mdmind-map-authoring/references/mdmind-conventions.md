@@ -1,101 +1,66 @@
-# mdmind Conventions
-
-Use these defaults unless the user’s source material or existing map style clearly suggests something else.
-
-## When mdmind Is The Right Target
-
-Choose `mdmind` when the output needs:
-
-- real hierarchy
-- durable branches a human will revisit
-- lightweight workflow markers like `#todo` or `#risk`
-- structured fields like `@owner:mira` or `@status:active`
-- stable deep-link anchors with `[id:...]`
-- lateral links between distant branches
-- attached notes without turning the whole file into prose
-
-Prefer ordinary Markdown when the user only needs a short one-off answer.
-
-## Good Default Syntax
-
-- visible label first
-- `#tag` for grouping or workflow markers
-- `@key:value` for repeated structured fields
-- `[id:path/to/node]` only on durable branches
-- `| detail` lines for real prose
-- `[[target/id]]` or `[[rel:kind->target/id]]` only when lateral structure matters
-
-## Recommended Tag And Metadata Defaults
-
-These are defaults, not mandatory schema:
-
-- workflow: `#todo`, `#blocked`, `#done`, `#idea`, `#decision`, `#question`, `#theme`, `#risk`
-- metadata: `@status`, `@owner`, `@priority`, `@area`, `@source`, `@region`, `@section`
-
-Prefer 2-5 stable keys over a large taxonomy.
-
-## When To Add Ids
-
-Add ids to:
-
-- the root when the map is durable
-- top-level sections
-- major workstreams or reusable anchors
-- durable themes, chapters, risks, entities, or decisions
-
-Avoid ids on:
-
-- transient leaves
-- every checklist item
-- branches that are unlikely to be linked or revisited
-
-Good ids are short, stable, and slash-based:
-
-- `product/api-design`
-- `research/themes/ownership`
-- `story/plot/act-1`
-
-## When To Use Details
-
-Use detail lines for:
-
-- rationale
-- source quotes
-- meeting context
-- scene notes
-- research excerpts
-- a sentence or two of explanation that belongs to one node
-
-Do not use detail lines for every branch. If most nodes need paragraphs, the map structure is probably wrong or the result should be prose.
-
-## When To Use Relations
-
-Use relations when the tree alone cannot express the meaning cleanly.
-
-Good cases:
-
-- a risk blocks a delivery branch
-- a research note supports a thesis branch
-- a chapter links to a character, place, or theme
-- an action answers an open question
-
-Prefer plain `[[target/id]]` first.
-Use typed relations like `[[rel:blocked-by->target/id]]` only when preserving the relation meaning is valuable.
-
-## What Good Map Output Looks Like
-
-- root and major branches are obvious
-- labels scan cleanly in plain text
-- metadata is repeated enough to support search
-- ids are present where deep links will help later
-- details hold the prose, not the labels
-- relations are sparse and meaningful
-
-## Validation Shortlist
-
-- parses cleanly
-- `mdm validate` passes when available
-- no duplicate ids
-- metadata keys are consistent
-- relation targets exist
-- labels are readable without the TUI
+- mdmind Conventions #guide @audience:agents @surface:skills [id:skill/mdmind/conventions]
+  - When mdmind is the right target #guide [id:skill/mdmind/conventions/when]
+    - choose mdmind when the output needs real hierarchy
+    - choose mdmind when durable branches matter
+    - choose mdmind when lightweight markers like tags would help
+    - choose mdmind when repeated structured fields like metadata would help
+    - choose mdmind when stable deep-link anchors with [id:...] would help
+    - choose mdmind when lateral links between distant branches matter
+    - choose mdmind when attached notes are useful but the whole file should not become prose
+    - prefer ordinary Markdown when the user only needs a short one-off answer
+  - Good default syntax #reference [id:skill/mdmind/conventions/syntax]
+    - visible label first
+    - #tag is available for grouping or workflow markers
+    - @key:value is available for repeated structured fields
+    - [id:path/to/node] only on durable branches
+    - use | detail lines for real prose
+    - use cross links only when lateral structure matters
+    - Example relation #reference [id:skill/mdmind/conventions/syntax/example-relation]
+      - Relation example [[skill/mdmind/conventions/ids/examples]]
+      - Typed relation example [[rel:related-to->skill/mdmind/conventions/good-output]]
+  - Tags and metadata are optional structure #reference [id:skill/mdmind/conventions/defaults]
+    - use tags when lightweight grouping helps
+    - use metadata when repeated fields help filtering or clarity
+    - keep any vocabulary small and internally consistent
+    - do not invent a schema unless the task really benefits from one
+  - When to add ids #guide [id:skill/mdmind/conventions/ids]
+    - add ids when durable anchors will help navigation, deep links, export, or cross-links
+    - add ids to sections or branches that are likely to be revisited
+    - avoid ids on branches that are unlikely to be linked or revisited
+    - avoid ids on every node
+    - good id patterns #example [id:skill/mdmind/conventions/ids/examples]
+      - product/api-design
+      - research/themes/ownership
+      - story/plot/act-1
+  - When to use details #guide [id:skill/mdmind/conventions/details]
+    - use detail lines for rationale
+    - use detail lines for source quotes
+    - use detail lines for meeting context
+    - use detail lines for scene notes
+    - use detail lines for research excerpts
+    - use detail lines for a sentence or two of explanation that belongs to one node
+    - do not use detail lines for every branch
+    - if most nodes need paragraphs the map structure is probably wrong or the result should be prose
+  - When to use relations #guide [id:skill/mdmind/conventions/relations]
+    - use relations when the tree alone cannot express the meaning cleanly
+    - good cases #reference [id:skill/mdmind/conventions/relations/cases]
+      - a risk blocks a delivery branch
+      - a research note supports a thesis branch
+      - a chapter links to a character, place, or theme
+      - an action answers an open question
+    - prefer plain cross links first
+    - use typed relations when preserving the relation meaning is valuable
+  - What good map output looks like #guide [id:skill/mdmind/conventions/good-output]
+    - root and major branches are obvious
+    - labels scan cleanly in plain text
+    - metadata is repeated enough to support search
+    - ids are present where deep links will help later
+    - details hold the prose, not the labels
+    - relations are sparse and meaningful
+  - Validation shortlist #checklist [id:skill/mdmind/conventions/validation]
+    - parses cleanly
+    - mdm validate passes when available
+    - no duplicate ids
+    - metadata keys are consistent
+    - relation targets exist
+    - labels are readable without the TUI

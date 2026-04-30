@@ -18,5 +18,5 @@ Why it matters:
 
 Related docs:
 
-- [INSTALL_AND_RELEASE.md](/Users/jason/Documents/Programming/mdmind/docs/INSTALL_AND_RELEASE.md)
-- [DEVELOPER.md](/Users/jason/Documents/Programming/mdmind/DEVELOPER.md)
+- [INSTALL_AND_RELEASE.md](../../../INSTALL_AND_RELEASE.md)
+- [DEVELOPER.md](../../../../DEVELOPER.md)

@@ -32,4 +32,4 @@ Reading mode pairs with that by giving the current node's details a larger calme
 
 Related docs:
 
-- [TERMINAL_EXPERIENCE.md](/Users/jason/Documents/Programming/mdmind/docs/TERMINAL_EXPERIENCE.md)
+- [TERMINAL_EXPERIENCE.md](../../../TERMINAL_EXPERIENCE.md)

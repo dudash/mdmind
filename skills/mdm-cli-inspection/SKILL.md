@@ -1,6 +1,10 @@
 ---
 name: mdm-cli-inspection
 description: Use whenever the user wants to inspect, validate, query, audit, deep-link, or export mdmind map files with the mdm CLI. Trigger for requests about tags, metadata, ids, relations, subtree inspection, filtered search, plain/json output, or export formats like json, mermaid, and opml. Do not use for drafting new map content from source material when the main task is authoring structure.
+license: Apache-2.0
+metadata:
+  author: mdmind
+  version: "0.4.0"
 ---
 
 # mdm CLI Inspection

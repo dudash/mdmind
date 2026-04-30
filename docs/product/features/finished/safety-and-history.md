@@ -21,4 +21,4 @@ This is one of the most important “trust” features in the product.
 
 Related docs:
 
-- [SAFETY_AND_HISTORY.md](/Users/jason/Documents/Programming/mdmind/docs/SAFETY_AND_HISTORY.md)
+- [SAFETY_AND_HISTORY.md](../../../SAFETY_AND_HISTORY.md)

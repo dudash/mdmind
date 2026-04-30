@@ -22,4 +22,4 @@ The current mindmap is already useful. The future canvas work is about going bey
 
 Related docs:
 
-- [SPATIAL_CANVAS.md](/Users/jason/Documents/Programming/mdmind/docs/SPATIAL_CANVAS.md)
+- [SPATIAL_CANVAS.md](../../../SPATIAL_CANVAS.md)

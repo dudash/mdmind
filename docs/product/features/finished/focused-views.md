@@ -25,6 +25,6 @@ This matters because the app stays calm on large maps without forcing you to man
 
 Related docs:
 
-- [FOCUSED_VIEWS.md](/Users/jason/Documents/Programming/mdmind/docs/FOCUSED_VIEWS.md)
-- [search-and-browse.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/search-and-browse.md)
-- [visual-mindmap.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/visual-mindmap.md)
+- [FOCUSED_VIEWS.md](../../../FOCUSED_VIEWS.md)
+- [search-and-browse.md](search-and-browse.md)
+- [visual-mindmap.md](visual-mindmap.md)

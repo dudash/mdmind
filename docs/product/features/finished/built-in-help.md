@@ -26,4 +26,4 @@ This surface is especially useful for:
 
 Related docs:
 
-- [PALETTE_AND_HELP.md](/Users/jason/Documents/Programming/mdmind/docs/PALETTE_AND_HELP.md)
+- [PALETTE_AND_HELP.md](../../../PALETTE_AND_HELP.md)

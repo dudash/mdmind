@@ -25,5 +25,5 @@ Why it matters:
 
 Related docs:
 
-- [NODE_DETAILS.md](/Users/jason/Documents/Programming/mdmind/docs/NODE_DETAILS.md)
-- [USING_MDMIND_AS_OUTLINER.md](/Users/jason/Documents/Programming/mdmind/docs/USING_MDMIND_AS_OUTLINER.md)
+- [NODE_DETAILS.md](../../../NODE_DETAILS.md)
+- [USING_MDMIND_AS_OUTLINER.md](../../../USING_MDMIND_AS_OUTLINER.md)

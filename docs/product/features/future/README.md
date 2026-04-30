@@ -6,13 +6,13 @@ If a feature is here, it should not be described anywhere else as already real.
 
 ## Nearer-Term Ideas
 
-- [checklist-semantics.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/checklist-semantics.md)
-- [document-and-branch-stats.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/document-and-branch-stats.md)
+- [checklist-semantics.md](checklist-semantics.md)
+- [document-and-branch-stats.md](document-and-branch-stats.md)
 
 ## Larger Future Work
 
-- [docs-site-and-adoption.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/docs-site-and-adoption.md)
-- [import-and-ingestion.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/import-and-ingestion.md)
-- [spatial-canvas.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/spatial-canvas.md)
-- [template-variables.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/template-variables.md)
-- [cli-help-and-completions.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/cli-help-and-completions.md)
+- [docs-site-and-adoption.md](docs-site-and-adoption.md)
+- [import-and-ingestion.md](import-and-ingestion.md)
+- [spatial-canvas.md](spatial-canvas.md)
+- [template-variables.md](template-variables.md)
+- [cli-help-and-completions.md](cli-help-and-completions.md)

@@ -33,4 +33,4 @@ Good uses:
 
 Related docs:
 
-- [NODE_DETAILS.md](/Users/jason/Documents/Programming/mdmind/docs/NODE_DETAILS.md)
+- [NODE_DETAILS.md](../../../NODE_DETAILS.md)

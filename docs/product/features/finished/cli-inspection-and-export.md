@@ -41,7 +41,7 @@ The richer export and future import story still belongs on the in-work shelf. Th
 
 Related docs:
 
-- [README.md](/Users/jason/Documents/Programming/mdmind/README.md)
-- [QUERY_LANGUAGE.md](/Users/jason/Documents/Programming/mdmind/docs/QUERY_LANGUAGE.md)
-- [TEMPLATES.md](/Users/jason/Documents/Programming/mdmind/docs/TEMPLATES.md)
-- [EXPORT_TARGETS.md](/Users/jason/Documents/Programming/mdmind/docs/EXPORT_TARGETS.md)
+- [README.md](../../../../README.md)
+- [QUERY_LANGUAGE.md](../../../QUERY_LANGUAGE.md)
+- [TEMPLATES.md](../../../TEMPLATES.md)
+- [EXPORT_TARGETS.md](../../../EXPORT_TARGETS.md)

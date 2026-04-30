@@ -36,5 +36,5 @@ Good uses:
 
 Related docs:
 
-- [QUERY_LANGUAGE.md](/Users/jason/Documents/Programming/mdmind/docs/QUERY_LANGUAGE.md)
-- [focused-views.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/focused-views.md)
+- [QUERY_LANGUAGE.md](../../../QUERY_LANGUAGE.md)
+- [focused-views.md](focused-views.md)

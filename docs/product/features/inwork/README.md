@@ -9,5 +9,5 @@ Recent items were either:
 
 So for now, read the shelves like this:
 
-- [finished/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/README.md) for what ships now
-- [future/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/README.md) for the next real capability gaps
+- [finished/README.md](../finished/README.md) for what ships now
+- [future/README.md](../future/README.md) for the next real capability gaps

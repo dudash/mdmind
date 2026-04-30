@@ -12,4 +12,4 @@ This would improve adoption and packaging, but it is not a shipped product featu
 
 Related docs:
 
-- [CLI_HELP_AND_COMPLETIONS.md](/Users/jason/Documents/Programming/mdmind/docs/CLI_HELP_AND_COMPLETIONS.md)
+- [CLI_HELP_AND_COMPLETIONS.md](../../../CLI_HELP_AND_COMPLETIONS.md)

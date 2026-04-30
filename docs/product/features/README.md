@@ -6,9 +6,9 @@ If you only want the answer to “what exists today vs later,” start here.
 
 ## Read It In Order
 
-1. [finished/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/README.md)
-2. [inwork/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/inwork/README.md)
-3. [future/README.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/future/README.md)
+1. [finished/README.md](finished/README.md)
+2. [inwork/README.md](inwork/README.md)
+3. [future/README.md](future/README.md)
 
 That gives you the clearest product picture:
 
@@ -20,6 +20,6 @@ That gives you the clearest product picture:
 
 If you want tutorials or day-to-day usage guidance instead, go back to:
 
-- [docs/USER_GUIDE.md](/Users/jason/Documents/Programming/mdmind/docs/USER_GUIDE.md)
-- [docs/TUI_WORKFLOWS.md](/Users/jason/Documents/Programming/mdmind/docs/TUI_WORKFLOWS.md)
-- [docs/README.md](/Users/jason/Documents/Programming/mdmind/docs/README.md)
+- [docs/USER_GUIDE.md](../../USER_GUIDE.md)
+- [docs/TUI_WORKFLOWS.md](../../TUI_WORKFLOWS.md)
+- [docs/README.md](../../README.md)

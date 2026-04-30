@@ -29,4 +29,4 @@ That fallback is great for quick exploration, but ids are still the better durab
 
 Related docs:
 
-- [IDS_AND_DEEP_LINKS.md](/Users/jason/Documents/Programming/mdmind/docs/IDS_AND_DEEP_LINKS.md)
+- [IDS_AND_DEEP_LINKS.md](../../../IDS_AND_DEEP_LINKS.md)

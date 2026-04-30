@@ -36,5 +36,5 @@ Good example queries:
 
 Related docs:
 
-- [PALETTE_AND_HELP.md](/Users/jason/Documents/Programming/mdmind/docs/PALETTE_AND_HELP.md)
-- [built-in-help.md](/Users/jason/Documents/Programming/mdmind/docs/product/features/finished/built-in-help.md)
+- [PALETTE_AND_HELP.md](../../../PALETTE_AND_HELP.md)
+- [built-in-help.md](built-in-help.md)

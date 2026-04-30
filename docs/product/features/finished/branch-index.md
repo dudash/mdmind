@@ -21,5 +21,5 @@ Important design rule:
 
 Related docs:
 
-- [PALETTE_AND_HELP.md](/Users/jason/Documents/Programming/mdmind/docs/PALETTE_AND_HELP.md)
-- [USING_MDMIND_AS_OUTLINER.md](/Users/jason/Documents/Programming/mdmind/docs/USING_MDMIND_AS_OUTLINER.md)
+- [PALETTE_AND_HELP.md](../../../PALETTE_AND_HELP.md)
+- [USING_MDMIND_AS_OUTLINER.md](../../../USING_MDMIND_AS_OUTLINER.md)

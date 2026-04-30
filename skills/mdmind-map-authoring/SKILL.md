@@ -1,6 +1,10 @@
 ---
 name: mdmind-map-authoring
 description: Use whenever the user wants source material turned into a native mdmind map or wants an existing mdmind map restructured, cleaned up, or normalized. Trigger for meeting notes, research synthesis, product plans, writing outlines, decision maps, project breakdowns, and similar work where hierarchy, tags, metadata, ids, details, or relations should survive in a durable .md file. Do not use for short prose-only answers, raw transcript cleanup without durable structure, visual-diagram requests, or mdm CLI-first inspection/export tasks.
+license: Apache-2.0
+metadata:
+  author: mdmind
+  version: "0.4.0"
 ---
 
 # mdmind Map Authoring
@@ -29,7 +33,7 @@ Create native `mdmind` map output that stays useful for a human, not just syntac
 
 - Build a readable tree first.
 - Keep labels short.
-- Use a few repeated tags or metadata keys, not a taxonomy.
+- Use tags, metadata, ids, details, and relations only when they add clear value.
 - Add ids only on durable branches.
 - Keep relations sparse.
 - Use detail lines only when a branch needs real prose, rationale, quotes, or context.
@@ -92,8 +96,8 @@ Rule of thumb:
 Choose the lightest structure that preserves meaning:
 
 - Use plain labels for core outline shape.
-- Use `#tags` for lightweight grouping and workflow markers such as `#todo`, `#risk`, `#decision`, or `#theme`.
-- Use `@key:value` metadata for repeated structured fields such as `@status:active`, `@owner:jason`, or `@priority:high`.
+- Use `#tags` when lightweight grouping or workflow marking helps.
+- Use `@key:value` metadata when repeated structured fields help filtering or clarity.
 - Use `[id:...]` for durable anchors that a human or tool is likely to revisit, deep-link, export, or reference later.
 - Use `[[target/id]]` or `[[rel:kind->target/id]]` only when lateral meaning matters across distant branches.
 
@@ -107,6 +111,45 @@ Prefer this escalation order:
 
 Do not jump to ids and relations before the tree shape is already good.
 
+## Feature Guide
+
+### Node Labels
+
+- Keep node labels short and readable.
+- Use labels for the main outline shape: headings, work items, themes, questions, decisions, and compact named concepts.
+- If the label stops scanning cleanly as one outline row, shorten it and move the nuance elsewhere.
+
+### `#tags`
+
+- Use `#tags` only for meaningful grouping or workflow marking.
+- Tags are good when they help cluster related branches or make search and filtering easier.
+- Do not add tags to every node by default.
+
+### `@key:value` Metadata
+
+- Use a few stable metadata keys when repeated structured fields help.
+- Good metadata is small, repeated, and easy to filter later.
+- Do not invent lots of one-off keys unless the task clearly needs them.
+
+### `[id:...]`
+
+- Add `[id:...]` only on durable branches.
+- Use ids when a branch is likely to be revisited, deep-linked, exported, or referenced by another branch.
+- Do not put ids on every node.
+
+### `| detail` Lines
+
+- Use `| detail` lines only when a branch needs real prose.
+- Good uses are rationale, quotes, meeting context, research excerpts, scene notes, and attached explanation.
+- Keep the main label compact and move slower-reading context into details.
+
+### `[[target]]` And `[[rel:kind->target]]`
+
+- Use `[[target]]` or `[[rel:kind->target]]` only when the cross-link is worth preserving.
+- Use plain cross-links when one branch should point to another.
+- Use typed cross-links when the relationship itself matters.
+- Prefer tree structure first and relations second.
+
 ## Workflow
 
 1. Decide whether `mdmind` is the right target.
@@ -116,7 +159,7 @@ Do not jump to ids and relations before the tree shape is already good.
 3. Write concise labels.
    Each label should still read well in plain text.
 4. Add the smallest useful structured layer.
-   Start with `#tags` and repeated metadata keys such as `@status`, `@owner`, `@priority`, `@source`, or `@area` only when the source supports them.
+   Use `#tags`, `@key:value` metadata, ids, details, and relations only when they make the map easier to navigate, filter, or understand.
 5. Add ids only where future navigation or linking is likely.
    Good id targets are top-level sections, major work items, durable themes, core entities, and reusable anchors.
 6. Add details only where prose materially helps.
@@ -139,7 +182,8 @@ Use the reference shapes when the task matches a common pattern:
 
 ## Map Conventions
 
-- Prefer a small, repeated metadata vocabulary over many one-off keys.
+- Prefer only as much structure as the map needs.
+- If you add tags or metadata, keep them small and internally consistent.
 - Prefer labels that imply hierarchy naturally instead of encoding too much into tags.
 - Do not put ids on every node.
 - Do not create relation-heavy graph output unless the source material strongly requires it.

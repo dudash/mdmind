@@ -34,4 +34,4 @@ This is valuable because many real maps have lateral structure:
 
 Related docs:
 
-- [CROSS_LINKS_AND_BACKLINKS.md](/Users/jason/Documents/Programming/mdmind/docs/CROSS_LINKS_AND_BACKLINKS.md)
+- [CROSS_LINKS_AND_BACKLINKS.md](../../../CROSS_LINKS_AND_BACKLINKS.md)

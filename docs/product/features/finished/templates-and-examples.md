@@ -20,5 +20,5 @@ These matter because they teach the map language in realistic shapes instead of 
 
 Related docs:
 
-- [TEMPLATES.md](/Users/jason/Documents/Programming/mdmind/docs/TEMPLATES.md)
-- [README.md](/Users/jason/Documents/Programming/mdmind/README.md)
+- [TEMPLATES.md](../../../TEMPLATES.md)
+- [README.md](../../../../README.md)
