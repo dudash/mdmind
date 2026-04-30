@@ -6042,29 +6042,13 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                 ]));
             }
             if !node.detail.is_empty() {
-                let visible_lines = if minimal { 2 } else { 3 };
-                let mut detail_iter = node.detail.iter().take(visible_lines).enumerate();
-                for (index, detail_line) in detail_iter.by_ref() {
-                    let label = if index == 0 { "details " } else { "        " };
-                    let text = if detail_line.is_empty() {
-                        " ".to_string()
-                    } else {
-                        detail_line.clone()
-                    };
-                    lines.push(Line::from(vec![
-                        Span::styled(label, Style::default().fg(PALETTE.muted)),
-                        Span::styled(text, Style::default().fg(PALETTE.text)),
-                    ]));
-                }
-                if node.detail.len() > visible_lines {
-                    lines.push(Line::from(vec![
-                        Span::styled("        ", Style::default().fg(PALETTE.muted)),
-                        Span::styled(
-                            format!("… {} more line(s)", node.detail.len() - visible_lines),
-                            Style::default().fg(PALETTE.sky),
-                        ),
-                    ]));
-                }
+                lines.extend(focus_detail_lines(
+                    &node.detail,
+                    if minimal { 2 } else { 3 },
+                    PALETTE.muted,
+                    PALETTE.text,
+                    PALETTE.sky,
+                ));
             }
             if !minimal {
                 lines.push(Line::from(vec![
@@ -6174,6 +6158,43 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
     };
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+fn focus_detail_lines(
+    detail: &[String],
+    visible_lines: usize,
+    muted: Color,
+    text: Color,
+    accent: Color,
+) -> Vec<Line<'static>> {
+    let mut lines = vec![Line::from(Span::styled(
+        "details",
+        Style::default().fg(muted),
+    ))];
+
+    for detail_line in detail.iter().take(visible_lines) {
+        let text_value = if detail_line.is_empty() {
+            " ".to_string()
+        } else {
+            detail_line.clone()
+        };
+        lines.push(Line::from(vec![
+            Span::styled("  ", Style::default().fg(muted)),
+            Span::styled(text_value, Style::default().fg(text)),
+        ]));
+    }
+
+    if detail.len() > visible_lines {
+        lines.push(Line::from(vec![
+            Span::styled("  ", Style::default().fg(muted)),
+            Span::styled(
+                format!("… {} more line(s)", detail.len() - visible_lines),
+                Style::default().fg(accent),
+            ),
+        ]));
+    }
+
+    lines
 }
 
 fn outline_inline_reading_lines(app: &TuiApp, row: &VisibleRow, _width: u16) -> Vec<Line<'static>> {
@@ -11475,6 +11496,37 @@ mod tests {
         assert!(rendered.trim().is_empty());
 
         cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn focus_detail_lines_render_as_a_header_with_an_indented_block() {
+        let lines = focus_detail_lines(
+            &[
+                "First paragraph that belongs under the details header.".to_string(),
+                "Second paragraph should align with the first detail line.".to_string(),
+                "Third paragraph is hidden in minimal mode.".to_string(),
+            ],
+            2,
+            Color::Gray,
+            Color::White,
+            Color::Cyan,
+        );
+
+        let rendered = lines
+            .into_iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(rendered[0], "details");
+        assert_eq!(
+            rendered[1],
+            "  First paragraph that belongs under the details header."
+        );
+        assert_eq!(
+            rendered[2],
+            "  Second paragraph should align with the first detail line."
+        );
+        assert_eq!(rendered[3], "  … 1 more line(s)");
     }
 
     #[test]

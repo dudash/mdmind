@@ -13,12 +13,9 @@ Create native `mdmind` map output that stays useful for a human, not just syntac
 
 ## Use For
 
-- Turn messy notes into a clean `mdmind` outline.
+- Turn messy source material into a clean `mdmind` outline.
 - Draft or revise `.md` map files used with `mdmind`.
-- Convert meeting notes into actions, decisions, risks, and open questions.
-- Convert research material into themes, evidence, questions, and follow-up work.
-- Convert product inputs into goals, requirements, workstreams, dependencies, and risks.
-- Convert writing notes into characters, places, plotlines, themes, chapters, and revisions.
+- Convert notes, plans, research, writing, or strategy material into a durable map without losing the user's intended framing.
 - Improve an existing map’s structure, labels, ids, metadata, details, or relations.
 
 ## Do Not Use For
@@ -37,11 +34,12 @@ Create native `mdmind` map output that stays useful for a human, not just syntac
 - Add ids only on durable branches.
 - Keep relations sparse.
 - Use detail lines only when a branch needs real prose, rationale, quotes, or context.
+- Preserve the user's framing; improve the structure, not the underlying taxonomy, unless the user asks for a new framework.
 
 Read only what you need:
 
 - Read `references/mdmind-conventions.md` when deciding how much structure to add and when to use ids, details, or relations.
-- Read `references/example-shapes.md` when the task looks like meeting notes, research synthesis, product planning, writing, decision work, or general planning.
+- Read `references/example-shapes.md` when the task matches a common domain or when you want optional decomposition examples without imposing a canned content model.
 
 ## Outline-First Composition Rules
 
@@ -111,6 +109,14 @@ Prefer this escalation order:
 
 Do not jump to ids and relations before the tree shape is already good.
 
+## Preserve User Framing
+
+- Default to the user's own categories, vocabulary, and decomposition.
+- Improve readability and structure without replacing the content model with your own preferred framework.
+- If the source already implies strong sections, preserve them.
+- If the source is messy, infer the smallest useful structure rather than inventing a full taxonomy.
+- Only introduce a new organizational framework when the user explicitly asks for one.
+
 ## Feature Guide
 
 ### Node Labels
@@ -172,13 +178,15 @@ Do not jump to ids and relations before the tree shape is already good.
 ## Output Shape
 
 - Use one root branch with clear major children.
-- Keep sibling sets coherent: sections, workstreams, themes, acts, decisions, questions, actions, or similar.
+- Keep sibling sets coherent: major sections, lenses, entities, questions, actions, stages, or similar.
 - Under execution-oriented branches, make leaf nodes concrete enough to act on.
 - Under research or writing branches, use details for context instead of turning every label into prose.
+- For broad strategy prompts, prefer a few clear lenses over a flat brainstorm.
+- Derive the actual top-level branches from the user's framing and source material instead of forcing a canned taxonomy.
 
 Use the reference shapes when the task matches a common pattern:
 
-- Meeting, research, product, writing, decision, or general planning shapes live in `references/example-shapes.md`.
+- Common decomposition patterns and optional domain examples live in `references/example-shapes.md`.
 
 ## Map Conventions
 
@@ -188,6 +196,7 @@ Use the reference shapes when the task matches a common pattern:
 - Do not put ids on every node.
 - Do not create relation-heavy graph output unless the source material strongly requires it.
 - If the user already has a map style, preserve it instead of imposing a new schema.
+- Do not inject a favorite taxonomy just because it is broadly sensible.
 
 ## Validation
 
@@ -208,6 +217,7 @@ If the user’s main goal is to inspect, query, validate, or export an existing 
 - “Turn these meeting notes into an mdmind map with actions, decisions, and open questions.”
 - “Restructure this project map so the workstreams are clearer and ids only appear on durable branches.”
 - “Convert this research dump into a map with themes, evidence, and follow-up tasks.”
+- “Brainstorm what it would take to turn this into a widely used product, then turn it into a native mdmind map with short labels, details for rationale, and ids only on durable branches.”
 
 ## Example Rewrite Pattern
 
@@ -229,6 +239,7 @@ The first version keeps the outline scannable, preserves the key state in the la
 ## Gotchas
 
 - Agents often over-structure. If unsure, remove structure rather than add more.
+- Agents also over-impose frameworks. If unsure, preserve the user's framing instead of introducing your own taxonomy.
 - Not every node needs an id. Overusing ids hurts readability.
 - Relations are for lateral meaning, not for replacing basic hierarchy.
 - Detail lines should hold actual prose or attached context, not restate the label.

@@ -1,80 +1,158 @@
 - Example Output Shapes #guide @audience:agents @surface:skills [id:skill/mdmind/example-shapes]
-  - These are starter shapes, not rigid templates
+  - These are optional shapes, not required taxonomies
+  - Preserve the user's framing when choosing one
+  - Use domain examples as prompts for decomposition, not as schemas to force onto the source
+  - Sectioned map #recipe [id:skill/mdmind/example-shapes/sectioned]
+    - shape #reference [id:skill/mdmind/example-shapes/sectioned/shape]
+      - root branch for the subject
+      - a few major sections or lenses
+      - supporting children under each section
+    - good defaults #reference [id:skill/mdmind/example-shapes/sectioned/defaults]
+      - use when the source already suggests a few big buckets
+      - keep section names close to the user's own wording
+      - add ids only on durable sections
+  - Action-oriented map #recipe [id:skill/mdmind/example-shapes/action]
+    - shape #reference [id:skill/mdmind/example-shapes/action/shape]
+      - root branch for the subject
+      - current context
+      - decisions or conclusions
+      - actions or next moves
+      - open questions
+    - good defaults #reference [id:skill/mdmind/example-shapes/action/defaults]
+      - use when the material needs follow-up or execution
+      - tags or metadata can mark ownership or state if that helps
+      - use details for rationale or meeting context
+  - Evidence-oriented map #recipe [id:skill/mdmind/example-shapes/evidence]
+    - shape #reference [id:skill/mdmind/example-shapes/evidence/shape]
+      - root branch for the subject
+      - themes, claims, or findings
+      - evidence or supporting context
+      - open questions
+      - follow-up
+    - good defaults #reference [id:skill/mdmind/example-shapes/evidence/defaults]
+      - use when the material mixes conclusions with support
+      - use details for quotes, excerpts, or nuance
+      - add ids on durable themes when anchors will help
+  - Entity-oriented map #recipe [id:skill/mdmind/example-shapes/entity]
+    - shape #reference [id:skill/mdmind/example-shapes/entity/shape]
+      - root branch for the subject
+      - major entities, components, or actors
+      - attributes, responsibilities, or related notes under each
+    - good defaults #reference [id:skill/mdmind/example-shapes/entity/defaults]
+      - use when the source is organized around people, places, systems, or objects
+      - metadata can help when attributes repeat across entities
+      - add ids on reusable anchors
+  - Stage-oriented map #recipe [id:skill/mdmind/example-shapes/stage]
+    - shape #reference [id:skill/mdmind/example-shapes/stage/shape]
+      - root branch for the subject
+      - stages, phases, or steps
+      - tasks, decisions, or notes under each stage
+    - good defaults #reference [id:skill/mdmind/example-shapes/stage/defaults]
+      - use when order or progression matters
+      - keep labels short and let details hold procedural nuance
+      - relations can help if dependencies matter across stages
+  - Lens-based map #recipe [id:skill/mdmind/example-shapes/lens]
+    - shape #reference [id:skill/mdmind/example-shapes/lens/shape]
+      - root branch for the subject
+      - a small set of major lenses or domains
+      - assumptions, evidence, options, constraints, or questions under each lens
+    - good defaults #reference [id:skill/mdmind/example-shapes/lens/defaults]
+      - use when the source spans several major aspects of the same topic
+      - derive lens names from the user's framing instead of imposing fixed categories
+      - use details for rationale, tradeoffs, and why a branch matters
+  - Domain examples #guide [id:skill/mdmind/example-shapes/domains]
+    - These are common map shapes for common tasks
+    - Treat them as optional examples, not required schemas
   - Meeting follow-up map #recipe [id:skill/mdmind/example-shapes/meeting]
-    - shape #reference [id:skill/mdmind/example-shapes/meeting/shape]
-      - root branch for the meeting
-      - agenda or context
+    - common branches #reference [id:skill/mdmind/example-shapes/meeting/shape]
+      - meeting or topic root
+      - context or agenda
       - decisions
       - action items
       - open questions
-      - parking lot or follow-up
-    - good defaults #reference [id:skill/mdmind/example-shapes/meeting/defaults]
-      - tags can mark decision or follow-up branches if that helps
+      - follow-up or parking lot
+    - feature notes #reference [id:skill/mdmind/example-shapes/meeting/defaults]
+      - tags can mark decisions or follow-up work if that helps
       - metadata can mark ownership or state if that helps
       - use details for rationale, quotes, or meeting context
+      - add ids on durable branches when the meeting map will be revisited
   - Research synthesis map #recipe [id:skill/mdmind/example-shapes/research]
-    - shape #reference [id:skill/mdmind/example-shapes/research/shape]
-      - root branch for the topic
-      - themes
+    - common branches #reference [id:skill/mdmind/example-shapes/research/shape]
+      - topic root
+      - themes or findings
       - evidence
       - open questions
       - actions or next steps
-    - good defaults #reference [id:skill/mdmind/example-shapes/research/defaults]
+    - feature notes #reference [id:skill/mdmind/example-shapes/research/defaults]
       - tags can mark themes, questions, or follow-up work if that helps
-      - metadata can record sources when useful
+      - metadata can record sources or state when useful
       - add ids on major themes and evidence clusters when durable anchors will help
       - use details for quotes or nuanced findings
   - Product or project map #recipe [id:skill/mdmind/example-shapes/product]
-    - shape #reference [id:skill/mdmind/example-shapes/product/shape]
-      - root branch for the initiative
+    - common branches #reference [id:skill/mdmind/example-shapes/product/shape]
+      - initiative root
       - goals or outcomes
       - requirements
       - workstreams
       - risks or blockers
       - decisions
       - current execution lane
-    - good defaults #reference [id:skill/mdmind/example-shapes/product/defaults]
+    - feature notes #reference [id:skill/mdmind/example-shapes/product/defaults]
       - metadata can mark ownership, state, or priority when that helps
       - add ids on durable branches like workstreams, major requirements, and risks when anchors will help
       - use relations for blockers, dependencies, or supporting evidence
+  - Strategy map #recipe [id:skill/mdmind/example-shapes/strategy]
+    - common branches #reference [id:skill/mdmind/example-shapes/strategy/shape]
+      - subject root
+      - a few major lenses
+      - assumptions, evidence, or supporting context
+      - options, bets, or priorities
+      - constraints, risks, or tradeoffs
+      - next moves or roadmap
+      - open questions
+    - feature notes #reference [id:skill/mdmind/example-shapes/strategy/defaults]
+      - use a few clear lenses instead of one long brainstorm list
+      - derive the lens names from the user's framing instead of imposing fixed categories
+      - add ids on major durable branches when the map will be revisited
+      - use details for rationale, tradeoffs, hypotheses, and why a branch matters
   - Writing or story map #recipe [id:skill/mdmind/example-shapes/writing]
-    - shape #reference [id:skill/mdmind/example-shapes/writing/shape]
-      - root branch for the work
+    - common branches #reference [id:skill/mdmind/example-shapes/writing/shape]
+      - work root
       - characters
       - places
       - plot or acts
       - themes
       - research
       - drafting or revision workflow
-    - good defaults #reference [id:skill/mdmind/example-shapes/writing/defaults]
+    - feature notes #reference [id:skill/mdmind/example-shapes/writing/defaults]
       - tags can mark plot, theme, chapter, or active work when useful
       - metadata can mark state when that helps
       - add ids on major entities, acts, and reusable anchors when durable links will help
       - use details for scene notes, quotes, and rationale
   - Decision map #recipe [id:skill/mdmind/example-shapes/decision]
-    - shape #reference [id:skill/mdmind/example-shapes/decision/shape]
-      - root branch for the decision
+    - common branches #reference [id:skill/mdmind/example-shapes/decision/shape]
+      - decision root
       - current decision statement
       - options
       - recommendation
       - evidence
       - risks or tradeoffs
       - follow-up
-    - good defaults #reference [id:skill/mdmind/example-shapes/decision/defaults]
+    - feature notes #reference [id:skill/mdmind/example-shapes/decision/defaults]
       - tags can distinguish decisions, ideas, risks, or follow-up work if that helps
       - metadata can reflect option state when useful
       - add ids on options and recommendation branches when durable anchors will help
       - use relations for evidence that supports or blocks an option
   - General planning map #recipe [id:skill/mdmind/example-shapes/planning]
-    - shape #reference [id:skill/mdmind/example-shapes/planning/shape]
-      - root branch for the topic
+    - common branches #reference [id:skill/mdmind/example-shapes/planning/shape]
+      - topic root
       - current state
       - desired outcome
       - workstreams
       - risks
       - questions
       - next actions
-    - good defaults #reference [id:skill/mdmind/example-shapes/planning/defaults]
+    - feature notes #reference [id:skill/mdmind/example-shapes/planning/defaults]
       - start with labels and add tags or metadata only when they help
       - add ids only to branches likely to be revisited
       - keep relations rare unless dependencies are central

@@ -82,6 +82,8 @@ That installs both:
 
 More install and release detail lives in [docs/INSTALL_AND_RELEASE.md](docs/INSTALL_AND_RELEASE.md).
 
+For Codex, Claude, or other agent clients, see [skills/README.md](skills/README.md).
+
 ## Quick Start
 
 Create a map from a starter template:

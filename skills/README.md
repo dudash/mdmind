@@ -108,9 +108,9 @@ cp -R skills/mdm-cli-inspection .claude/skills/
 
 Claude usually picks up skill edits live once the skills directory already exists.
 
-## Quick Validation
+## Testing
 
-Before sharing the skills broadly, test them with realistic prompts.
+Test with realistic prompts.
 
 For an isolated Codex test home, run:
 
@@ -122,15 +122,15 @@ scripts/test-skills.sh --skill mdm-cli-inspection
 That script copies the selected skill into a clean `CODEX_HOME`-style directory and
 prints the exact `codex` launch command plus the prompt file to use.
 
-Suggested prompts live in:
+Prompt files:
 
 - `mdmind-map-authoring/examples/prompts.md`
 - `mdm-cli-inspection/examples/prompts.md`
 
-You should test both:
+Check:
 
 - whether the right skill triggers
-- whether the resulting output shape is useful
+- whether the output is useful
 
 ## Notes
 

@@ -29,9 +29,9 @@
     - avoid ids on branches that are unlikely to be linked or revisited
     - avoid ids on every node
     - good id patterns #example [id:skill/mdmind/conventions/ids/examples]
-      - product/api-design
-      - research/themes/ownership
-      - story/plot/act-1
+      - topic/subtopic
+      - plan/workstream-a
+      - subject/phase-1
   - When to use details #guide [id:skill/mdmind/conventions/details]
     - use detail lines for rationale
     - use detail lines for source quotes
@@ -44,10 +44,10 @@
   - When to use relations #guide [id:skill/mdmind/conventions/relations]
     - use relations when the tree alone cannot express the meaning cleanly
     - good cases #reference [id:skill/mdmind/conventions/relations/cases]
-      - a risk blocks a delivery branch
-      - a research note supports a thesis branch
-      - a chapter links to a character, place, or theme
-      - an action answers an open question
+      - a blocking branch points to the branch it blocks
+      - an evidence branch points to the claim it supports
+      - a follow-up branch points to the question it resolves
+      - one branch depends on another branch outside its local tree position
     - prefer plain cross links first
     - use typed relations when preserving the relation meaning is valuable
   - What good map output looks like #guide [id:skill/mdmind/conventions/good-output]

@@ -6,7 +6,7 @@
     <title>mdmind Downloads</title>
     <meta
       name="description"
-      content="Download mdmind from GitHub releases or install on macOS with Homebrew."
+      content="Download mdmind from GitHub releases, install on macOS with Homebrew, or add mdmind skills to agents like Codex and Claude."
     >
     <link rel="stylesheet" href="../styles.css">
   </head>
@@ -67,6 +67,76 @@ brew install mdmind</code></pre>
             <p>For local development or testing directly from the repo:</p>
             <pre><code>cargo install --path .</code></pre>
           </article>
+        </section>
+
+        <section class="section-heading" id="agent-skills">
+          <div class="eyebrow">Agent mode</div>
+          <h2>Install mdmind as a skill for your agents.</h2>
+          <p>
+            Teach Codex or Claude to write native mdmind maps and inspect them with
+            <code>mdm</code>. After cloning or downloading the repo, replace
+            <code>/path/to/mdmind</code> below with that folder, copy one or both skill folders into
+            your agent's skills directory, and restart the client.
+          </p>
+        </section>
+
+        <section class="downloads-grid">
+          <article class="download-card">
+            <div class="eyebrow">What you get</div>
+            <h2>Two focused skills</h2>
+            <p>
+              <code>mdmind-map-authoring</code> teaches agents to write clean native maps.
+              <code>mdm-cli-inspection</code> teaches them to validate, inspect, and export existing maps.
+            </p>
+            <a class="text-link" href="https://github.com/dudash/mdmind/tree/main/skills" target="_blank" rel="noreferrer">Browse the skill pack</a>
+          </article>
+
+          <article class="download-card">
+            <div class="eyebrow">Codex</div>
+            <h2>Install for Codex</h2>
+            <p>
+              Copy the skill folders into <code>~/.codex/skills</code>.
+            </p>
+            <pre><code>mkdir -p ~/.codex/skills
+cp -R /path/to/mdmind/skills/mdmind-map-authoring ~/.codex/skills/
+cp -R /path/to/mdmind/skills/mdm-cli-inspection ~/.codex/skills/</code></pre>
+          </article>
+
+          <article class="download-card">
+            <div class="eyebrow">Claude</div>
+            <h2>Install for Claude</h2>
+            <p>
+              For all projects, copy the same folders into <code>~/.claude/skills</code>.
+            </p>
+            <pre><code>mkdir -p ~/.claude/skills
+cp -R /path/to/mdmind/skills/mdmind-map-authoring ~/.claude/skills/
+cp -R /path/to/mdmind/skills/mdm-cli-inspection ~/.claude/skills/</code></pre>
+          </article>
+
+          <article class="download-card">
+            <div class="eyebrow">Need the guide?</div>
+            <h2>Full skill install notes</h2>
+            <p>
+              The repo includes a portable skills README, example prompts, and a small test harness
+              for isolated Codex installs.
+            </p>
+            <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/skills/README.md" target="_blank" rel="noreferrer">Open the skills README</a>
+          </article>
+        </section>
+
+        <section class="final-cta">
+          <div>
+            <div class="eyebrow">Two install paths</div>
+            <h3>Install mdmind for yourself, then install the skills for your agents.</h3>
+            <p>
+              The binaries are for writing and exploring maps directly. The skill pack helps Codex,
+              Claude, and similar tools produce native mdmind files with better structure.
+            </p>
+          </div>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://github.com/dudash/mdmind/releases/latest" target="_blank" rel="noreferrer">Latest release</a>
+            <a class="button button-secondary" href="https://github.com/dudash/mdmind/tree/main/skills" target="_blank" rel="noreferrer">Browse skills</a>
+          </div>
         </section>
 
       </main>
