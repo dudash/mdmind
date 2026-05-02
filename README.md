@@ -1,4 +1,6 @@
-# mdmind
+<p align="center">
+  <img src="docs/assets/mdmind-logo.png" alt="mdmind" width="720">
+</p>
 
 `mdmind` is a local-first thinking tool for structured maps in plain text.
 
