@@ -97,9 +97,25 @@ pre {
   gap: 18px;
 }
 
-.site-nav a,
-.text-link {
+.site-nav a {
   color: var(--ink-soft);
+  text-decoration: none;
+}
+
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  color: var(--violet-strong);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.text-link::after {
+  content: "->";
   text-decoration: none;
 }
 
@@ -459,6 +475,11 @@ p {
   margin-top: 0;
 }
 
+.section-band-intro .section-heading p,
+.workflow-lab .section-heading p {
+  max-width: none;
+}
+
 .section-heading p {
   max-width: 70ch;
   font-size: 1.02rem;
@@ -555,10 +576,6 @@ p {
 
 .workflow-lab {
   background: linear-gradient(180deg, rgba(234, 244, 237, 0.7), rgba(255, 255, 255, 0.58));
-}
-
-.workflow-lab .section-heading p {
-  max-width: none;
 }
 
 .workflow-stage {
