@@ -1,5 +1,14 @@
 <p align="center">
-  <img src="docs/assets/mdmind-logo.png" alt="mdmind" width="720">
+  <img src="docs/assets/mdmind-logo.png" alt="mdmind" width="560">
+</p>
+
+<p align="center">
+  <a href="https://github.com/dudash/mdmind/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/dudash/mdmind/ci.yml?branch=main&label=ci" alt="CI status"></a>
+  <a href="https://github.com/dudash/mdmind/releases"><img src="https://img.shields.io/github/v/release/dudash/mdmind?label=release" alt="Latest release"></a>
+  <a href="https://crates.io/crates/mdmind"><img src="https://img.shields.io/crates/v/mdmind" alt="Crates.io version"></a>
+  <img src="https://img.shields.io/badge/rust-1.85%2B-f05f40" alt="Rust 1.85+">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0 license"></a>
+  <a href="https://github.com/sponsors/dudash"><img src="https://img.shields.io/github/sponsors/dudash?label=sponsor&logo=githubsponsors" alt="Sponsor on GitHub"></a>
 </p>
 
 `mdmind` is a local-first thinking tool for structured maps in plain text.
@@ -9,7 +18,7 @@ It gives you two interfaces over the same file:
 - `mdm`: a CLI for viewing, searching, validating, exporting, and copying examples
 - `mdmind`: a full-screen TUI for navigating, filtering, editing, and reshaping maps
 
-The goal is not to mimic a whiteboard app. The goal is to make large idea trees feel calm, searchable, and safe to edit with a keyboard.
+Large idea trees stay calm, searchable, and safe to edit with a keyboard.
 
 License: Apache-2.0
 
@@ -26,7 +35,7 @@ License: Apache-2.0
 - backlog shaping
 - keyboard-first personal planning
 
-It is intentionally not:
+It is not trying to be:
 
 - a rich document editor
 - a team wiki
@@ -45,14 +54,18 @@ Maps are plain-text tree files with lightweight inline structure:
 Example:
 
 ```text
-- Product Idea #idea [id:product]
-  | Keep the tree label short. Put longer rationale here.
-  - Direction #strategy [id:product/direction]
-    - CLI-first MVP
-  - Tasks #todo @status:active [id:product/tasks] [[prompts/library]]
-    - Build parser
-    - Ship tests
-  - Prompt Library #prompt [id:prompts/library]
+- Onboarding Research #project @status:active [id:onboarding]
+  | Turn scattered notes, interviews, and generated research into a decision map.
+  - Core Question #question [id:onboarding/question]
+    - Where do new users lose momentum first?
+  - Evidence #source [id:onboarding/evidence] [[rel:informs->onboarding/decision]]
+    - Interview notes mention setup vocabulary friction
+    - Support tickets cluster around first-map examples
+  - Decision #decision @owner:jason [id:onboarding/decision]
+    - Ship a guided starter map before adding more settings
+  - Follow-ups #todo @status:active [id:onboarding/follow-ups] [[onboarding/evidence]]
+    - Review five more sessions
+    - Draft release note
 ```
 
 These files stay readable in normal Markdown tools. `mdmind` adds structure and navigation on top of that plain-text shape.

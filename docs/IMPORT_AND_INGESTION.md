@@ -11,20 +11,12 @@ This should be a CLI-first feature:
 
 The TUI should not become a format-ingestion surface.
 
-## Why This Matters
+## Scope
 
-Right now the product is strong at:
+Import and ingestion cover two different jobs:
 
-- native editing
-- native navigation
-- export
-
-The bigger missing capability is getting existing work into the format without manual copy-paste.
-
-That includes two different jobs:
-
-1. faithful import from real map and outline formats
-2. best-effort ingestion from non-map content like web pages and PDFs
+- faithful import from real map and outline formats
+- best-effort ingestion from non-map content like web pages and PDFs
 
 Those should be documented and implemented differently.
 
@@ -103,7 +95,7 @@ When something cannot be represented cleanly:
 - prefer preserving it in detail text or metadata
 - do not silently drop it if it is important to interpretation
 
-## Delivery Recommendation
+## Implementation Order
 
 Phase 1:
 

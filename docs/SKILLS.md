@@ -4,11 +4,11 @@ This is a practical format spec for a `SKILLS.md` file that guides agents workin
 
 It is not meant to be a heavy standard. It is meant to be easy for both humans and agents to read.
 
-The goal is simple:
+A skill file should describe:
 
-- describe when a workflow should be used
-- describe what good output looks like
-- describe what the agent should validate before handing work back
+- when a workflow should be used
+- what good output looks like
+- what the agent should validate before handing work back
 
 ## What A Skill File Is For
 

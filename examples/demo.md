@@ -1,14 +1,12 @@
-- mdmind Demo [id:demo]
-  - Product Direction #idea @status:active [id:demo/direction]
-    - CLI-first MVP
-    - TUI later
-  - Tasks #todo
-    - I need to build the parser
-    - Add templates
-    - Ship test now please
-  - Prompts #prompt @owner:jason
-    - Explore command help tone
-  - This is something I need to sort
-    - one
-    - two
-    - three
+- Onboarding Research #project @status:active [id:onboarding]
+  | Turn scattered notes, interviews, and generated research into a decision map.
+  - Core Question #question [id:onboarding/question]
+    - Where do new users lose momentum first?
+  - Evidence #source [id:onboarding/evidence] [[rel:informs->onboarding/decision]]
+    - Interview notes mention setup vocabulary friction
+    - Support tickets cluster around first-map examples
+  - Decision #decision @owner:jason [id:onboarding/decision]
+    - Ship a guided starter map before adding more settings
+  - Follow-ups #todo @status:active [id:onboarding/follow-ups] [[onboarding/evidence]]
+    - Review five more sessions
+    - Draft release note

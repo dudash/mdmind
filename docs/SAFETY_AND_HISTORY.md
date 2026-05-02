@@ -81,8 +81,6 @@ For everyday work:
 - use checkpoints before bigger experiments
 - use recent history in the palette when the restore target is a few steps away
 
-The goal is not to edit cautiously. The goal is to edit confidently because recovery is nearby.
-
 ## Related Docs
 
 - [TUI_WORKFLOWS.md](TUI_WORKFLOWS.md)

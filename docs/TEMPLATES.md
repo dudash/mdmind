@@ -26,7 +26,7 @@ Templates are useful when:
 - you are teaching someone the format
 - you want a consistent scaffold for recurring work
 
-They are intentionally small. The goal is to give you a useful starting shape, not to generate a giant opinionated document.
+They are small by design: useful starting shapes, not giant opinionated documents.
 
 Each template demonstrates the core map language too:
 

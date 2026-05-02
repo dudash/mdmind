@@ -98,15 +98,6 @@ If you are experienced:
 - search for the exact topic or phrase you want
 - use help as a fast refresher instead of browsing the whole tree of docs
 
-## Why Palette And Help Belong Together
-
-These two surfaces solve a similar problem:
-
-- the palette helps you act
-- help helps you understand
-
-Keeping them close makes the app easier to learn because the same user who types `review todo` in the palette can also type `deep link` or `subtree` in help and get an explanation right away.
-
 ## Practical Advice
 
 - use the palette when you know the target
