@@ -9,6 +9,11 @@ Current built-in themes:
 - Blueprint
 - Calm
 - Violet
+- Amethyst
+- Atelier
+- Archive
+- Signal
+- Tokyo Mind
 - Monograph
 - Terminal Neon
 
@@ -16,6 +21,9 @@ Related surface features:
 
 - live theme preview from the palette
 - per-map UI settings
+- semantic colors for tags, metadata, ids, and query text
+- dedicated relation, count, and selection colors for denser technical themes
+- per-theme attention colors for subtle input and focus motion
 - minimal mode
 - reading mode
 - ASCII accents

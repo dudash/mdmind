@@ -332,6 +332,14 @@ impl FacetTab {
     }
 }
 
+fn facet_tab_color(tab: FacetTab, palette: Palette) -> Color {
+    match tab {
+        FacetTab::Tags => palette.tag,
+        FacetTab::Keys | FacetTab::Values => palette.metadata,
+        FacetTab::Ids => palette.id,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FacetItem {
     label: String,
@@ -572,7 +580,7 @@ impl HelpTopic {
                 "safety undo redo checkpoint checkpoints autosave save revert restore history recent actions recovery"
             }
             Self::Themes => {
-                "theme themes paper blueprint calm violet monograph terminal neon workbench palette ui settings motion ascii accents minimal reading purple lavender"
+                "theme themes paper blueprint calm violet amethyst atelier archive signal tokyo mind monograph terminal neon workbench palette ui settings motion ascii accents minimal reading purple lavender gray graphite vscode editor"
             }
             Self::Mindmap => "mindmap visual bubble canvas png export pan recenter map overlay",
             Self::Syntax => {
@@ -844,7 +852,7 @@ impl HelpTopic {
                 ),
                 (
                     "theme",
-                    "Preview themes like paper, violet, monograph, or blueprint",
+                    "Preview themes like paper, archive, tokyo mind, or amethyst",
                 ),
                 ("minimal", "Toggle the quieter pro layout"),
                 (
@@ -5656,7 +5664,7 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
             .fg(PALETTE.background)
             .add_modifier(Modifier::BOLD),
         (_, 1, _) => Style::default()
-            .bg(PALETTE.surface_alt)
+            .bg(PALETTE.selection)
             .fg(PALETTE.warn)
             .add_modifier(Modifier::BOLD),
         (level, _, _) if level >= 2 => Style::default()
@@ -5664,20 +5672,20 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
             .fg(PALETTE.background)
             .add_modifier(Modifier::BOLD),
         (1, _, _) => Style::default()
-            .bg(PALETTE.surface_alt)
-            .fg(PALETTE.text)
+            .bg(PALETTE.selection)
+            .fg(PALETTE.selection_text)
             .add_modifier(Modifier::BOLD),
         (_, _, level) if level >= 2 => Style::default()
             .bg(PALETTE.warn)
             .fg(PALETTE.background)
             .add_modifier(Modifier::BOLD),
         (_, _, 1) => Style::default()
-            .bg(PALETTE.surface_alt)
-            .fg(PALETTE.text)
+            .bg(PALETTE.selection)
+            .fg(PALETTE.selection_text)
             .add_modifier(Modifier::BOLD),
         _ => Style::default()
-            .bg(PALETTE.surface_alt)
-            .fg(PALETTE.text)
+            .bg(PALETTE.selection)
+            .fg(PALETTE.selection_text)
             .add_modifier(Modifier::BOLD),
     };
 
@@ -5759,7 +5767,7 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     Style::default().fg(if row.dimmed {
                         PALETTE.border
                     } else {
-                        PALETTE.accent
+                        PALETTE.tag
                     }),
                 ));
             }
@@ -5770,7 +5778,7 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     Style::default().fg(if row.dimmed {
                         PALETTE.muted
                     } else {
-                        PALETTE.warn
+                        PALETTE.metadata
                     }),
                 ));
             }
@@ -5781,7 +5789,7 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     Style::default().fg(if row.dimmed {
                         PALETTE.border
                     } else {
-                        PALETTE.sky
+                        PALETTE.relation
                     }),
                 ));
             }
@@ -5792,7 +5800,7 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     Style::default().fg(if row.dimmed {
                         PALETTE.border
                     } else {
-                        PALETTE.muted
+                        PALETTE.id
                     }),
                 ));
             }
@@ -5803,7 +5811,7 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     Style::default().fg(if row.dimmed {
                         PALETTE.border
                     } else {
-                        PALETTE.sky
+                        PALETTE.count
                     }),
                 ));
             }
@@ -5984,7 +5992,7 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                 if !node.tags.is_empty() {
                     meta.push(Span::styled(
                         node.tags.join(" "),
-                        Style::default().fg(PALETTE.accent),
+                        Style::default().fg(PALETTE.tag),
                     ));
                 }
                 if !node.metadata.is_empty() {
@@ -5997,7 +6005,7 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                             .map(|entry| format!("@{}:{}", entry.key, entry.value))
                             .collect::<Vec<_>>()
                             .join(" "),
-                        Style::default().fg(PALETTE.warn),
+                        Style::default().fg(PALETTE.metadata),
                     ));
                 }
                 lines.push(Line::from(meta));
@@ -6016,16 +6024,16 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                 Span::styled("id ", Style::default().fg(PALETTE.muted)),
                 Span::styled(
                     node.id.clone().unwrap_or_else(|| "none".to_string()),
-                    Style::default().fg(PALETTE.text),
+                    Style::default().fg(PALETTE.id),
                 ),
                 Span::raw("   "),
                 Span::styled("line ", Style::default().fg(PALETTE.muted)),
-                Span::styled(node.line.to_string(), Style::default().fg(PALETTE.text)),
+                Span::styled(node.line.to_string(), Style::default().fg(PALETTE.count)),
                 Span::raw("   "),
                 Span::styled("children ", Style::default().fg(PALETTE.muted)),
                 Span::styled(
                     node.children.len().to_string(),
-                    Style::default().fg(PALETTE.text),
+                    Style::default().fg(PALETTE.count),
                 ),
             ]));
             if !node.relations.is_empty() {
@@ -6037,7 +6045,7 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                             .map(|relation| relation.display_token())
                             .collect::<Vec<_>>()
                             .join(" "),
-                        Style::default().fg(PALETTE.sky),
+                        Style::default().fg(PALETTE.relation),
                     ),
                 ]));
             }
@@ -6119,15 +6127,15 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
             }
             if let Some(filter) = &app.filter {
                 let is_direct_match = current_node_matches_filter(app);
+                let mut filter_query_style = Style::default().fg(PALETTE.query);
+                if motion_level(MotionTarget::FilterResult) > 0 {
+                    filter_query_style = filter_query_style.add_modifier(Modifier::BOLD);
+                }
                 lines.push(Line::from(vec![
                     Span::styled("filter ", Style::default().fg(PALETTE.muted)),
                     Span::styled(
                         format!("{} ({})", filter.query.raw(), filter.matches.len()),
-                        Style::default().fg(if motion_level(MotionTarget::FilterResult) > 0 {
-                            PALETTE.accent
-                        } else {
-                            PALETTE.warn
-                        }),
+                        filter_query_style,
                     ),
                     Span::raw("  "),
                     Span::styled(
@@ -6595,17 +6603,17 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
         .title(styled_title(
             "Query",
             attention_border(
-                PALETTE.warn,
-                PALETTE.sky,
-                PALETTE.accent,
+                PALETTE.query,
+                PALETTE.attention,
+                PALETTE.attention,
                 MotionTarget::HelpInput,
             ),
         ))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(attention_border(
-            PALETTE.warn,
-            PALETTE.sky,
-            PALETTE.accent,
+            PALETTE.query,
+            PALETTE.attention,
+            PALETTE.attention,
             MotionTarget::HelpInput,
         )))
         .style(Style::default().bg(attention_fill(
@@ -6619,7 +6627,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
     frame.render_widget(input_block, sections[1]);
     frame.render_widget(
         Paragraph::new(help.query.clone())
-            .style(Style::default().fg(PALETTE.text))
+            .style(Style::default().fg(PALETTE.query))
             .wrap(Wrap { trim: false }),
         input_inner,
     );
@@ -6714,8 +6722,8 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
                 .highlight_symbol("")
                 .highlight_style(
                     Style::default()
-                        .bg(PALETTE.surface_alt)
-                        .fg(PALETTE.text)
+                        .bg(PALETTE.selection)
+                        .fg(PALETTE.selection_text)
                         .add_modifier(Modifier::BOLD),
                 ),
             columns[0],
@@ -6969,17 +6977,17 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
         .title(styled_title(
             "Query",
             attention_border(
-                PALETTE.warn,
-                PALETTE.sky,
-                PALETTE.accent,
+                PALETTE.query,
+                PALETTE.attention,
+                PALETTE.attention,
                 MotionTarget::PaletteInput,
             ),
         ))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(attention_border(
-            PALETTE.warn,
-            PALETTE.sky,
-            PALETTE.accent,
+            PALETTE.query,
+            PALETTE.attention,
+            PALETTE.attention,
             MotionTarget::PaletteInput,
         )))
         .style(Style::default().bg(attention_fill(
@@ -6993,7 +7001,7 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
     frame.render_widget(input_block, sections[1]);
     frame.render_widget(
         Paragraph::new(palette.query.clone())
-            .style(Style::default().fg(PALETTE.text))
+            .style(Style::default().fg(PALETTE.query))
             .wrap(Wrap { trim: false }),
         input_inner,
     );
@@ -7115,8 +7123,8 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
                 )
                 .highlight_style(
                     Style::default()
-                        .bg(PALETTE.background)
-                        .fg(PALETTE.text)
+                        .bg(PALETTE.selection)
+                        .fg(PALETTE.selection_text)
                         .add_modifier(Modifier::BOLD),
                 ),
             body[0],
@@ -7244,7 +7252,7 @@ fn render_relation_picker_overlay(
                         .add_modifier(Modifier::BOLD),
                 ),
                 Span::raw("  "),
-                Span::styled(item.subtitle.clone(), Style::default().fg(PALETTE.sky)),
+                Span::styled(item.subtitle.clone(), Style::default().fg(PALETTE.relation)),
             ])])
         })
         .collect::<Vec<_>>();
@@ -7257,13 +7265,13 @@ fn render_relation_picker_overlay(
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(PALETTE.sky))
+                    .border_style(Style::default().fg(PALETTE.relation))
                     .style(Style::default().bg(PALETTE.surface)),
             )
             .highlight_style(
                 Style::default()
-                    .bg(PALETTE.surface_alt)
-                    .fg(PALETTE.text)
+                    .bg(PALETTE.selection)
+                    .fg(PALETTE.selection_text)
                     .add_modifier(Modifier::BOLD),
             ),
         sections[1],
@@ -7403,19 +7411,24 @@ fn render_search_section_tabs(frame: &mut Frame, area: Rect, search: &SearchOver
     .into_iter()
     .flat_map(|section| {
         let is_active = section == search.section;
+        let section_color = match section {
+            SearchSection::Query => PALETTE.query,
+            SearchSection::Facets => facet_tab_color(search.facet_tab, PALETTE),
+            SearchSection::Views => PALETTE.accent,
+        };
         let mut spans = vec![Span::styled(
             format!(" {} ", section.title()),
             Style::default()
                 .fg(if is_active {
                     PALETTE.background
                 } else {
-                    PALETTE.text
+                    section_color
                 })
                 .bg(if is_active {
                     if search_attention >= 2 {
                         PALETTE.warn
                     } else {
-                        PALETTE.accent
+                        section_color
                     }
                 } else {
                     PALETTE.surface
@@ -7452,17 +7465,17 @@ fn render_search_query_section(
         .title(styled_title(
             "Query",
             attention_border(
-                PALETTE.warn,
-                PALETTE.sky,
-                PALETTE.accent,
+                PALETTE.query,
+                PALETTE.attention,
+                PALETTE.attention,
                 MotionTarget::SearchActive,
             ),
         ))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(attention_border(
-            PALETTE.warn,
-            PALETTE.sky,
-            PALETTE.accent,
+            PALETTE.query,
+            PALETTE.attention,
+            PALETTE.attention,
             MotionTarget::SearchActive,
         )))
         .style(Style::default().bg(attention_fill(
@@ -7476,7 +7489,7 @@ fn render_search_query_section(
     frame.render_widget(input_block, sections[0]);
     frame.render_widget(
         Paragraph::new(search.draft_query.clone())
-            .style(Style::default().fg(PALETTE.text))
+            .style(Style::default().fg(PALETTE.query))
             .wrap(Wrap { trim: false }),
         input_inner,
     );
@@ -7566,16 +7579,17 @@ fn render_search_facets_section(
     .into_iter()
     .flat_map(|tab| {
         let is_active = tab == search.facet_tab;
+        let tab_color = facet_tab_color(tab, PALETTE);
         let mut spans = vec![Span::styled(
             format!(" {} ", tab.title()),
             Style::default()
                 .fg(if is_active {
                     PALETTE.background
                 } else {
-                    PALETTE.text
+                    tab_color
                 })
                 .bg(if is_active {
-                    PALETTE.sky
+                    tab_color
                 } else {
                     PALETTE.surface
                 })
@@ -7589,6 +7603,7 @@ fn render_search_facets_section(
     .collect::<Vec<_>>();
     frame.render_widget(Paragraph::new(Line::from(tabs)), sections[0]);
 
+    let facet_color = facet_tab_color(search.facet_tab, PALETTE);
     let body = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(62), Constraint::Percentage(38)])
@@ -7600,7 +7615,7 @@ fn render_search_facets_section(
             Paragraph::new(search.facet_tab.empty_message())
                 .block(
                     Block::default()
-                        .title(styled_title(search.facet_tab.title(), PALETTE.sky))
+                        .title(styled_title(search.facet_tab.title(), facet_color))
                         .borders(Borders::ALL)
                         .border_style(Style::default().fg(PALETTE.border))
                         .style(Style::default().bg(PALETTE.surface))
@@ -7623,11 +7638,11 @@ fn render_search_facets_section(
                     Span::styled(
                         item.label.clone(),
                         Style::default()
-                            .fg(PALETTE.text)
+                            .fg(facet_color)
                             .add_modifier(Modifier::BOLD),
                     ),
                     Span::raw("  "),
-                    Span::styled(detail, Style::default().fg(PALETTE.warn)),
+                    Span::styled(detail, Style::default().fg(PALETTE.count)),
                 ]))
             })
             .collect::<Vec<_>>();
@@ -7637,15 +7652,15 @@ fn render_search_facets_section(
             List::new(list_items)
                 .block(
                     Block::default()
-                        .title(styled_title(search.facet_tab.title(), PALETTE.sky))
+                        .title(styled_title(search.facet_tab.title(), facet_color))
                         .borders(Borders::ALL)
-                        .border_style(Style::default().fg(PALETTE.sky))
+                        .border_style(Style::default().fg(facet_color))
                         .style(Style::default().bg(PALETTE.surface)),
                 )
                 .highlight_style(
                     Style::default()
-                        .bg(PALETTE.surface_alt)
-                        .fg(PALETTE.text)
+                        .bg(PALETTE.selection)
+                        .fg(PALETTE.selection_text)
                         .add_modifier(Modifier::BOLD),
                 ),
             body[0],
@@ -7658,19 +7673,19 @@ fn render_search_facets_section(
         Some(item) => vec![
             Line::from(vec![
                 Span::styled("selected ", Style::default().fg(PALETTE.muted)),
-                Span::styled(item.label.clone(), Style::default().fg(PALETTE.text)),
+                Span::styled(item.label.clone(), Style::default().fg(facet_color)),
             ]),
             if search.facet_tab == FacetTab::Ids {
                 Line::from(vec![
                     Span::styled("path ", Style::default().fg(PALETTE.muted)),
-                    Span::styled(item.token.clone(), Style::default().fg(PALETTE.sky)),
+                    Span::styled(item.token.clone(), Style::default().fg(PALETTE.id)),
                 ])
             } else {
                 Line::from(vec![
                     Span::styled("apply ", Style::default().fg(PALETTE.muted)),
                     Span::styled(
                         compose_query_with_token(&search.draft_query, &item.token),
-                        Style::default().fg(PALETTE.accent),
+                        Style::default().fg(PALETTE.query),
                     ),
                 ])
             },
@@ -7755,7 +7770,7 @@ fn render_search_views_section(
                             .add_modifier(Modifier::BOLD),
                     ),
                     Span::raw("  "),
-                    Span::styled(view.query.clone(), Style::default().fg(PALETTE.warn)),
+                    Span::styled(view.query.clone(), Style::default().fg(PALETTE.query)),
                 ]))
             })
             .collect::<Vec<_>>();
@@ -7774,8 +7789,8 @@ fn render_search_views_section(
                 )
                 .highlight_style(
                     Style::default()
-                        .bg(PALETTE.surface_alt)
-                        .fg(PALETTE.text)
+                        .bg(PALETTE.selection)
+                        .fg(PALETTE.selection_text)
                         .add_modifier(Modifier::BOLD),
                 ),
             body[0],
@@ -7791,7 +7806,7 @@ fn render_search_views_section(
             ]),
             Line::from(vec![
                 Span::styled("query ", Style::default().fg(PALETTE.muted)),
-                Span::styled(view.query.clone(), Style::default().fg(PALETTE.warn)),
+                Span::styled(view.query.clone(), Style::default().fg(PALETTE.query)),
             ]),
             Line::from(Span::styled(
                 if app.ui_settings.minimal_mode {
@@ -8139,7 +8154,7 @@ fn palette_group_color(kind: PaletteItemKind, palette: Palette, home_mode: bool)
             "Recent" => palette.sky,
             "Sections" => palette.accent,
             "Views" => palette.accent,
-            "Related" => palette.warn,
+            "Related" => palette.relation,
             "Recipes" => palette.accent,
             "Actions" => palette.sky,
             "Recovery" => palette.warn,
@@ -8152,7 +8167,7 @@ fn palette_group_color(kind: PaletteItemKind, palette: Palette, home_mode: bool)
             PaletteItemKind::Action => palette.warn,
             PaletteItemKind::Recipe => palette.accent,
             PaletteItemKind::Theme | PaletteItemKind::Setting => palette.border,
-            PaletteItemKind::Relation => palette.warn,
+            PaletteItemKind::Relation => palette.relation,
             PaletteItemKind::Inline => palette.accent,
             PaletteItemKind::Section => palette.accent,
             PaletteItemKind::Frequent | PaletteItemKind::Location | PaletteItemKind::SavedView => {
@@ -9208,9 +9223,9 @@ fn highlight_prompt_input(value: &str, mode: PromptMode, palette: Palette) -> Li
 
         let style = match prompt_token_kind(&token, mode) {
             PromptTokenKind::Text => Style::default().fg(palette.text),
-            PromptTokenKind::Tag => Style::default().fg(palette.accent),
-            PromptTokenKind::Metadata => Style::default().fg(palette.warn),
-            PromptTokenKind::Id => Style::default().fg(palette.sky),
+            PromptTokenKind::Tag => Style::default().fg(palette.tag),
+            PromptTokenKind::Metadata => Style::default().fg(palette.metadata),
+            PromptTokenKind::Id => Style::default().fg(palette.id),
         };
         spans.push(Span::styled(token, style));
     }
@@ -10200,7 +10215,7 @@ fn parent_lines(app: &TuiApp) -> Vec<Line<'static>> {
             )),
             Line::from(Span::styled(
                 parent.id.clone().unwrap_or_else(|| "no id".to_string()),
-                Style::default().fg(PALETTE.muted),
+                Style::default().fg(PALETTE.id),
             )),
         ],
         None => vec![Line::from(Span::styled(
@@ -10242,7 +10257,7 @@ fn backlink_lines(app: &TuiApp) -> Vec<Line<'static>> {
                 Span::raw(" "),
                 Span::styled(
                     format!("[[{relation}->{}]]", entry.target),
-                    Style::default().fg(PALETTE.sky),
+                    Style::default().fg(PALETTE.relation),
                 ),
             ])
         })
@@ -10271,7 +10286,10 @@ fn child_lines(app: &TuiApp) -> Vec<Line<'static>> {
         .enumerate()
         .map(|(index, child)| {
             let mut spans = vec![
-                Span::styled(format!("{}. ", index + 1), Style::default().fg(PALETTE.sky)),
+                Span::styled(
+                    format!("{}. ", index + 1),
+                    Style::default().fg(PALETTE.count),
+                ),
                 Span::styled(
                     child.text.clone(),
                     Style::default()
@@ -10283,7 +10301,7 @@ fn child_lines(app: &TuiApp) -> Vec<Line<'static>> {
                 spans.push(Span::raw(" "));
                 spans.push(Span::styled(
                     child.tags.join(" "),
-                    Style::default().fg(PALETTE.accent),
+                    Style::default().fg(PALETTE.tag),
                 ));
             }
             Line::from(spans)

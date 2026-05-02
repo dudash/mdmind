@@ -103,3 +103,132 @@ fn ui_settings_load_reduced_motion_sidecars() {
     std::fs::remove_file(settings_path).ok();
     std::fs::remove_file(map_path).ok();
 }
+
+#[test]
+fn ui_settings_load_amethyst_theme_sidecars() {
+    let map_path = temp_map_path("amethyst-theme.md");
+    std::fs::write(&map_path, "- Root\n").expect("fixture map should be writable");
+    let settings_path =
+        ui_settings_path_for(&map_path).expect("ui settings path should be derivable");
+    std::fs::write(
+        &settings_path,
+        r#"{
+  "theme": "amethyst",
+  "motion_enabled": true,
+  "ascii_accents": false
+}"#,
+    )
+    .expect("amethyst ui settings should write");
+
+    let loaded = load_ui_settings_for(&map_path).expect("amethyst settings should load");
+    assert_eq!(loaded.theme, ThemeId::Amethyst);
+    assert_eq!(ThemeId::Amethyst.label(), "Amethyst");
+    assert!(ThemeId::Amethyst.summary().contains("sea-glass"));
+
+    std::fs::remove_file(settings_path).ok();
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
+fn ui_settings_load_atelier_theme_sidecars() {
+    let map_path = temp_map_path("atelier-theme.md");
+    std::fs::write(&map_path, "- Root\n").expect("fixture map should be writable");
+    let settings_path =
+        ui_settings_path_for(&map_path).expect("ui settings path should be derivable");
+    std::fs::write(
+        &settings_path,
+        r#"{
+  "theme": "atelier",
+  "motion_enabled": true,
+  "ascii_accents": false
+}"#,
+    )
+    .expect("atelier ui settings should write");
+
+    let loaded = load_ui_settings_for(&map_path).expect("atelier settings should load");
+    assert_eq!(loaded.theme, ThemeId::Atelier);
+    assert_eq!(ThemeId::Atelier.label(), "Atelier");
+    assert!(ThemeId::Atelier.summary().contains("tape-and-clay"));
+
+    std::fs::remove_file(settings_path).ok();
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
+fn ui_settings_load_archive_theme_sidecars() {
+    let map_path = temp_map_path("archive-theme.md");
+    std::fs::write(&map_path, "- Root\n").expect("fixture map should be writable");
+    let settings_path =
+        ui_settings_path_for(&map_path).expect("ui settings path should be derivable");
+    std::fs::write(
+        &settings_path,
+        r#"{
+  "theme": "archive",
+  "motion_enabled": true,
+  "ascii_accents": false
+}"#,
+    )
+    .expect("archive ui settings should write");
+
+    let loaded = load_ui_settings_for(&map_path).expect("archive settings should load");
+    assert_eq!(loaded.theme, ThemeId::Archive);
+    assert_eq!(ThemeId::Archive.label(), "Archive");
+    assert!(ThemeId::Archive.summary().contains("walnut depth"));
+
+    std::fs::remove_file(settings_path).ok();
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
+fn ui_settings_load_signal_theme_sidecars() {
+    let map_path = temp_map_path("signal-theme.md");
+    std::fs::write(&map_path, "- Root\n").expect("fixture map should be writable");
+    let settings_path =
+        ui_settings_path_for(&map_path).expect("ui settings path should be derivable");
+    std::fs::write(
+        &settings_path,
+        r#"{
+  "theme": "signal",
+  "motion_enabled": true,
+  "ascii_accents": false
+}"#,
+    )
+    .expect("signal ui settings should write");
+
+    let loaded = load_ui_settings_for(&map_path).expect("signal settings should load");
+    assert_eq!(loaded.theme, ThemeId::Signal);
+    assert_eq!(ThemeId::Signal.label(), "Signal");
+    assert!(ThemeId::Signal.summary().contains("control-room"));
+
+    std::fs::remove_file(settings_path).ok();
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
+fn ui_settings_load_tokyo_mind_theme_sidecars() {
+    let map_path = temp_map_path("tokyo-mind-theme.md");
+    std::fs::write(&map_path, "- Root\n").expect("fixture map should be writable");
+    let settings_path =
+        ui_settings_path_for(&map_path).expect("ui settings path should be derivable");
+    std::fs::write(
+        &settings_path,
+        r#"{
+  "theme": "tokyo-mind",
+  "motion_enabled": true,
+  "ascii_accents": false
+}"#,
+    )
+    .expect("tokyo mind ui settings should write");
+
+    let loaded = load_ui_settings_for(&map_path).expect("tokyo mind settings should load");
+    assert_eq!(loaded.theme, ThemeId::TokyoMind);
+    assert_eq!(ThemeId::TokyoMind.label(), "Tokyo Mind");
+    assert!(
+        ThemeId::TokyoMind
+            .summary()
+            .contains("Tokyo Night-inspired")
+    );
+
+    std::fs::remove_file(settings_path).ok();
+    std::fs::remove_file(map_path).ok();
+}

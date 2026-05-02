@@ -143,6 +143,13 @@ Suggested theme set:
 - Paper
 - Blueprint
 - Calm
+- Violet
+- Amethyst
+- Atelier
+- Archive
+- Signal
+- Tokyo Mind
+- Monograph
 - Terminal Neon
 
 Acceptance criteria:

@@ -81,6 +81,15 @@ pub struct Theme {
     pub sky: Color,
     pub warn: Color,
     pub danger: Color,
+    pub tag: Color,
+    pub metadata: Color,
+    pub id: Color,
+    pub query: Color,
+    pub attention: Color,
+    pub relation: Color,
+    pub count: Color,
+    pub selection: Color,
+    pub selection_text: Color,
     pub text: Color,
     pub muted: Color,
 }
@@ -802,7 +811,7 @@ fn render_surface(scene: &Scene, camera: Camera, theme: Theme) -> CellSurface {
                 let symbol = line_symbol(mask);
                 let cell = surface.get_mut(x as i32, y as i32);
                 cell.symbol = symbol;
-                cell.fg = theme.accent;
+                cell.fg = theme.relation;
                 cell.bg = theme.background;
                 cell.bold = true;
             }
@@ -1225,6 +1234,15 @@ mod tests {
             sky: Color::Rgb(94, 191, 255),
             warn: Color::Rgb(248, 189, 94),
             danger: Color::Rgb(244, 114, 93),
+            tag: Color::Rgb(67, 201, 176),
+            metadata: Color::Rgb(248, 189, 94),
+            id: Color::Rgb(94, 191, 255),
+            query: Color::Rgb(158, 206, 255),
+            attention: Color::Rgb(120, 224, 205),
+            relation: Color::Rgb(67, 201, 176),
+            count: Color::Rgb(94, 191, 255),
+            selection: Color::Rgb(24, 39, 58),
+            selection_text: Color::Rgb(233, 241, 248),
             text: Color::Rgb(233, 241, 248),
             muted: Color::Rgb(129, 153, 178),
         }

@@ -246,10 +246,13 @@
   - Themes And Minimal Mode #guide @section:themes [id:guide/themes]
     - What themes affect #guide [id:guide/themes/what]
       - themes change the header, outline, overlays, status surfaces, and mindmap together
+      - themes can style tags, metadata, ids, and query text independently
+      - denser themes can also separate relation links, numeric counts, and selected rows
+      - motion cues use a theme-specific attention color instead of a fixed warning color
       - the goal is comfort and hierarchy, not decoration
     - How to change themes #reference [id:guide/themes/controls]
       - open the palette with : or Ctrl+P
-      - type theme or a theme name like paper, monograph, or blueprint
+      - type theme or a theme name like paper, archive, tokyo mind, or amethyst
       - Enter commits the previewed theme
       - Esc restores the previous surface
     - Minimal mode #reference [id:guide/themes/minimal]

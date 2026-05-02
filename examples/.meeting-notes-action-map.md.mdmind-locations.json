@@ -9,19 +9,8 @@
         ],
         "id": "meeting/notes/partners"
       },
-      "visits": 4,
-      "last_seen": 51
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          4
-        ],
-        "id": "meeting/decisions"
-      },
-      "visits": 4,
-      "last_seen": 50
+      "visits": 6,
+      "last_seen": 59
     },
     {
       "anchor": {
@@ -32,8 +21,81 @@
         ],
         "id": "meeting/notes/handout"
       },
+      "visits": 5,
+      "last_seen": 63
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4
+        ],
+        "id": "meeting/decisions"
+      },
+      "visits": 5,
+      "last_seen": 58
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 4,
+      "last_seen": 62
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          1,
+          1
+        ],
+        "id": null
+      },
+      "visits": 4,
+      "last_seen": 61
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          1,
+          2
+        ],
+        "id": null
+      },
+      "visits": 4,
+      "last_seen": 60
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1
+        ],
+        "id": "meeting/info"
+      },
       "visits": 3,
-      "last_seen": 52
+      "last_seen": 67
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          0
+        ],
+        "id": "meeting/notes/blockers"
+      },
+      "visits": 3,
+      "last_seen": 64
     },
     {
       "anchor": {
@@ -77,57 +139,6 @@
         "path": [
           0,
           3,
-          1,
-          0
-        ],
-        "id": null
-      },
-      "visits": 2,
-      "last_seen": 41
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          3,
-          1,
-          1
-        ],
-        "id": null
-      },
-      "visits": 2,
-      "last_seen": 40
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          3,
-          1,
-          2
-        ],
-        "id": null
-      },
-      "visits": 2,
-      "last_seen": 39
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          3,
-          0
-        ],
-        "id": "meeting/notes/blockers"
-      },
-      "visits": 2,
-      "last_seen": 29
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          3,
           0,
           0
         ],
@@ -164,17 +175,6 @@
       "anchor": {
         "path": [
           0,
-          1
-        ],
-        "id": "meeting/info"
-      },
-      "visits": 2,
-      "last_seen": 10
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
           0,
           2
         ],
@@ -186,14 +186,12 @@
     {
       "anchor": {
         "path": [
-          0,
-          4,
           0
         ],
-        "id": "meeting/decisions/field-card"
+        "id": "meeting"
       },
       "visits": 1,
-      "last_seen": 49
+      "last_seen": 69
     }
   ]
 }

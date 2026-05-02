@@ -1,7 +1,7 @@
 {
-  "theme": "calm",
+  "theme": "signal",
   "motion_enabled": true,
   "ascii_accents": false,
-  "minimal_mode": false,
+  "minimal_mode": true,
   "reading_mode": false
 }
