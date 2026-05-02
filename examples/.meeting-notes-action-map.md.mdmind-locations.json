@@ -4,6 +4,154 @@
       "anchor": {
         "path": [
           0,
+          3,
+          2
+        ],
+        "id": "meeting/notes/partners"
+      },
+      "visits": 4,
+      "last_seen": 51
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          4
+        ],
+        "id": "meeting/decisions"
+      },
+      "visits": 4,
+      "last_seen": 50
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          1
+        ],
+        "id": "meeting/notes/handout"
+      },
+      "visits": 3,
+      "last_seen": 52
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          3,
+          0
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 22
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          3
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 21
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          2
+        ],
+        "id": null
+      },
+      "visits": 3,
+      "last_seen": 20
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 41
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          1,
+          1
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 40
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          1,
+          2
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 39
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          0
+        ],
+        "id": "meeting/notes/blockers"
+      },
+      "visits": 2,
+      "last_seen": 29
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          0,
+          0
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 28
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1
+        ],
+        "id": null
+      },
+      "visits": 2,
+      "last_seen": 19
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
           1,
           0
         ],
@@ -39,108 +187,13 @@
       "anchor": {
         "path": [
           0,
-          1,
-          3,
+          4,
           0
         ],
-        "id": null
+        "id": "meeting/decisions/field-card"
       },
       "visits": 1,
-      "last_seen": 15
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          3
-        ],
-        "id": null
-      },
-      "visits": 1,
-      "last_seen": 14
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          2
-        ],
-        "id": null
-      },
-      "visits": 1,
-      "last_seen": 13
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          1
-        ],
-        "id": null
-      },
-      "visits": 1,
-      "last_seen": 12
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          0,
-          2,
-          0
-        ],
-        "id": null
-      },
-      "visits": 1,
-      "last_seen": 6
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          0,
-          1
-        ],
-        "id": null
-      },
-      "visits": 1,
-      "last_seen": 4
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          0,
-          0
-        ],
-        "id": null
-      },
-      "visits": 1,
-      "last_seen": 3
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          0
-        ],
-        "id": "meeting/start"
-      },
-      "visits": 1,
-      "last_seen": 2
-    },
-    {
-      "anchor": {
-        "path": [
-          0
-        ],
-        "id": "meeting"
-      },
-      "visits": 1,
-      "last_seen": 1
+      "last_seen": 49
     }
   ]
 }

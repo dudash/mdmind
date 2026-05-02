@@ -210,6 +210,8 @@ Before handing back a map or file:
 6. If `mdm` is available, run `mdm validate <file>`.
 7. If the result is large or deeply linked, use `mdm links <file>` or `mdm relations <file> --plain` as a sanity check.
 
+If `mdm` is not available, still do the manual checks and say that CLI validation was not run.
+
 If the user’s main goal is to inspect, query, validate, or export an existing map rather than author one, use the companion `mdm-cli-inspection` skill instead.
 
 ## Example User Prompts

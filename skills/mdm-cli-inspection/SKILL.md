@@ -36,11 +36,24 @@ If the task is mainly about creating or reshaping map content, use `mdmind-map-a
 - Prefer `--plain` for grep-friendly inspection and quick human scanning.
 - Prefer deep links like `map.md#product/tasks` when the user cares about one branch.
 - Prefer `--query` on export when the user wants a filtered machine-readable subset.
+- Check that `mdm` is available before relying on CLI output.
 
 Read only what you need:
 
 - Read `references/command-patterns.md` when choosing the right mdm subcommand.
 - Read `references/query-and-export.md` when query syntax, deep links, or export scope matter.
+
+## Requirement
+
+This skill expects `mdm` on `PATH`.
+
+If availability is unknown, run:
+
+```bash
+command -v mdm
+```
+
+If `mdm` is missing, do not invent command results. Tell the user to install `mdmind` first or use the map-authoring skill for syntax-only guidance.
 
 ## Command Selection
 

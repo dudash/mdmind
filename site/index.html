@@ -19,8 +19,8 @@
         </a>
         <nav class="site-nav">
           <a href="#features">Features</a>
-          <a href="#why">Why</a>
-          <a href="./downloads/">Downloads</a>
+          <a href="#workflows">Workflows</a>
+          <a href="#downloads">Downloads</a>
           <a href="https://github.com/dudash/mdmind" target="_blank" rel="noreferrer">GitHub</a>
         </nav>
       </header>
@@ -31,12 +31,13 @@
             <div class="eyebrow">Local-first. Plain text. Keyboard-first.</div>
             <h1>Structured thinking that still lives in normal Markdown files.</h1>
             <p class="hero-text">
-              <strong>mdmind</strong> is built for mind maps, outlines, plans, story writing, research trees, 
-              and large structured sets of notes. It also comes paired with the <code>mdm</code> CLI for validation,
-              search, export, and examples.
+              <strong>mdmind</strong> is a local-first map editor for writers, researchers,
+              planners, and agents who want durable structure without locking ideas inside a
+              proprietary app. Write maps as readable Markdown, explore them in the full-screen
+              TUI, then use the <code>mdm</code> CLI to validate, search, export, and inspect them.
             </p>
             <div class="hero-actions">
-              <a class="button button-primary" href="./downloads/">Download mdmind</a>
+              <a class="button button-primary" href="#downloads">Download mdmind</a>
               <a class="button button-secondary" href="https://github.com/dudash/mdmind" target="_blank" rel="noreferrer">View on GitHub</a>
             </div>
             <div class="hero-install">
@@ -44,8 +45,8 @@
               <code>brew tap dudash/tap; brew install mdmind</code>
             </div>
             <div class="hero-meta">
+              <span>Normal files</span>
               <span>Apache 2.0</span>
-              <span>Free</span>
               <span>macOS, Linux, Windows</span>
             </div>
           </div>
@@ -92,22 +93,69 @@
           </div>
         </section>
 
-        <section class="audience-strip" id="why">
-          <div class="audience-copy">
-            <div class="eyebrow">Why mdmind</div>
-            <h2>Plain-text maps without giving up structure, navigation, or editing power</h2>
+        <section class="proof-strip" aria-label="mdmind trust signals">
+          <div class="proof-item">
+            <strong>Local-first</strong>
+            <span>No hosted workspace or account required.</span>
           </div>
-          <p class="audience-text">
-            mdmind keeps your work in normal Markdown-like files, then layers on focused views,
-            ids, cross-links, search, validation, and a full-screen editor when the tree gets large.
-          </p>
+          <div class="proof-item">
+            <strong>Git-friendly</strong>
+            <span>Readable files that diff, branch, and review cleanly.</span>
+          </div>
+          <div class="proof-item">
+            <strong>CLI included</strong>
+            <span>Validate maps, query structure, and export when needed.</span>
+          </div>
+          <div class="proof-item">
+            <strong>Agent-ready</strong>
+            <span>Skills help Codex and Claude write native mdmind maps.</span>
+          </div>
         </section>
 
-        <section class="features" id="features">
+        <section class="section-band section-band-intro" id="why">
+          <div class="section-heading">
+            <div class="eyebrow">Why it exists</div>
+            <h2>When an outline turns into a system, mdmind keeps it usable.</h2>
+            <p>
+              The page goal is simple: get mdmind into the hands of people whose notes, plans,
+              and generated research have outgrown a flat document.
+            </p>
+          </div>
+          <div class="problem-grid">
+            <article class="problem-card">
+              <span class="feature-kicker">Messy maps</span>
+              <h3>Your notes need shape, not another database.</h3>
+              <p>
+                Keep hierarchy, tags, ids, metadata, details, and links in a small plain-text vocabulary.
+              </p>
+            </article>
+            <article class="problem-card">
+              <span class="feature-kicker">Too much tree</span>
+              <h3>You need to focus without splitting the file.</h3>
+              <p>
+                Switch views, jump by section, and inspect backlinks while the source stays one map.
+              </p>
+            </article>
+            <article class="problem-card">
+              <span class="feature-kicker">Brainstorming</span>
+              <h3>Big ideas get easier when you can decompose them.</h3>
+              <p>
+                Break messy questions into branches, compare paths, and keep the reasoning visible
+                as a problem turns into smaller decisions.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section-band features" id="features">
+          <div class="section-heading">
+            <div class="eyebrow">Core features</div>
+            <h2>The pieces that make large plain-text maps workable.</h2>
+          </div>
           <div class="feature-grid">
             <article class="feature-card feature-card-wide">
               <span class="feature-kicker">Map language</span>
-              <h3>Tags, metadata, ids, and cross-links inside plain text</h3>
+              <h3>Add structure where Markdown runs out.</h3>
               <p>
                 Use <code>#tags</code> for grouping, <code>@key:value</code> for structure,
                 <code>[id:...]</code> for stable deep links, <code>[[target]]</code> for references,
@@ -117,7 +165,7 @@
 
             <article class="feature-card feature-card-wide">
               <span class="feature-kicker">Navigation</span>
-              <h3>View modes, section jumps, and backlink-aware navigation</h3>
+              <h3>Move around without losing context.</h3>
               <p>
                 Work in <em>Full Map</em>, <em>Focus Branch</em>, <em>Subtree Only</em>, or
                 <em>Filtered Focus</em>, jump by major branch through the command palette’s
@@ -126,106 +174,106 @@
             </article>
 
             <article class="feature-card">
-              <span class="feature-kicker">Search</span>
-              <h3>Search, browse, and reopen working sets</h3>
+              <span class="feature-kicker">CLI companion</span>
+              <h3>Inspect maps outside the editor.</h3>
               <p>
-                Search by text, browse existing tags, metadata, and ids, reopen saved working sets,
-                and use recipes when you know the workflow but do not want to remember the filter.
-              </p>
-            </article>
-
-            <article class="feature-card">
-              <span class="feature-kicker">Outliner modes</span>
-              <h3>Reading mode, minimal mode, and visual mindmap</h3>
-              <p>
-                Switch from a fuller guided surface to a quieter expert layout, expand long-form
-                notes inline, and open the current scope as a visual map when the tree needs a second lens.
+                Search by text, browse tags and metadata, validate structure, export views,
+                and reopen saved working sets with <code>mdm</code>.
               </p>
             </article>
 
             <article class="feature-card">
               <span class="feature-kicker">Agent-friendly</span>
-              <h3>Built for agent-generated maps</h3>
+              <h3>Give agents a format they can use on purpose.</h3>
               <p>
                 mdmind gives agents a small, explicit vocabulary for hierarchy, details, ids, tags,
                 and cross-links. You can also install mdmind skills for Codex and Claude so generated
                 maps open cleanly and use the format on purpose.
-                <a class="text-link" href="./downloads/#agent-skills">Install the skill pack.</a>
+                <a class="text-link" href="#agent-skills">Install the skill pack.</a>
               </p>
             </article>
           </div>
         </section>
 
-        <section class="showcase-grid">
-          <article class="showcase-card">
-            <div class="showcase-copy">
-              <div class="eyebrow">Focused views</div>
-              <h2>Large maps stay navigable without becoming a mess.</h2>
-              <p>
-                Full Map, Focus Branch, Subtree Only, and Filtered Focus give you different
-                working scopes over the same file. The command palette can also jump by major
-                branch through the section index when the map gets large.
-              </p>
+        <section class="section-band workflow-lab" id="workflows">
+          <div class="section-heading">
+            <div class="eyebrow">Working modes</div>
+            <h2>Hover through the ways a map can become useful.</h2>
+            <p>
+              One file can act like an outline, a reading surface, or a visual map depending on the work in front of you.
+            </p>
+          </div>
+          <div class="workflow-stage">
+            <div class="workflow-options" aria-label="mdmind workflow previews">
+              <button
+                class="workflow-option is-active"
+                type="button"
+                aria-pressed="true"
+                data-image="./assets/meeting-notes-ui.png"
+                data-alt="mdmind screenshot showing structured meeting notes with a focused handout branch"
+              >
+                <span class="feature-kicker">Natural navigation</span>
+                <strong>No mouse required.</strong>
+                <span>
+                  Keyboard-based navigation and a command palette help you capture thoughts fast.
+                </span>
+              </button>
+              <button
+                class="workflow-option"
+                type="button"
+                aria-pressed="false"
+                data-image="./assets/mindmap-ui.png"
+                data-alt="mdmind screenshot showing the main outline and focus layout"
+              >
+                <span class="feature-kicker">Focused views</span>
+                <strong>Large maps stay navigable.</strong>
+                <span>
+                  Move between Full Map, Focus Branch, Subtree Only, and Filtered Focus without changing the source file.
+                </span>
+              </button>
+              <button
+                class="workflow-option"
+                type="button"
+                aria-pressed="false"
+                data-image="./assets/reader-ui.png"
+                data-alt="mdmind screenshot showing inline reading mode with attached notes"
+              >
+                <span class="feature-kicker">Reading mode</span>
+                <strong>Long notes stay attached.</strong>
+                <span>
+                  Expand detail content inline for research notes, scene work, rationale, and draft prose.
+                </span>
+              </button>
+              <button
+                class="workflow-option"
+                type="button"
+                aria-pressed="false"
+                data-image="./assets/hero-ui.png"
+                data-alt="mdmind screenshot showing the visual mindmap view"
+              >
+                <span class="feature-kicker">Second lens</span>
+                <strong>See the branch shape.</strong>
+                <span>
+                  Open the current scope as a visual map for cluster recognition, presentation, and orientation.
+                </span>
+              </button>
             </div>
-            <div class="screen-card">
+            <div class="screen-card workflow-preview">
               <div class="screen-toolbar">
                 <span></span>
                 <span></span>
                 <span></span>
               </div>
               <img
-                src="./assets/mindmap-ui.png"
-                alt="mdmind screenshot showing the main outline and focus layout"
+                id="workflow-preview-image"
+                src="./assets/meeting-notes-ui.png"
+                alt="mdmind screenshot showing structured meeting notes with a focused handout branch"
               >
             </div>
-          </article>
-
-          <article class="showcase-card showcase-card-reverse">
-            <div class="showcase-copy">
-              <div class="eyebrow">Reading mode</div>
-              <h2>Long-form notes stay attached to the branch they belong to.</h2>
-              <p>
-                Reading mode expands detail content inline instead of turning the outline into a separate editor.
-                That makes writing, research, scene notes, and rationale feel natural without losing structure.
-              </p>
-            </div>
-            <div class="screen-card screen-card-paper">
-              <div class="screen-toolbar">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-              <img
-                src="./assets/reader-ui.png"
-                alt="mdmind screenshot showing inline reading mode with attached notes"
-              >
-            </div>
-          </article>
-
-          <article class="showcase-card">
-            <div class="showcase-copy">
-              <div class="eyebrow">Second lens</div>
-              <h2>Visual maps are there for looking at the structure differently</h2>
-              <p>
-                The visual mindmap follows your current scope and view mode.
-                Use it for cluster recognition, presentations, and understanding branch shape.
-              </p>
-            </div>
-            <div class="screen-card">
-              <div class="screen-toolbar">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-              <img
-                src="./assets/hero-ui.png"
-                alt="mdmind screenshot showing the visual mindmap view"
-              >
-            </div>
-          </article>
+          </div>
         </section>
 
-        <section class="split-callout">
+        <section class="section-band split-callout">
           <div class="callout-panel">
             <div class="eyebrow">TUI + CLI</div>
             <h2>One map file. Two strong surfaces.</h2>
@@ -246,6 +294,120 @@
           </div>
         </section>
 
+        <section class="section-band downloads-section" id="downloads">
+          <div class="downloads-intro">
+            <div>
+              <div class="eyebrow">Downloads</div>
+              <h2>Install mdmind from here.</h2>
+              <p>
+                GitHub Releases are the source of truth for public installs. Every release bundles both
+                <code>mdm</code> and <code>mdmind</code>, plus the example map pack.
+              </p>
+            </div>
+            <div class="hero-actions">
+              <a class="button button-primary" href="https://github.com/dudash/mdmind/releases/latest" target="_blank" rel="noreferrer">Latest release</a>
+              <a class="button button-secondary" href="https://github.com/dudash/mdmind" target="_blank" rel="noreferrer">Repository</a>
+            </div>
+          </div>
+
+          <div class="downloads-grid">
+            <article class="download-card">
+              <div class="eyebrow">macOS</div>
+              <h3>Homebrew</h3>
+              <p>The cleanest public install path on macOS.</p>
+              <div class="copyable-command">
+                <button class="copy-button" type="button">Copy</button>
+                <pre><code>brew tap dudash/tap
+brew install mdmind</code></pre>
+              </div>
+            </article>
+
+            <article class="download-card">
+              <div class="eyebrow">Linux</div>
+              <h3>Release tarball</h3>
+              <p>Download the latest archive from the GitHub release page and put the binaries on your path.</p>
+              <a class="text-link" href="https://github.com/dudash/mdmind/releases/latest" target="_blank" rel="noreferrer">Open latest release</a>
+            </article>
+
+            <article class="download-card">
+              <div class="eyebrow">Windows</div>
+              <h3>Release zip</h3>
+              <p>Grab the latest Windows zip from GitHub releases and extract both binaries together.</p>
+              <a class="text-link" href="https://github.com/dudash/mdmind/releases/latest" target="_blank" rel="noreferrer">Open latest release</a>
+            </article>
+
+            <article class="download-card">
+              <div class="eyebrow">Development</div>
+              <h3>Install from source</h3>
+              <p>For local development or testing directly from the repo:</p>
+              <div class="copyable-command">
+                <button class="copy-button" type="button">Copy</button>
+                <pre><code>cargo install --path .</code></pre>
+              </div>
+            </article>
+          </div>
+
+          <div class="section-heading" id="agent-skills">
+            <div class="eyebrow">Agent mode</div>
+            <h2>Install mdmind as a skill for your agents.</h2>
+            <p>
+              Teach Codex or Claude to write native mdmind maps and inspect them with
+              <code>mdm</code>. Clone the repo once, copy one or both skill folders into your
+              agent's skills directory, and restart the client.
+            </p>
+          </div>
+
+          <div class="downloads-grid">
+            <article class="download-card">
+              <div class="eyebrow">What you get</div>
+              <h3>Grab the skill pack</h3>
+              <p>
+                <code>mdmind-map-authoring</code> teaches agents to write clean native maps.
+                <code>mdm-cli-inspection</code> teaches them to validate, inspect, and export existing maps.
+              </p>
+              <div class="copyable-command">
+                <button class="copy-button" type="button">Copy</button>
+                <pre><code>git clone https://github.com/dudash/mdmind ~/mdmind</code></pre>
+              </div>
+              <a class="text-link" href="https://github.com/dudash/mdmind/tree/main/skills" target="_blank" rel="noreferrer">Browse the skill pack</a>
+            </article>
+
+            <article class="download-card">
+              <div class="eyebrow">Codex</div>
+              <h3>Install for Codex</h3>
+              <p>Copy the skill folders into <code>~/.codex/skills</code>.</p>
+              <div class="copyable-command">
+                <button class="copy-button" type="button">Copy</button>
+                <pre><code>mkdir -p ~/.codex/skills
+cp -R ~/mdmind/skills/mdmind-map-authoring ~/.codex/skills/
+cp -R ~/mdmind/skills/mdm-cli-inspection ~/.codex/skills/</code></pre>
+              </div>
+            </article>
+
+            <article class="download-card">
+              <div class="eyebrow">Claude</div>
+              <h3>Install for Claude</h3>
+              <p>Claude expects each skill folder directly under <code>~/.claude/skills</code>.</p>
+              <div class="copyable-command">
+                <button class="copy-button" type="button">Copy</button>
+                <pre><code>mkdir -p ~/.claude/skills
+cp -R ~/mdmind/skills/mdmind-map-authoring ~/.claude/skills/
+cp -R ~/mdmind/skills/mdm-cli-inspection ~/.claude/skills/</code></pre>
+              </div>
+            </article>
+
+            <article class="download-card">
+              <div class="eyebrow">Need the guide?</div>
+              <h3>Full skill install notes</h3>
+              <p>
+                The repo includes a portable skills README, example prompts, and a small test harness
+                for isolated Codex installs.
+              </p>
+              <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/skills/README.md" target="_blank" rel="noreferrer">Open the skills README</a>
+            </article>
+          </div>
+        </section>
+
         <section class="support-strip">
           <div>
             <div class="eyebrow">Support the project</div>
@@ -256,20 +418,49 @@
             <a class="button button-secondary" href="https://buymeacoffee.com/dudash" target="_blank" rel="noreferrer">Buy Me a Coffee</a>
           </div>
         </section>
-
-        <section class="final-cta">
-          <div class="eyebrow">Get started</div>
-          <h3>Download the latest release or install with Homebrew.</h3>
-          <p>
-            The downloads page points to the latest GitHub release and the current install paths for
-            macOS, Linux, Windows, and local development.
-          </p>
-          <div class="hero-actions">
-            <a class="button button-primary" href="./downloads/">Open downloads</a>
-            <a class="button button-secondary" href="https://github.com/dudash/mdmind/releases/latest" target="_blank" rel="noreferrer">Latest release</a>
-          </div>
-        </section>
       </main>
     </div>
+    <script>
+      document.querySelectorAll(".workflow-option").forEach((option) => {
+        const image = document.querySelector("#workflow-preview-image");
+        const activate = () => {
+          document.querySelectorAll(".workflow-option").forEach((item) => {
+            item.classList.toggle("is-active", item === option);
+            item.setAttribute("aria-pressed", item === option ? "true" : "false");
+          });
+          image.src = option.dataset.image;
+          image.alt = option.dataset.alt;
+        };
+
+        option.addEventListener("mouseenter", activate);
+        option.addEventListener("focus", activate);
+        option.addEventListener("click", activate);
+      });
+
+      document.querySelectorAll(".copyable-command").forEach((block) => {
+        const button = block.querySelector(".copy-button");
+        const code = block.querySelector("code");
+
+        button.addEventListener("click", async () => {
+          const text = code.textContent.trim();
+
+          try {
+            await navigator.clipboard.writeText(text);
+            button.textContent = "Copied";
+          } catch {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(code);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            button.textContent = "Selected";
+          }
+
+          window.setTimeout(() => {
+            button.textContent = "Copy";
+          }, 1800);
+        });
+      });
+    </script>
   </body>
 </html>

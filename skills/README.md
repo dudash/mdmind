@@ -52,7 +52,13 @@ If both are needed, author first and inspect second.
 
 ## Installation
 
-Install one or both skill folders:
+Clone the repo once, then install one or both skill folders:
+
+```bash
+git clone https://github.com/dudash/mdmind ~/mdmind
+```
+
+Skill folders:
 
 - `mdmind-map-authoring`
 - `mdm-cli-inspection`
@@ -63,8 +69,8 @@ If your agent supports the shared Agent Skills convention:
 
 ```bash
 mkdir -p ~/.agents/skills
-cp -R skills/mdmind-map-authoring ~/.agents/skills/
-cp -R skills/mdm-cli-inspection ~/.agents/skills/
+cp -R ~/mdmind/skills/mdmind-map-authoring ~/.agents/skills/
+cp -R ~/mdmind/skills/mdm-cli-inspection ~/.agents/skills/
 ```
 
 This is the most portable layout.
@@ -75,8 +81,8 @@ Copy the folders to:
 
 ```bash
 mkdir -p ~/.codex/skills
-cp -R skills/mdmind-map-authoring ~/.codex/skills/
-cp -R skills/mdm-cli-inspection ~/.codex/skills/
+cp -R ~/mdmind/skills/mdmind-map-authoring ~/.codex/skills/
+cp -R ~/mdmind/skills/mdm-cli-inspection ~/.codex/skills/
 ```
 
 Then restart Codex.
@@ -90,23 +96,30 @@ $skill-installer install https://github.com/dudash/mdmind/tree/main/skills/mdm-c
 
 ### Claude Code
 
+Claude Code expects each skill folder directly under the skills directory.
+
 Install for all projects:
 
 ```bash
 mkdir -p ~/.claude/skills
-cp -R skills/mdmind-map-authoring ~/.claude/skills/
-cp -R skills/mdm-cli-inspection ~/.claude/skills/
+cp -R ~/mdmind/skills/mdmind-map-authoring ~/.claude/skills/
+cp -R ~/mdmind/skills/mdm-cli-inspection ~/.claude/skills/
 ```
 
 Install for one project only:
 
 ```bash
 mkdir -p .claude/skills
-cp -R skills/mdmind-map-authoring .claude/skills/
-cp -R skills/mdm-cli-inspection .claude/skills/
+cp -R ~/mdmind/skills/mdmind-map-authoring .claude/skills/
+cp -R ~/mdmind/skills/mdm-cli-inspection .claude/skills/
 ```
 
 Claude usually picks up skill edits live once the skills directory already exists.
+
+## Requirements
+
+- `mdmind-map-authoring` has no required tools, but works best when `mdm` is available for validation.
+- `mdm-cli-inspection` expects `mdm` on `PATH`.
 
 ## Testing
 

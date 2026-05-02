@@ -1,9 +1,8 @@
 {
   "focus_path": [
     0,
-    1,
     3,
-    0
+    1
   ],
-  "focus_id": null
+  "focus_id": "meeting/notes/handout"
 }
