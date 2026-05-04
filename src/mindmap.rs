@@ -39,6 +39,7 @@ pub struct Bubble {
     pub lines: Vec<String>,
     pub kind: BubbleKind,
     pub matched: bool,
+    pub child_count: usize,
     pub hidden_children: usize,
 }
 
@@ -120,6 +121,7 @@ struct VisibleNode {
     metadata: Vec<MetadataEntry>,
     id: Option<String>,
     children: Vec<VisibleNode>,
+    child_count: usize,
     hidden_children: usize,
     matched: bool,
     kind: BubbleKind,
@@ -268,6 +270,24 @@ impl Scene {
         filter_matches: Option<&[Vec<usize>]>,
         visible_paths: Option<&HashSet<Vec<usize>>>,
     ) -> Self {
+        Self::build_spatial_with_layout_focus(
+            document,
+            focus_path,
+            focus_path,
+            expanded,
+            filter_matches,
+            visible_paths,
+        )
+    }
+
+    pub fn build_spatial_with_layout_focus(
+        document: &Document,
+        focus_path: &[usize],
+        layout_focus_path: &[usize],
+        expanded: &HashSet<Vec<usize>>,
+        filter_matches: Option<&[Vec<usize>]>,
+        visible_paths: Option<&HashSet<Vec<usize>>>,
+    ) -> Self {
         let tree_scene = Self::build(
             document,
             focus_path,
@@ -279,7 +299,12 @@ impl Scene {
             return tree_scene;
         }
 
-        let focus_center = tree_scene.focus_center;
+        let layout_focus_center = tree_scene
+            .bubbles
+            .iter()
+            .find(|bubble| bubble.path == layout_focus_path)
+            .map(bubble_relation_anchor)
+            .unwrap_or(tree_scene.focus_center);
         let tree_centers = tree_scene
             .bubbles
             .iter()
@@ -290,7 +315,12 @@ impl Scene {
             .iter()
             .map(|bubble| {
                 let mut bubble = bubble.clone();
-                place_spatial_bubble(&mut bubble, focus_path, focus_center, &tree_centers);
+                place_spatial_bubble(
+                    &mut bubble,
+                    layout_focus_path,
+                    layout_focus_center,
+                    &tree_centers,
+                );
                 bubble
             })
             .collect::<Vec<_>>();
@@ -722,6 +752,7 @@ fn build_visible_nodes(
             metadata: node.metadata.clone(),
             id: node.id.clone(),
             children: if show_children { children } else { Vec::new() },
+            child_count: node.children.len(),
             hidden_children,
             matched,
             kind,
@@ -752,6 +783,7 @@ fn measure_node(node: VisibleNode) -> MeasuredNode {
         metadata,
         id,
         children,
+        child_count,
         hidden_children,
         matched,
         kind,
@@ -785,6 +817,7 @@ fn measure_node(node: VisibleNode) -> MeasuredNode {
             metadata,
             id,
             children: Vec::new(),
+            child_count,
             hidden_children,
             matched,
             kind,
@@ -814,6 +847,7 @@ fn place_node(
         lines: node.lines.clone(),
         kind: node.node.kind,
         matched: node.node.matched,
+        child_count: node.node.child_count,
         hidden_children: node.node.hidden_children,
     });
 
@@ -972,6 +1006,8 @@ fn stable_sibling_y(
 }
 
 fn normalize_spatial_collisions(bubbles: &mut [Bubble], _focus_path: &[usize]) {
+    normalize_spatial_branch_overlaps(bubbles);
+
     let mut columns: HashMap<i32, Vec<usize>> = HashMap::new();
     for (index, bubble) in bubbles.iter().enumerate() {
         columns
@@ -1000,6 +1036,7 @@ fn normalize_spatial_collisions(bubbles: &mut [Bubble], _focus_path: &[usize]) {
 
     normalize_spatial_rectangle_overlaps(bubbles);
     normalize_spatial_branch_overlaps(bubbles);
+    normalize_spatial_rectangle_overlaps(bubbles);
 }
 
 fn normalize_spatial_branch_overlaps(bubbles: &mut [Bubble]) {
@@ -1014,9 +1051,7 @@ fn normalize_spatial_branch_overlaps(bubbles: &mut [Bubble]) {
         for sibling_groups in groups.values() {
             let mut previous_bounds: Option<GroupBounds> = None;
             for group in sibling_groups {
-                let Some(mut bounds) = group.lane_bounds else {
-                    continue;
-                };
+                let mut bounds = group.bounds;
                 if let Some(previous) = previous_bounds {
                     if bounds_overlap_horizontally(previous, bounds)
                         && bounds.min_y <= previous.max_y + BUBBLE_COLLISION_GAP
@@ -1043,7 +1078,7 @@ fn normalize_spatial_branch_overlaps(bubbles: &mut [Bubble]) {
 #[derive(Debug, Clone)]
 struct BranchGroup {
     root_path: Vec<usize>,
-    lane_bounds: Option<GroupBounds>,
+    bounds: GroupBounds,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1081,7 +1116,7 @@ fn spatial_sibling_groups(bubbles: &[Bubble]) -> HashMap<Vec<usize>, Vec<BranchG
         }
         groups.entry(parent_path).or_default().push(BranchGroup {
             root_path: bubble.path.clone(),
-            lane_bounds: subtree_descendant_bounds(bubbles, &bubble.path),
+            bounds: subtree_branch_bounds(bubbles, &bubble.path),
         });
     }
 
@@ -1091,12 +1126,19 @@ fn spatial_sibling_groups(bubbles: &[Bubble]) -> HashMap<Vec<usize>, Vec<BranchG
     groups
 }
 
-fn subtree_descendant_bounds(bubbles: &[Bubble], root_path: &[usize]) -> Option<GroupBounds> {
+fn subtree_branch_bounds(bubbles: &[Bubble], root_path: &[usize]) -> GroupBounds {
+    subtree_bounds(bubbles, root_path, true).expect("branch root should be present")
+}
+
+fn subtree_bounds(
+    bubbles: &[Bubble],
+    root_path: &[usize],
+    include_root: bool,
+) -> Option<GroupBounds> {
     let mut bounds: Option<GroupBounds> = None;
-    for bubble in bubbles
-        .iter()
-        .filter(|bubble| bubble.path.starts_with(root_path) && bubble.path != root_path)
-    {
+    for bubble in bubbles.iter().filter(|bubble| {
+        bubble.path.starts_with(root_path) && (include_root || bubble.path != root_path)
+    }) {
         let bubble_bounds = GroupBounds {
             min_x: bubble.x,
             max_x: bubble.x + bubble.width as i32 - 1,
@@ -1600,8 +1642,16 @@ fn draw_bubble(
         }
     }
 
-    if bubble.hidden_children > 0 {
-        draw_fold_marker(surface, x1, y0, y1, style.fill, theme);
+    if bubble.child_count > 0 {
+        draw_child_marker(
+            surface,
+            x1,
+            y0,
+            y1,
+            style.fill,
+            theme,
+            bubble.hidden_children > 0,
+        );
     }
 
     if let Some(edge) = boundary_edge {
@@ -1609,17 +1659,18 @@ fn draw_bubble(
     }
 }
 
-fn draw_fold_marker(
+fn draw_child_marker(
     surface: &mut CellSurface,
     x1: i32,
     y0: i32,
     y1: i32,
     fill: Color,
     theme: Theme,
+    collapsed: bool,
 ) {
     let y = y0 + ((y1 - y0) / 2).max(1);
     if let Some(cell) = surface.get_mut_checked(x1, y) {
-        cell.symbol = '›';
+        cell.symbol = if collapsed { '›' } else { '•' };
         cell.fg = theme.count;
         cell.bg = fill;
         cell.bold = true;
@@ -2072,6 +2123,30 @@ mod tests {
         }
     }
 
+    fn assert_no_bubble_overlaps(scene: &Scene) {
+        for (index, upper) in scene.bubbles.iter().enumerate() {
+            for lower in scene.bubbles.iter().skip(index + 1) {
+                let overlap_x = upper.x <= lower.x + lower.width as i32 - 1
+                    && lower.x <= upper.x + upper.width as i32 - 1;
+                let overlap_y = upper.y <= bubble_bottom(lower) && lower.y <= bubble_bottom(upper);
+                assert!(
+                    !(overlap_x && overlap_y),
+                    "bubbles overlap: {:?} at ({}, {}) {}x{} and {:?} at ({}, {}) {}x{}",
+                    upper.path,
+                    upper.x,
+                    upper.y,
+                    upper.width,
+                    upper.height,
+                    lower.path,
+                    lower.x,
+                    lower.y,
+                    lower.width,
+                    lower.height
+                );
+            }
+        }
+    }
+
     #[test]
     fn focus_style_is_distinct_from_context_bubbles() {
         let palette = theme();
@@ -2102,6 +2177,7 @@ mod tests {
                 lines: vec!["Current".to_string()],
                 kind: BubbleKind::Focus,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             }],
             connectors: Vec::new(),
@@ -2139,6 +2215,7 @@ mod tests {
                 lines: vec!["Current".to_string()],
                 kind: BubbleKind::Focus,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             }],
             connectors: Vec::new(),
@@ -2209,6 +2286,7 @@ mod tests {
                 lines: vec!["Parent".to_string()],
                 kind: BubbleKind::Context,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
             Bubble {
@@ -2220,6 +2298,7 @@ mod tests {
                 lines: vec!["One".to_string()],
                 kind: BubbleKind::Context,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
             Bubble {
@@ -2231,6 +2310,7 @@ mod tests {
                 lines: vec!["Two".to_string()],
                 kind: BubbleKind::Context,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
             Bubble {
@@ -2242,6 +2322,7 @@ mod tests {
                 lines: vec!["Three".to_string()],
                 kind: BubbleKind::Context,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
         ];
@@ -2290,6 +2371,7 @@ mod tests {
                 lines: vec!["Parent".to_string()],
                 kind: BubbleKind::Context,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
             Bubble {
@@ -2301,6 +2383,7 @@ mod tests {
                 lines: vec!["Child".to_string()],
                 kind: BubbleKind::Descendant,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
         ];
@@ -2326,6 +2409,7 @@ mod tests {
                 lines: vec!["Parent".to_string()],
                 kind: BubbleKind::Context,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
             Bubble {
@@ -2337,6 +2421,7 @@ mod tests {
                 lines: vec!["Earlier".to_string()],
                 kind: BubbleKind::Context,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
             Bubble {
@@ -2348,6 +2433,7 @@ mod tests {
                 lines: vec!["Earlier child".to_string()],
                 kind: BubbleKind::Context,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
             Bubble {
@@ -2359,6 +2445,7 @@ mod tests {
                 lines: vec!["Opened".to_string()],
                 kind: BubbleKind::Focus,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
             Bubble {
@@ -2370,6 +2457,7 @@ mod tests {
                 lines: vec!["Opened child".to_string()],
                 kind: BubbleKind::Descendant,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
         ];
@@ -2378,10 +2466,8 @@ mod tests {
 
         normalize_spatial_branch_overlaps(&mut bubbles);
 
-        let earlier_bounds =
-            subtree_descendant_bounds(&bubbles, &[0, 0]).expect("earlier descendant bounds");
-        let opened_bounds =
-            subtree_descendant_bounds(&bubbles, &[0, 1]).expect("opened descendant bounds");
+        let earlier_bounds = subtree_branch_bounds(&bubbles, &[0, 0]);
+        let opened_bounds = subtree_branch_bounds(&bubbles, &[0, 1]);
 
         assert!(
             opened_bounds.min_y > earlier_bounds.max_y,
@@ -2395,7 +2481,7 @@ mod tests {
     }
 
     #[test]
-    fn spatial_branch_collision_does_not_over_space_folded_sibling_cards() {
+    fn spatial_branch_collision_reserves_previous_expanded_sibling_branch() {
         let mut bubbles = vec![
             Bubble {
                 path: vec![0],
@@ -2406,6 +2492,7 @@ mod tests {
                 lines: vec!["Parent".to_string()],
                 kind: BubbleKind::Context,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
             Bubble {
@@ -2417,6 +2504,7 @@ mod tests {
                 lines: vec!["Nora".to_string()],
                 kind: BubbleKind::Context,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
             Bubble {
@@ -2428,6 +2516,7 @@ mod tests {
                 lines: vec!["Nora child".to_string()],
                 kind: BubbleKind::Context,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
             Bubble {
@@ -2439,6 +2528,7 @@ mod tests {
                 lines: vec!["Ivo".to_string()],
                 kind: BubbleKind::Focus,
                 matched: false,
+                child_count: 0,
                 hidden_children: 0,
             },
         ];
@@ -2446,9 +2536,13 @@ mod tests {
 
         normalize_spatial_branch_overlaps(&mut bubbles);
 
-        assert_eq!(
-            bubbles[3].y, ivo_y,
-            "a previous sibling's descendant lane should not push a folded sibling card far away by itself"
+        assert!(
+            bubbles[3].y > ivo_y,
+            "a previous sibling's visible branch should reserve space before the next sibling card"
+        );
+        assert!(
+            bubbles[3].y > bubble_bottom(&bubbles[2]),
+            "the next sibling should move below the previous sibling's visible descendants"
         );
     }
 
@@ -2467,6 +2561,7 @@ mod tests {
             .iter()
             .find(|bubble| bubble.path == vec![0, 0])
             .expect("direction bubble should exist");
+        assert_eq!(direction.child_count, 1);
         assert_eq!(direction.hidden_children, 1);
         assert!(direction.lines.iter().all(|line| !line.contains("folded")));
     }
@@ -2483,6 +2578,7 @@ mod tests {
                 lines: vec!["Collapsed".to_string()],
                 kind: BubbleKind::Collapsed,
                 matched: false,
+                child_count: 3,
                 hidden_children: 3,
             }],
             connectors: Vec::new(),
@@ -2502,6 +2598,40 @@ mod tests {
         let surface = render_surface(&scene, camera, theme(), None, None);
 
         assert_eq!(surface.cells[2_usize * 24 + 18].symbol, '›');
+    }
+
+    #[test]
+    fn expanded_bubbles_render_a_right_edge_marker() {
+        let scene = Scene {
+            bubbles: vec![Bubble {
+                path: vec![0],
+                x: 1,
+                y: 1,
+                width: 18,
+                height: 4,
+                lines: vec!["Expanded".to_string()],
+                kind: BubbleKind::Context,
+                matched: false,
+                child_count: 3,
+                hidden_children: 0,
+            }],
+            connectors: Vec::new(),
+            min_x: 1,
+            min_y: 1,
+            max_x: 18,
+            max_y: 4,
+            focus_center: (9, 2),
+        };
+        let camera = Camera {
+            origin_x: 0,
+            origin_y: 0,
+            width: 24,
+            height: 8,
+            zoom_percent: 100,
+        };
+        let surface = render_surface(&scene, camera, theme(), None, None);
+
+        assert_eq!(surface.cells[2_usize * 24 + 18].symbol, '•');
     }
 
     #[test]
@@ -2633,6 +2763,45 @@ mod tests {
                 "sibling position should stay fixed while focus changes"
             );
         }
+    }
+
+    #[test]
+    fn spatial_scene_has_no_bubble_overlaps_after_arrow_navigation_layout() {
+        let document = parse_document(include_str!("../examples/game-world-moonwake.md")).document;
+        let expanded = HashSet::from([
+            vec![0],
+            vec![0, 1],
+            vec![0, 2],
+            vec![0, 3],
+            vec![0, 4],
+            vec![0, 5],
+            vec![0, 6],
+            vec![0, 7],
+        ]);
+        let scene = Scene::build_spatial(&document, &[0, 2], &expanded, None, None);
+
+        assert_no_bubble_overlaps(&scene);
+    }
+
+    #[test]
+    fn spatial_scene_reserves_expanded_character_branch_before_quest_sibling() {
+        let document = parse_document(include_str!("../examples/game-world-moonwake.md")).document;
+        let expanded = HashSet::from([vec![0], vec![0, 2], vec![0, 4], vec![0, 5]]);
+        let scene = Scene::build_spatial(&document, &[0, 4], &expanded, None, None);
+
+        assert_no_bubble_overlaps(&scene);
+
+        let character_branch = subtree_branch_bounds(&scene.bubbles, &[0, 4]);
+        let quest = scene
+            .bubbles
+            .iter()
+            .find(|bubble| bubble.path == vec![0, 5])
+            .expect("quest architecture sibling should be visible");
+
+        assert!(
+            quest.y > character_branch.max_y + BUBBLE_COLLISION_GAP,
+            "Quest Architecture should sit below the expanded Characters branch instead of threading through its children"
+        );
     }
 
     #[test]

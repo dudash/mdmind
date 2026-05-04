@@ -148,6 +148,7 @@ If you are new:
 
 If you want specific features:
 
+- [spec/README.md](spec/README.md)
 - [docs/QUERY_LANGUAGE.md](docs/QUERY_LANGUAGE.md)
 - [docs/IDS_AND_DEEP_LINKS.md](docs/IDS_AND_DEEP_LINKS.md)
 - [docs/CROSS_LINKS_AND_BACKLINKS.md](docs/CROSS_LINKS_AND_BACKLINKS.md)

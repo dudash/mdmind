@@ -8,46 +8,8 @@
         ],
         "id": "moonwake/factions"
       },
-      "visits": 23,
-      "last_seen": 154
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          3,
-          0,
-          1
-        ],
-        "id": null
-      },
-      "visits": 9,
-      "last_seen": 146
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          3,
-          0,
-          0
-        ],
-        "id": null
-      },
-      "visits": 8,
-      "last_seen": 145
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          1
-        ],
-        "id": "moonwake/pitch/fantasy"
-      },
-      "visits": 7,
-      "last_seen": 152
+      "visits": 124,
+      "last_seen": 444
     },
     {
       "anchor": {
@@ -58,20 +20,20 @@
         ],
         "id": "moonwake/factions/tidecart"
       },
-      "visits": 7,
-      "last_seen": 144
+      "visits": 35,
+      "last_seen": 445
     },
     {
       "anchor": {
         "path": [
           0,
           1,
-          2
+          1
         ],
-        "id": "moonwake/pitch/tone"
+        "id": "moonwake/pitch/fantasy"
       },
-      "visits": 6,
-      "last_seen": 153
+      "visits": 35,
+      "last_seen": 441
     },
     {
       "anchor": {
@@ -82,8 +44,98 @@
         ],
         "id": "moonwake/factions/choir"
       },
-      "visits": 6,
-      "last_seen": 148
+      "visits": 30,
+      "last_seen": 447
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          2
+        ],
+        "id": "moonwake/pitch/tone"
+      },
+      "visits": 25,
+      "last_seen": 443
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 19,
+      "last_seen": 372
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          2,
+          2
+        ],
+        "id": null
+      },
+      "visits": 17,
+      "last_seen": 382
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "id": null
+      },
+      "visits": 15,
+      "last_seen": 414
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1,
+          0
+        ],
+        "id": null
+      },
+      "visits": 14,
+      "last_seen": 440
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          3,
+          0,
+          0
+        ],
+        "id": null
+      },
+      "visits": 14,
+      "last_seen": 434
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          0,
+          1,
+          2
+        ],
+        "id": null
+      },
+      "visits": 14,
+      "last_seen": 415
     },
     {
       "anchor": {
@@ -95,8 +147,8 @@
         ],
         "id": null
       },
-      "visits": 6,
-      "last_seen": 108
+      "visits": 14,
+      "last_seen": 383
     },
     {
       "anchor": {
@@ -104,38 +156,12 @@
           0,
           3,
           0,
-          2
-        ],
-        "id": null
-      },
-      "visits": 5,
-      "last_seen": 147
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          0,
-          1,
           1
         ],
         "id": null
       },
-      "visits": 4,
-      "last_seen": 121
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          1,
-          2
-        ],
-        "id": null
-      },
-      "visits": 4,
-      "last_seen": 114
+      "visits": 14,
+      "last_seen": 175
     },
     {
       "anchor": {
@@ -147,60 +173,34 @@
         ],
         "id": null
       },
-      "visits": 4,
-      "last_seen": 113
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          1,
-          1,
-          0
-        ],
-        "id": null
-      },
-      "visits": 4,
-      "last_seen": 112
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          0,
-          2,
-          2
-        ],
-        "id": null
-      },
-      "visits": 4,
-      "last_seen": 107
-    },
-    {
-      "anchor": {
-        "path": [
-          0,
-          0,
-          1,
-          2
-        ],
-        "id": null
-      },
-      "visits": 3,
-      "last_seen": 122
+      "visits": 10,
+      "last_seen": 316
     },
     {
       "anchor": {
         "path": [
           0,
           3,
-          1,
-          0
+          0,
+          2
         ],
         "id": null
       },
-      "visits": 2,
-      "last_seen": 101
+      "visits": 8,
+      "last_seen": 174
+    },
+    {
+      "anchor": {
+        "path": [
+          0,
+          1,
+          1,
+          2
+        ],
+        "id": null
+      },
+      "visits": 7,
+      "last_seen": 317
     }
   ]
 }

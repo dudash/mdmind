@@ -29,6 +29,7 @@ If you want a product-status map instead of a tutorial:
 
 Core map language:
 
+- [../spec/README.md](../spec/README.md)
 - [QUERY_LANGUAGE.md](QUERY_LANGUAGE.md)
 - [IDS_AND_DEEP_LINKS.md](IDS_AND_DEEP_LINKS.md)
 - [CROSS_LINKS_AND_BACKLINKS.md](CROSS_LINKS_AND_BACKLINKS.md)
