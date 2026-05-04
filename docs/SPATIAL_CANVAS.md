@@ -29,11 +29,33 @@ The user enters a full-screen canvas mode where:
 
 This mode should feel like a working surface, not just a screenshot of the tree.
 
+Current Phase 1 behavior:
+
+- `m` opens the full-screen spatial canvas from the TUI
+- `M` opens the older fixed visual mindmap overlay when needed
+- the same scene model as the visual mindmap is projected into a spatial layout
+- the focused node is centered
+- ancestors sit left of the focus
+- descendants fan right from the focus
+- peers cluster near the focus
+- siblings stay in document order; focus highlighting moves instead of reordering the map
+- expanded branches stay visible until the user explicitly collapses them, matching Full Map behavior
+- the camera fits the focused neighborhood when possible, then centers on the active focus when it cannot fit
+- connectors to off-screen bubbles are hidden rather than drawn as dangling lines
+- the selected bubble is highlighted independently when using Tab-based jumps
+- normal arrows / `hjkl` navigate and expand/collapse like the outline
+- `Shift` + arrows pan the camera
+- `+` / `=` zoom in and `-` / `_` zoom out
+- `Tab` / `Shift+Tab` optionally cycle visible bubbles
+- `Enter` toggles the current branch, or focuses a Tab-selected bubble
+
 ## Navigation
 
-- arrows or `hjkl`: move camera
-- `Tab`: cycle visible nearby nodes
-- `Enter`: focus the highlighted bubble
+- arrows or `hjkl`: navigate focus, expand, and collapse like the normal outline
+- `Shift` + arrows: move camera
+- `+` / `=` and `-` / `_`: zoom in and out
+- `Tab`: optionally cycle visible nearby nodes for non-linear jumps
+- `Enter`: toggle the focused branch, or focus a Tab-selected bubble
 - `0`: recenter on the focused node
 - `Esc`: return to outline mode
 
@@ -63,15 +85,15 @@ Do not start with force-directed physics.
 
 - share one scene model with the mindmap overlay
 - add a camera layer for pan and optional zoom
-- separate spatial navigation from outline navigation logic
+- reuse the outline navigation logic for focus, expand, and collapse
 
 ## Delivery
 
 Phase 1:
 
-- visual navigation only
-- deterministic layout
-- camera pan and recenter
+- visual navigation only - shipped
+- deterministic layout - shipped
+- camera pan and recenter - shipped
 
 Phase 2:
 

@@ -74,7 +74,7 @@ A classic meeting-notes outline with agenda, discussion notes, decisions, action
 
 What it demonstrates:
 
-- an OmniOutliner-style use case that still benefits from tags, metadata, ids, and cross-links
+- a traditional outliner-style use case that still benefits from tags, metadata, ids, and cross-links
 - longer discussion notes attached with detail lines instead of bloating row labels
 - turning one meeting into a reusable action surface instead of a dead transcript
 

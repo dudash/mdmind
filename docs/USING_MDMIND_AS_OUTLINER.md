@@ -2,7 +2,7 @@
 
 `mdmind` is a mind map tool, but it is also a very good outliner.
 
-If you are coming from OmniOutliner, Workflowy, Logseq outlines, or just plain nested notes, this is the best way to think about it:
+If you are coming from traditional outliners, Workflowy, Logseq outlines, or just plain nested notes, this is the best way to think about it:
 
 - one line is one row
 - children create hierarchy
