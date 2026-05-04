@@ -1626,12 +1626,13 @@ impl SpatialCanvasState {
             nudge_origin_to_include_bubble(
                 &mut desired_origin_x,
                 &mut desired_origin_y,
-                view_width,
-                view_height,
-                bubble.x,
-                bubble.y,
-                bubble.width as i32,
-                bubble.height as i32,
+                (view_width, view_height),
+                SpatialBubbleBounds {
+                    x: bubble.x,
+                    y: bubble.y,
+                    width: bubble.width as i32,
+                    height: bubble.height as i32,
+                },
             );
         }
 
@@ -1709,6 +1710,14 @@ const SPATIAL_CANVAS_ZOOM_STEPS: [u16; 7] = [50, 67, 80, 100, 125, 150, 200];
 const SPATIAL_BOUNDARY_CUE_DURATION: u8 = 5;
 const SPATIAL_CAMERA_MARGIN: i32 = 2;
 
+#[derive(Debug, Clone, Copy)]
+struct SpatialBubbleBounds {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+}
+
 fn spatial_scaled_viewport(viewport: u16, zoom_percent: u16) -> i32 {
     ((viewport as i32 * 100) / zoom_percent.max(1) as i32).max(1)
 }
@@ -1716,27 +1725,24 @@ fn spatial_scaled_viewport(viewport: u16, zoom_percent: u16) -> i32 {
 fn nudge_origin_to_include_bubble(
     origin_x: &mut i32,
     origin_y: &mut i32,
-    view_width: i32,
-    view_height: i32,
-    bubble_x: i32,
-    bubble_y: i32,
-    bubble_width: i32,
-    bubble_height: i32,
+    view_size: (i32, i32),
+    bubble: SpatialBubbleBounds,
 ) {
-    let bubble_right = bubble_x + bubble_width.saturating_sub(1);
-    let bubble_bottom = bubble_y + bubble_height.saturating_sub(1);
+    let (view_width, view_height) = view_size;
+    let bubble_right = bubble.x + bubble.width.saturating_sub(1);
+    let bubble_bottom = bubble.y + bubble.height.saturating_sub(1);
     let visible_right = *origin_x + view_width.saturating_sub(1);
     let visible_bottom = *origin_y + view_height.saturating_sub(1);
 
     if bubble_right < *origin_x {
-        *origin_x = bubble_x - SPATIAL_CAMERA_MARGIN;
-    } else if bubble_x > visible_right {
+        *origin_x = bubble.x - SPATIAL_CAMERA_MARGIN;
+    } else if bubble.x > visible_right {
         *origin_x = bubble_right - view_width + 1 + SPATIAL_CAMERA_MARGIN;
     }
 
     if bubble_bottom < *origin_y {
-        *origin_y = bubble_y - SPATIAL_CAMERA_MARGIN;
-    } else if bubble_y > visible_bottom {
+        *origin_y = bubble.y - SPATIAL_CAMERA_MARGIN;
+    } else if bubble.y > visible_bottom {
         *origin_y = bubble_bottom - view_height + 1 + SPATIAL_CAMERA_MARGIN;
     }
 }
@@ -2500,9 +2506,15 @@ impl TuiApp {
                 }
             }
             KeyCode::Enter | KeyCode::Char(' ') => {
+                let has_children = self
+                    .editor
+                    .current()
+                    .is_some_and(|node| !node.children.is_empty());
                 self.toggle_branch()?;
                 canvas.clear_boundary();
-                canvas.anchor_layout_to_focus(self.editor.focus_path());
+                if has_children {
+                    canvas.anchor_layout_to_focus(self.editor.focus_path());
+                }
                 canvas.selected_path = self.editor.focus_path().to_vec();
             }
             _ => {}
@@ -14612,6 +14624,95 @@ mod tests {
             (before_camera.origin_x, before_camera.origin_y),
             "right to an already visible child should not snap the camera"
         );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn spatial_canvas_enter_or_space_on_leaf_does_not_reanchor_or_jump() {
+        let map_path = temp_map_path("spatial-canvas-leaf-enter.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE))
+            .expect("m should open the spatial canvas");
+        if let Some(canvas) = app.spatial_canvas.as_mut() {
+            canvas.update_viewport(72, 18);
+        }
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .expect("right should move into the visible leaf child");
+        assert_eq!(app.editor.focus_path(), &[0, 0, 0]);
+
+        for key_code in [KeyCode::Enter, KeyCode::Char(' ')] {
+            let before_scene = app.current_spatial_canvas_scene();
+            let before_positions = before_scene
+                .bubbles
+                .iter()
+                .map(|bubble| (bubble.path.clone(), (bubble.x, bubble.y)))
+                .collect::<HashMap<_, _>>();
+            let before_camera = app
+                .spatial_canvas
+                .as_ref()
+                .map(|canvas| canvas.camera_for_scene(&before_scene))
+                .expect("spatial canvas should stay open");
+            let before_layout_path = app
+                .spatial_canvas
+                .as_ref()
+                .map(|canvas| canvas.layout_path.clone())
+                .expect("spatial canvas should stay open");
+            let before_expanded = app.expanded.clone();
+
+            app.handle_key(KeyEvent::new(key_code, KeyModifiers::NONE))
+                .expect("leaf toggle key should be handled without changing the layout");
+
+            assert_eq!(
+                app.editor.focus_path(),
+                &[0, 0, 0],
+                "leaf toggle key should leave focus alone"
+            );
+            assert_eq!(
+                app.expanded, before_expanded,
+                "leaf toggle key should not expand or collapse any branch"
+            );
+            assert_eq!(
+                app.spatial_canvas
+                    .as_ref()
+                    .map(|canvas| canvas.layout_path.as_slice()),
+                Some(before_layout_path.as_slice()),
+                "leaf toggle key should not re-anchor the spatial layout"
+            );
+            let after_scene = app.current_spatial_canvas_scene();
+            for bubble in &after_scene.bubbles {
+                if let Some(position) = before_positions.get(&bubble.path) {
+                    assert_eq!(
+                        (bubble.x, bubble.y),
+                        *position,
+                        "leaf toggle key should not reposition visible nodes"
+                    );
+                }
+            }
+            let after_camera = app
+                .spatial_canvas
+                .as_ref()
+                .map(|canvas| canvas.camera_for_scene(&after_scene))
+                .expect("spatial canvas should stay open");
+            assert_eq!(
+                (after_camera.origin_x, after_camera.origin_y),
+                (before_camera.origin_x, before_camera.origin_y),
+                "leaf toggle key should not move the camera"
+            );
+            assert!(
+                app.status.text.contains("no children"),
+                "leaf toggle key should explain that there is nothing to toggle"
+            );
+        }
 
         cleanup_sidecars(&map_path);
     }

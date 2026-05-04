@@ -43,6 +43,11 @@ pub struct Bubble {
     pub hidden_children: usize,
 }
 
+/// A routed world-space edge between bubbles.
+///
+/// Routes are orthogonal segments today because the terminal renderer turns them
+/// into box-drawing cells. Keeping construction behind helpers makes it easier
+/// to add curved or renderer-specific routes without changing layout callers.
 #[derive(Debug, Clone)]
 pub struct Connector {
     pub from: (i32, i32),
@@ -57,10 +62,37 @@ pub enum ConnectorKind {
     Relation,
 }
 
+impl Connector {
+    fn tree_segment(from: (i32, i32), to: (i32, i32)) -> Self {
+        Self::segment(from, to, ConnectorKind::Tree)
+    }
+
+    fn relation_segment(from: (i32, i32), to: (i32, i32)) -> Self {
+        Self::segment(from, to, ConnectorKind::Relation)
+    }
+
+    fn segment(from: (i32, i32), to: (i32, i32), kind: ConnectorKind) -> Self {
+        Self {
+            from,
+            to,
+            elbow_x: None,
+            kind,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoundaryEdge {
     Top,
     Bottom,
+}
+
+#[derive(Debug, Clone)]
+pub struct SpatialLayout {
+    /// Positioned nodes in stable document order.
+    pub bubbles: Vec<Bubble>,
+    /// Routed edges in world coordinates, independent of the terminal viewport.
+    pub connectors: Vec<Connector>,
 }
 
 #[derive(Debug, Clone)]
@@ -153,6 +185,14 @@ struct Size {
     height: u16,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ScreenBubbleBounds {
+    x0: i32,
+    x1: i32,
+    y0: i32,
+    y1: i32,
+}
+
 #[derive(Debug, Clone)]
 struct CellSurface {
     width: u16,
@@ -228,7 +268,7 @@ impl Scene {
             place_node(node, 4, cursor_y, &mut bubbles, &mut connectors);
             cursor_y += node.subtree_height + ROOT_GAP;
         }
-        connectors.extend(build_relation_connectors(document, &bubbles));
+        connectors.extend(route_relation_connectors(document, &bubbles));
 
         let mut min_x = i32::MAX;
         let mut min_y = i32::MAX;
@@ -295,44 +335,8 @@ impl Scene {
             filter_matches,
             visible_paths,
         );
-        if tree_scene.bubbles.is_empty() {
-            return tree_scene;
-        }
-
-        let layout_focus_center = tree_scene
-            .bubbles
-            .iter()
-            .find(|bubble| bubble.path == layout_focus_path)
-            .map(bubble_relation_anchor)
-            .unwrap_or(tree_scene.focus_center);
-        let tree_centers = tree_scene
-            .bubbles
-            .iter()
-            .map(|bubble| (bubble.path.clone(), bubble_relation_anchor(bubble)))
-            .collect::<HashMap<_, _>>();
-        let mut bubbles = tree_scene
-            .bubbles
-            .iter()
-            .map(|bubble| {
-                let mut bubble = bubble.clone();
-                place_spatial_bubble(
-                    &mut bubble,
-                    layout_focus_path,
-                    layout_focus_center,
-                    &tree_centers,
-                );
-                bubble
-            })
-            .collect::<Vec<_>>();
-
-        normalize_spatial_collisions(&mut bubbles, focus_path);
-
-        let connectors = build_tree_connectors(&bubbles)
-            .into_iter()
-            .chain(build_relation_connectors(document, &bubbles))
-            .collect::<Vec<_>>();
-
-        Self::from_parts(bubbles, connectors, focus_path)
+        SpatialLayout::build(document, tree_scene, focus_path, layout_focus_path)
+            .into_scene(focus_path)
     }
 
     fn from_parts(bubbles: Vec<Bubble>, connectors: Vec<Connector>, focus_path: &[usize]) -> Self {
@@ -533,6 +537,45 @@ impl Scene {
         self.bubbles
             .get(next_index)
             .map(|bubble| bubble.path.clone())
+    }
+}
+
+impl SpatialLayout {
+    fn build(
+        document: &Document,
+        tree_scene: Scene,
+        focus_path: &[usize],
+        layout_focus_path: &[usize],
+    ) -> Self {
+        if tree_scene.bubbles.is_empty() {
+            return Self {
+                bubbles: Vec::new(),
+                connectors: Vec::new(),
+            };
+        }
+
+        let mut layout = Self {
+            bubbles: place_spatial_bubbles(&tree_scene, layout_focus_path),
+            connectors: Vec::new(),
+        };
+        layout.normalize(focus_path);
+        layout.route_connectors(document);
+        layout
+    }
+
+    fn normalize(&mut self, focus_path: &[usize]) {
+        normalize_spatial_collisions(&mut self.bubbles, focus_path);
+    }
+
+    fn route_connectors(&mut self, document: &Document) {
+        self.connectors = route_tree_connectors(&self.bubbles)
+            .into_iter()
+            .chain(route_relation_connectors(document, &self.bubbles))
+            .collect();
+    }
+
+    fn into_scene(self, focus_path: &[usize]) -> Scene {
+        Scene::from_parts(self.bubbles, self.connectors, focus_path)
     }
 }
 
@@ -868,18 +911,16 @@ fn place_node(
         let child_y = cursor_y + (child.subtree_height - child.height as i32) / 2;
         let child_mid = child_y + child.height as i32 / 2;
         let child_x = x + COLUMN_WIDTH;
-        connectors.push(Connector {
-            from: (x + node.width as i32, parent_mid),
-            to: (child_x - 1, child_mid),
-            elbow_x: None,
-            kind: ConnectorKind::Tree,
-        });
+        connectors.push(Connector::tree_segment(
+            (x + node.width as i32, parent_mid),
+            (child_x - 1, child_mid),
+        ));
         place_node(child, child_x, cursor_y, bubbles, connectors);
         cursor_y += child.subtree_height + CHILD_GAP;
     }
 }
 
-fn build_relation_connectors(document: &Document, bubbles: &[Bubble]) -> Vec<Connector> {
+fn route_relation_connectors(document: &Document, bubbles: &[Bubble]) -> Vec<Connector> {
     let mut id_to_anchor = HashMap::new();
     let mut visible_paths = HashSet::new();
     for bubble in bubbles {
@@ -921,12 +962,7 @@ fn collect_relation_connectors_from(
                 if let Some(to) = id_to_anchor.get(&relation.target).copied()
                     && from != to
                 {
-                    connectors.push(Connector {
-                        from,
-                        to,
-                        elbow_x: None,
-                        kind: ConnectorKind::Relation,
-                    });
+                    connectors.push(Connector::relation_segment(from, to));
                 }
             }
         }
@@ -946,6 +982,35 @@ fn bubble_relation_anchor(bubble: &Bubble) -> (i32, i32) {
         bubble.x + bubble.width as i32 / 2,
         bubble.y + bubble.height as i32 / 2,
     )
+}
+
+fn place_spatial_bubbles(tree_scene: &Scene, layout_focus_path: &[usize]) -> Vec<Bubble> {
+    let layout_focus_center = tree_scene
+        .bubbles
+        .iter()
+        .find(|bubble| bubble.path == layout_focus_path)
+        .map(bubble_relation_anchor)
+        .unwrap_or(tree_scene.focus_center);
+    let tree_centers = tree_scene
+        .bubbles
+        .iter()
+        .map(|bubble| (bubble.path.clone(), bubble_relation_anchor(bubble)))
+        .collect::<HashMap<_, _>>();
+
+    tree_scene
+        .bubbles
+        .iter()
+        .map(|bubble| {
+            let mut bubble = bubble.clone();
+            place_spatial_bubble(
+                &mut bubble,
+                layout_focus_path,
+                layout_focus_center,
+                &tree_centers,
+            );
+            bubble
+        })
+        .collect()
 }
 
 fn place_spatial_bubble(
@@ -1229,7 +1294,7 @@ fn is_peer_path(path: &[usize], focus_path: &[usize]) -> bool {
         && path[..path.len() - 1] == focus_path[..focus_path.len() - 1]
 }
 
-fn build_tree_connectors(bubbles: &[Bubble]) -> Vec<Connector> {
+fn route_tree_connectors(bubbles: &[Bubble]) -> Vec<Connector> {
     let mut path_to_bubble = HashMap::new();
     for bubble in bubbles {
         path_to_bubble.insert(bubble.path.clone(), bubble);
@@ -1319,26 +1384,15 @@ fn tree_group_connectors(parent: &Bubble, direction: i32, children: &[&Bubble]) 
         .unwrap_or(parent_anchor.1);
 
     let mut connectors = vec![
-        segment_connector(
-            parent_anchor,
-            (spine_x, parent_anchor.1),
-            ConnectorKind::Tree,
-        ),
-        segment_connector((spine_x, min_y), (spine_x, max_y), ConnectorKind::Tree),
+        Connector::tree_segment(parent_anchor, (spine_x, parent_anchor.1)),
+        Connector::tree_segment((spine_x, min_y), (spine_x, max_y)),
     ];
-    connectors.extend(child_anchors.into_iter().map(|child_anchor| {
-        segment_connector((spine_x, child_anchor.1), child_anchor, ConnectorKind::Tree)
-    }));
+    connectors.extend(
+        child_anchors
+            .into_iter()
+            .map(|child_anchor| Connector::tree_segment((spine_x, child_anchor.1), child_anchor)),
+    );
     connectors
-}
-
-fn segment_connector(from: (i32, i32), to: (i32, i32), kind: ConnectorKind) -> Connector {
-    Connector {
-        from,
-        to,
-        elbow_x: None,
-        kind,
-    }
 }
 
 fn tree_connector_elbow_x(from_x: i32, to_x: i32, parent_path: &[usize]) -> i32 {
@@ -1655,7 +1709,13 @@ fn draw_bubble(
     }
 
     if let Some(edge) = boundary_edge {
-        draw_boundary_edge(surface, x0, x1, y0, y1, edge, style.fill, theme);
+        draw_boundary_edge(
+            surface,
+            ScreenBubbleBounds { x0, x1, y0, y1 },
+            edge,
+            style.fill,
+            theme,
+        );
     }
 }
 
@@ -1679,19 +1739,16 @@ fn draw_child_marker(
 
 fn draw_boundary_edge(
     surface: &mut CellSurface,
-    x0: i32,
-    x1: i32,
-    y0: i32,
-    y1: i32,
+    bounds: ScreenBubbleBounds,
     edge: BoundaryEdge,
     fill: Color,
     theme: Theme,
 ) {
     let y = match edge {
-        BoundaryEdge::Top => y0,
-        BoundaryEdge::Bottom => y1,
+        BoundaryEdge::Top => bounds.y0,
+        BoundaryEdge::Bottom => bounds.y1,
     };
-    for x in x0..=x1 {
+    for x in bounds.x0..=bounds.x1 {
         let Some(cell) = surface.get_mut_checked(x, y) else {
             continue;
         };
@@ -1744,7 +1801,7 @@ fn connector_elbow_x(from_x: i32, to_x: i32) -> i32 {
     }
 
     let direction = (to_x - from_x).signum();
-    let offset = distance.min(CONNECTOR_ELBOW_OFFSET).max(1);
+    let offset = distance.clamp(1, CONNECTOR_ELBOW_OFFSET);
     from_x + direction * offset
 }
 
@@ -2126,8 +2183,8 @@ mod tests {
     fn assert_no_bubble_overlaps(scene: &Scene) {
         for (index, upper) in scene.bubbles.iter().enumerate() {
             for lower in scene.bubbles.iter().skip(index + 1) {
-                let overlap_x = upper.x <= lower.x + lower.width as i32 - 1
-                    && lower.x <= upper.x + upper.width as i32 - 1;
+                let overlap_x = upper.x < lower.x + lower.width as i32
+                    && lower.x < upper.x + upper.width as i32;
                 let overlap_y = upper.y <= bubble_bottom(lower) && lower.y <= bubble_bottom(upper);
                 assert!(
                     !(overlap_x && overlap_y),
@@ -2248,10 +2305,10 @@ mod tests {
             Some((&[0], BoundaryEdge::Bottom)),
         );
 
-        assert_eq!(top_surface.cells[1_usize * 24 + 2].fg, palette.warn);
+        assert_eq!(top_surface.cells[24 + 2].fg, palette.warn);
         assert_ne!(top_surface.cells[4_usize * 24 + 2].fg, palette.warn);
         assert_eq!(bottom_surface.cells[4_usize * 24 + 2].fg, palette.warn);
-        assert_ne!(bottom_surface.cells[1_usize * 24 + 2].fg, palette.warn);
+        assert_ne!(bottom_surface.cells[24 + 2].fg, palette.warn);
     }
 
     #[test]
@@ -2327,7 +2384,7 @@ mod tests {
             },
         ];
 
-        let connectors = build_tree_connectors(&bubbles);
+        let connectors = route_tree_connectors(&bubbles);
         let vertical_spines = connectors
             .iter()
             .filter(|connector| {
@@ -2874,12 +2931,7 @@ mod tests {
     fn renderer_clips_connector_to_offscreen_child() {
         let scene = Scene {
             bubbles: Vec::new(),
-            connectors: vec![Connector {
-                from: (8, 4),
-                to: (8, 40),
-                elbow_x: None,
-                kind: ConnectorKind::Tree,
-            }],
+            connectors: vec![Connector::tree_segment((8, 4), (8, 40))],
             min_x: 0,
             min_y: 0,
             max_x: 8,
@@ -2905,12 +2957,7 @@ mod tests {
     fn renderer_clips_connector_from_offscreen_parent_to_visible_child() {
         let scene = Scene {
             bubbles: Vec::new(),
-            connectors: vec![Connector {
-                from: (8, -20),
-                to: (8, 4),
-                elbow_x: None,
-                kind: ConnectorKind::Tree,
-            }],
+            connectors: vec![Connector::tree_segment((8, -20), (8, 4))],
             min_x: 0,
             min_y: -20,
             max_x: 8,
