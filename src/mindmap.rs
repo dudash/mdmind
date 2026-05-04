@@ -84,6 +84,7 @@ impl Connector {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoundaryEdge {
     Top,
+    Right,
     Bottom,
 }
 
@@ -503,12 +504,10 @@ impl Scene {
             .filter(|connector| connector.kind == ConnectorKind::Relation)
             .count();
         format!(
-            "{} bubbles, {} tree connectors, {} relation edges, canvas {}x{}",
+            "Visible: {} nodes, {} tree connectors, {} relation links",
             self.bubbles.len(),
             tree_connectors,
-            relation_connectors,
-            self.width(),
-            self.height()
+            relation_connectors
         )
     }
 
@@ -1430,17 +1429,23 @@ fn build_bubble_lines(node: &VisibleNode) -> Vec<String> {
         lines.truncate(2);
     }
 
-    if !node.tags.is_empty() {
-        lines.push(truncate(&node.tags.join(" "), INNER_WRAP_WIDTH));
-    } else if !node.metadata.is_empty() {
-        lines.push(truncate(&format_metadata(&node.metadata), INNER_WRAP_WIDTH));
+    let tags = node.tags.join(" ");
+    let metadata = format_metadata(&node.metadata);
+    let annotations = match (tags.is_empty(), metadata.is_empty()) {
+        (true, true) => None,
+        (false, true) => Some(tags),
+        (true, false) => Some(metadata),
+        (false, false) => Some(format!("{tags} {metadata}")),
+    };
+    if let Some(annotations) = annotations {
+        lines.push(truncate(&annotations, INNER_WRAP_WIDTH));
     }
 
     if let Some(id) = &node.id {
         lines.push(truncate(id, INNER_WRAP_WIDTH));
     }
 
-    lines.truncate(3);
+    lines.truncate(4);
     lines
 }
 
@@ -1504,11 +1509,48 @@ fn render_surface(
     let mut surface = CellSurface::new(size, theme.background);
     let mut tree_masks = vec![0_u8; size.width as usize * size.height as usize];
     let mut relation_masks = vec![0_u8; size.width as usize * size.height as usize];
+    let mut focus_relation_masks = vec![0_u8; size.width as usize * size.height as usize];
+    let focus_relation_anchor = highlight_path
+        .and_then(|path| scene.bubbles.iter().find(|bubble| bubble.path == path))
+        .map(bubble_relation_anchor);
 
     for connector in &scene.connectors {
         match connector.kind {
             ConnectorKind::Tree => draw_connector(&mut tree_masks, size, camera, connector),
-            ConnectorKind::Relation => draw_connector(&mut relation_masks, size, camera, connector),
+            ConnectorKind::Relation => {
+                let masks = if focus_relation_anchor
+                    .is_some_and(|anchor| relation_connector_touches(anchor, connector))
+                {
+                    &mut focus_relation_masks
+                } else {
+                    &mut relation_masks
+                };
+                draw_dotted_connector(masks, size, camera, connector);
+            }
+        }
+    }
+    for y in 0..size.height as usize {
+        for x in 0..size.width as usize {
+            let index = y * size.width as usize + x;
+            let mask = relation_masks[index];
+            if mask != 0 {
+                let cell = surface.get_mut(x as i32, y as i32);
+                cell.symbol = '·';
+                cell.fg = theme.border;
+                cell.bg = theme.background;
+            }
+        }
+    }
+    for y in 0..size.height as usize {
+        for x in 0..size.width as usize {
+            let index = y * size.width as usize + x;
+            let mask = focus_relation_masks[index];
+            if mask != 0 {
+                let cell = surface.get_mut(x as i32, y as i32);
+                cell.symbol = '·';
+                cell.fg = theme.relation;
+                cell.bg = theme.background;
+            }
         }
     }
     for y in 0..size.height as usize {
@@ -1520,19 +1562,6 @@ fn render_surface(
                 cell.symbol = symbol;
                 cell.fg = theme.muted;
                 cell.bg = theme.background;
-            }
-        }
-    }
-    for y in 0..size.height as usize {
-        for x in 0..size.width as usize {
-            let mask = relation_masks[y * size.width as usize + x];
-            if mask != 0 {
-                let symbol = line_symbol(mask);
-                let cell = surface.get_mut(x as i32, y as i32);
-                cell.symbol = symbol;
-                cell.fg = theme.relation;
-                cell.bg = theme.background;
-                cell.bold = true;
             }
         }
     }
@@ -1618,6 +1647,8 @@ fn draw_bubble(
     )
     .max(y0 + 2);
     let rendered_width = (x1 - x0 + 1).max(1) as usize;
+    let min_rendered_height = bubble.lines.len().max(1) + 2;
+    let y1 = y1.max(y0 + min_rendered_height as i32 - 1);
     let rendered_height = (y1 - y0 + 1).max(1) as usize;
 
     for y in y0..=y1 {
@@ -1744,14 +1775,35 @@ fn draw_boundary_edge(
     fill: Color,
     theme: Theme,
 ) {
-    let y = match edge {
-        BoundaryEdge::Top => bounds.y0,
-        BoundaryEdge::Bottom => bounds.y1,
-    };
+    match edge {
+        BoundaryEdge::Top => {
+            tint_horizontal_boundary_edge(surface, bounds, bounds.y0, fill, theme);
+        }
+        BoundaryEdge::Bottom => {
+            tint_horizontal_boundary_edge(surface, bounds, bounds.y1, fill, theme);
+        }
+        BoundaryEdge::Right => {
+            for y in bounds.y0..=bounds.y1 {
+                tint_boundary_cell(surface, bounds.x1, y, fill, theme);
+            }
+        }
+    }
+}
+
+fn tint_horizontal_boundary_edge(
+    surface: &mut CellSurface,
+    bounds: ScreenBubbleBounds,
+    y: i32,
+    fill: Color,
+    theme: Theme,
+) {
     for x in bounds.x0..=bounds.x1 {
-        let Some(cell) = surface.get_mut_checked(x, y) else {
-            continue;
-        };
+        tint_boundary_cell(surface, x, y, fill, theme);
+    }
+}
+
+fn tint_boundary_cell(surface: &mut CellSurface, x: i32, y: i32, fill: Color, theme: Theme) {
+    if let Some(cell) = surface.get_mut_checked(x, y) {
         cell.fg = theme.warn;
         cell.bg = fill;
         cell.bold = true;
@@ -1792,6 +1844,29 @@ fn draw_connector(masks: &mut [u8], size: Size, camera: Camera, connector: &Conn
     add_horizontal(masks, size, x1, elbow_x, y1);
     add_vertical(masks, size, elbow_x, y1, y2);
     add_horizontal(masks, size, elbow_x, x2, y2);
+}
+
+fn draw_dotted_connector(masks: &mut [u8], size: Size, camera: Camera, connector: &Connector) {
+    let x1 = world_to_screen(connector.from.0, camera.origin_x, camera.zoom_percent);
+    let y1 = world_to_screen(connector.from.1, camera.origin_y, camera.zoom_percent);
+    let x2 = world_to_screen(connector.to.0, camera.origin_x, camera.zoom_percent);
+    let y2 = world_to_screen(connector.to.1, camera.origin_y, camera.zoom_percent);
+    let elbow_x = connector
+        .elbow_x
+        .map(|world_x| world_to_screen(world_x, camera.origin_x, camera.zoom_percent))
+        .unwrap_or_else(|| connector_elbow_x(x1, x2));
+
+    if !connector_intersects_surface(size, x1, y1, elbow_x, x2, y2) {
+        return;
+    }
+
+    add_dotted_horizontal(masks, size, x1, elbow_x, y1);
+    add_dotted_vertical(masks, size, elbow_x, y1, y2);
+    add_dotted_horizontal(masks, size, elbow_x, x2, y2);
+}
+
+fn relation_connector_touches(anchor: (i32, i32), connector: &Connector) -> bool {
+    connector.from == anchor || connector.to == anchor
 }
 
 fn connector_elbow_x(from_x: i32, to_x: i32) -> i32 {
@@ -1864,6 +1939,26 @@ fn add_vertical(masks: &mut [u8], size: Size, x: i32, y1: i32, y2: i32) {
         }
         if y < end {
             add_mask(masks, size, x, y, SOUTH);
+        }
+    }
+}
+
+fn add_dotted_horizontal(masks: &mut [u8], size: Size, x1: i32, x2: i32, y: i32) {
+    let start = x1.min(x2);
+    let end = x1.max(x2);
+    for x in start..=end {
+        if (x - start).rem_euclid(2) == 0 {
+            add_mask(masks, size, x, y, EAST | WEST);
+        }
+    }
+}
+
+fn add_dotted_vertical(masks: &mut [u8], size: Size, x: i32, y1: i32, y2: i32) {
+    let start = y1.min(y2);
+    let end = y1.max(y2);
+    for y in start..=end {
+        if (y - start).rem_euclid(2) == 0 {
+            add_mask(masks, size, x, y, NORTH | SOUTH);
         }
     }
 }
@@ -2304,11 +2399,20 @@ mod tests {
             Some(&[0]),
             Some((&[0], BoundaryEdge::Bottom)),
         );
+        let right_surface = render_surface(
+            &scene,
+            camera,
+            palette,
+            Some(&[0]),
+            Some((&[0], BoundaryEdge::Right)),
+        );
 
         assert_eq!(top_surface.cells[24 + 2].fg, palette.warn);
         assert_ne!(top_surface.cells[4_usize * 24 + 2].fg, palette.warn);
         assert_eq!(bottom_surface.cells[4_usize * 24 + 2].fg, palette.warn);
         assert_ne!(bottom_surface.cells[24 + 2].fg, palette.warn);
+        assert_eq!(right_surface.cells[2_usize * 24 + 18].fg, palette.warn);
+        assert_ne!(right_surface.cells[2_usize * 24 + 2].fg, palette.warn);
     }
 
     #[test]
@@ -2880,6 +2984,78 @@ mod tests {
     }
 
     #[test]
+    fn bubble_lines_include_tags_and_metadata_together() {
+        let node = VisibleNode {
+            path: vec![0],
+            text: "query".to_string(),
+            tags: vec!["#todo".to_string()],
+            metadata: vec![MetadataEntry {
+                key: "status".to_string(),
+                value: "active".to_string(),
+            }],
+            id: Some("filters/todo-active".to_string()),
+            children: Vec::new(),
+            child_count: 0,
+            hidden_children: 0,
+            matched: false,
+            kind: BubbleKind::Context,
+        };
+
+        let lines = build_bubble_lines(&node);
+
+        assert_eq!(lines[0], "query");
+        assert!(
+            lines[1].starts_with("#todo @status:"),
+            "annotation line should preserve both tags and metadata, got {lines:?}"
+        );
+        assert_eq!(lines[2], "filters/todo-active");
+    }
+
+    #[test]
+    fn zoomed_bubbles_keep_annotation_lines_visible() {
+        let palette = theme();
+        let scene = Scene {
+            bubbles: vec![Bubble {
+                path: vec![0],
+                x: 0,
+                y: 0,
+                width: 20,
+                height: 4,
+                lines: vec!["query".to_string(), "#todo @status:active".to_string()],
+                kind: BubbleKind::Focus,
+                matched: false,
+                child_count: 0,
+                hidden_children: 0,
+            }],
+            connectors: Vec::new(),
+            min_x: 0,
+            min_y: 0,
+            max_x: 19,
+            max_y: 3,
+            focus_center: (10, 2),
+        };
+        let camera = Camera {
+            origin_x: 0,
+            origin_y: 0,
+            width: 24,
+            height: 8,
+            zoom_percent: 80,
+        };
+
+        let surface = render_surface(&scene, camera, palette, Some(&[0]), None);
+        let rendered = surface
+            .cells
+            .iter()
+            .map(|cell| cell.symbol)
+            .collect::<String>();
+
+        assert!(
+            rendered.contains("#todo"),
+            "overview zoom should not clip the annotation line out of the bubble"
+        );
+    }
+
+    #[test]
     fn spatial_framed_camera_keeps_focus_neighborhood_visible_when_it_fits() {
         let document = parse_document(
             "- Root [id:root]\n  - Parent [id:root/parent]\n    - Active [id:root/parent/active]\n    - Sibling [id:root/parent/sibling]\n",
@@ -3012,6 +3188,79 @@ mod tests {
                 .iter()
                 .all(|connector| connector.kind != ConnectorKind::Relation)
         );
+    }
+
+    #[test]
+    fn relation_connectors_render_as_faint_dots() {
+        let palette = theme();
+        let scene = Scene {
+            bubbles: vec![Bubble {
+                path: vec![0],
+                x: 0,
+                y: 0,
+                width: 4,
+                height: 4,
+                lines: vec!["Focus".to_string()],
+                kind: BubbleKind::Focus,
+                matched: false,
+                child_count: 0,
+                hidden_children: 0,
+            }],
+            connectors: vec![Connector::relation_segment((2, 2), (10, 2))],
+            min_x: 0,
+            min_y: 0,
+            max_x: 10,
+            max_y: 2,
+            focus_center: (2, 2),
+        };
+        let camera = Camera {
+            origin_x: 0,
+            origin_y: 0,
+            width: 16,
+            height: 6,
+            zoom_percent: 100,
+        };
+
+        let ambient = render_surface(&scene, camera, palette, None, None);
+        let ambient_cell = ambient.cells[2_usize * 16 + 6];
+        assert_eq!(ambient_cell.symbol, '·');
+        assert_eq!(ambient_cell.fg, palette.border);
+        assert!(!ambient_cell.bold);
+
+        let focused = render_surface(&scene, camera, palette, Some(&[0]), None);
+        let focused_cell = focused.cells[2_usize * 16 + 6];
+        assert_eq!(focused_cell.symbol, '·');
+        assert_eq!(focused_cell.fg, palette.relation);
+        assert!(!focused_cell.bold);
+    }
+
+    #[test]
+    fn tree_connectors_override_faint_relation_dots() {
+        let palette = theme();
+        let scene = Scene {
+            bubbles: Vec::new(),
+            connectors: vec![
+                Connector::relation_segment((2, 2), (10, 2)),
+                Connector::tree_segment((2, 2), (10, 2)),
+            ],
+            min_x: 0,
+            min_y: 0,
+            max_x: 10,
+            max_y: 2,
+            focus_center: (2, 2),
+        };
+        let camera = Camera {
+            origin_x: 0,
+            origin_y: 0,
+            width: 16,
+            height: 6,
+            zoom_percent: 100,
+        };
+
+        let surface = render_surface(&scene, camera, palette, None, None);
+        let cell = surface.cells[2_usize * 16 + 6];
+        assert_eq!(cell.symbol, '─');
+        assert_eq!(cell.fg, palette.muted);
     }
 
     #[test]

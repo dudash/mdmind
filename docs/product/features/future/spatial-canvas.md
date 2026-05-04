@@ -15,6 +15,7 @@ What exists now:
 - outline-like arrow / `hjkl` navigation and expand/collapse
 - `Shift` + arrows camera pan
 - `+` / `=` zoom in and `-` / `_` zoom out
+- `z` / `Z` collapse the visible scope or expand it into an overview
 - `0` recenter
 - optional `Tab` / `Shift+Tab` bubble selection for non-linear jumps
 

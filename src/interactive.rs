@@ -1567,6 +1567,12 @@ struct SpatialBoundaryCue {
     ticks_remaining: u8,
 }
 
+impl SpatialBoundaryCue {
+    fn is_visible(&self) -> bool {
+        matches!(self.ticks_remaining, 5 | 3)
+    }
+}
+
 impl SpatialCanvasState {
     fn new(focus_path: &[usize]) -> Self {
         Self {
@@ -1669,6 +1675,10 @@ impl SpatialCanvasState {
         self.zoom_percent = next_zoom(self.zoom_percent, -1);
     }
 
+    fn zoom_to_overview(&mut self, scene: &MindmapScene) {
+        self.zoom_percent = spatial_overview_zoom(scene, self.viewport_width, self.viewport_height);
+    }
+
     fn flash_boundary(&mut self, path: &[usize], edge: BoundaryEdge) {
         self.boundary_cue = Some(SpatialBoundaryCue {
             path: path.to_vec(),
@@ -1763,6 +1773,17 @@ fn next_zoom(current: u16, direction: i32) -> u16 {
         current_index.saturating_sub(1)
     };
     SPATIAL_CANVAS_ZOOM_STEPS[next_index]
+}
+
+fn spatial_overview_zoom(scene: &MindmapScene, viewport_width: u16, viewport_height: u16) -> u16 {
+    for zoom in [100, 80, 67, 50] {
+        if scene.width() <= spatial_scaled_viewport(viewport_width, zoom)
+            && scene.height() <= spatial_scaled_viewport(viewport_height, zoom)
+        {
+            return zoom;
+        }
+    }
+    80
 }
 
 impl PromptState {
@@ -2329,7 +2350,7 @@ impl TuiApp {
         self.set_status(
             StatusTone::Info,
             format!(
-                "Spatial canvas open. {}. Arrows navigate, Enter toggles, Shift+arrows pan, -/+ zooms, 0/c recenters.",
+                "Spatial canvas open. {}. Arrows navigate, Enter toggles, Shift+arrows pan, -/+ zooms, z/Z folds or expands the scope.",
                 scene.describe()
             ),
         );
@@ -2419,6 +2440,34 @@ impl TuiApp {
                     format!("Zoomed spatial canvas to {}%.", canvas.zoom_percent),
                 );
             }
+            KeyCode::Char('z') => {
+                self.collapse_spatial_scope()?;
+                canvas.zoom_percent = 100;
+                canvas.recenter();
+                canvas.clear_boundary();
+                canvas.anchor_layout_to_focus(self.editor.focus_path());
+                canvas.selected_path = self.editor.focus_path().to_vec();
+                self.set_status(
+                    StatusTone::Info,
+                    "Collapsed the spatial scope and centered the root.",
+                );
+            }
+            KeyCode::Char('Z') => {
+                self.expand_all_in_scope();
+                canvas.clear_boundary();
+                canvas.anchor_layout_to_focus(self.editor.focus_path());
+                let after_scene = self.spatial_canvas_scene_for_layout(&canvas.layout_path);
+                canvas.zoom_to_overview(&after_scene);
+                canvas.recenter();
+                canvas.selected_path = self.editor.focus_path().to_vec();
+                self.set_status(
+                    StatusTone::Info,
+                    format!(
+                        "Expanded the spatial scope and zoomed to {}%.",
+                        canvas.zoom_percent
+                    ),
+                );
+            }
             KeyCode::Up if key.modifiers.contains(KeyModifiers::SHIFT) => canvas.pan(0, -3),
             KeyCode::Down if key.modifiers.contains(KeyModifiers::SHIFT) => canvas.pan(0, 3),
             KeyCode::Left if key.modifiers.contains(KeyModifiers::SHIFT) => canvas.pan(-6, 0),
@@ -2459,14 +2508,22 @@ impl TuiApp {
             KeyCode::Right | KeyCode::Char('l') => {
                 let before_scene = scene.clone();
                 let before_focus = self.editor.focus_path().to_vec();
+                let has_children = self
+                    .editor
+                    .current()
+                    .is_some_and(|node| !node.children.is_empty());
                 self.expand_or_child()?;
-                canvas.clear_boundary();
-                let focus_path = self.editor.focus_path().to_vec();
-                if focus_path == before_focus {
-                    canvas.anchor_layout_to_focus(&focus_path);
+                if has_children {
+                    canvas.clear_boundary();
+                    let focus_path = self.editor.focus_path().to_vec();
+                    if focus_path == before_focus {
+                        canvas.anchor_layout_to_focus(&focus_path);
+                    }
+                    let after_scene = self.spatial_canvas_scene_for_layout(&canvas.layout_path);
+                    canvas.settle_focus_navigation(&before_scene, &after_scene, &focus_path);
+                } else {
+                    canvas.flash_boundary(&before_focus, BoundaryEdge::Right);
                 }
-                let after_scene = self.spatial_canvas_scene_for_layout(&canvas.layout_path);
-                canvas.settle_focus_navigation(&before_scene, &after_scene, &focus_path);
                 canvas.selected_path = self.editor.focus_path().to_vec();
             }
             KeyCode::Tab | KeyCode::BackTab => {
@@ -3422,6 +3479,42 @@ impl TuiApp {
             StatusTone::Info,
             "Collapsed the current scope and kept the focused path visible.",
         );
+    }
+
+    fn spatial_scope_root_path(&self) -> Vec<usize> {
+        if self.view_mode == ViewMode::SubtreeOnly
+            && let Some(path) = self.subtree_root_path()
+        {
+            return path;
+        }
+
+        if let Some(root_index) = self.editor.focus_path().first() {
+            return vec![*root_index];
+        }
+
+        self.visible_rows()
+            .first()
+            .map(|row| row.path.clone())
+            .unwrap_or_else(|| self.editor.focus_path().to_vec())
+    }
+
+    fn collapse_spatial_scope(&mut self) -> Result<Vec<usize>, AppError> {
+        let scope_root = self.spatial_scope_root_path();
+        let scope_paths = self.expandable_paths_in_scope();
+        let document_nodes = &self.editor.document().nodes;
+        self.expanded.retain(|path| {
+            !scope_paths.contains(path)
+                && get_node(document_nodes, path).is_some_and(|node| !node.children.is_empty())
+        });
+
+        let focus_path = self.editor.focus_path().to_vec();
+        let focus_still_visible = self.visible_rows().iter().any(|row| row.path == focus_path);
+        if !focus_still_visible && get_node(&self.editor.document().nodes, &scope_root).is_some() {
+            self.editor.set_focus_path(scope_root.clone())?;
+            self.finalize_focus_change_with_reveal(MotionTarget::Focus, FocusReveal::Preserve)?;
+        }
+
+        Ok(scope_root)
     }
 
     fn expandable_paths_in_scope(&self) -> HashSet<Vec<usize>> {
@@ -7548,7 +7641,9 @@ fn render_spatial_canvas(frame: &mut Frame, area: Rect, app: &mut TuiApp) {
 
     let mut widget =
         MindmapWidget::new(&scene, camera, app.mindmap_theme()).highlight_path(&selected_path);
-    if let Some(cue) = &boundary_cue {
+    if let Some(cue) = &boundary_cue
+        && cue.is_visible()
+    {
         widget = widget.boundary_cue(&cue.path, cue.edge);
     }
     frame.render_widget(widget, sections[1]);
@@ -7562,6 +7657,8 @@ fn render_spatial_canvas(frame: &mut Frame, area: Rect, app: &mut TuiApp) {
             key_hint("Shift+↑↓←→", "pan"),
             separator_span(),
             key_hint("-/+", "zoom"),
+            separator_span(),
+            key_hint("z/Z", "fold/all"),
             separator_span(),
             key_hint("Tab", "cycle"),
             separator_span(),
@@ -14718,6 +14815,259 @@ mod tests {
     }
 
     #[test]
+    fn spatial_canvas_z_collapses_scope_and_moves_hidden_focus_to_root() {
+        let map_path = temp_map_path("spatial-canvas-z-collapse.md");
+        let document = parse_document(
+            "- Root [id:root]\n  - Alpha [id:root/alpha]\n    - Alpha child [id:root/alpha/child]\n  - Beta [id:root/beta]\n",
+        )
+        .document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.set_view_mode(ViewMode::FullMap);
+        app.expanded.insert(vec![0]);
+        app.expanded.insert(vec![0, 0]);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE))
+            .expect("m should open the spatial canvas");
+        if let Some(canvas) = app.spatial_canvas.as_mut() {
+            canvas.pan(12, -6);
+            canvas.zoom_percent = 150;
+        }
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE))
+            .expect("z should collapse and reset the spatial canvas");
+
+        assert_eq!(
+            app.editor.focus_path(),
+            &[0],
+            "collapsing the spatial scope should move focus to the root when the old focus is hidden"
+        );
+        assert!(
+            app.expanded.is_empty(),
+            "spatial z should collapse every branch in the current scope, got {:?}",
+            app.expanded
+        );
+        assert_eq!(
+            app.spatial_canvas.as_ref().map(|canvas| (
+                canvas.pan_x,
+                canvas.pan_y,
+                canvas.zoom_percent
+            )),
+            Some((0, 0, 100)),
+            "spatial z should reset pan and zoom"
+        );
+        assert_eq!(
+            app.spatial_canvas.as_ref().map(|canvas| (
+                canvas.layout_path.as_slice(),
+                canvas.selected_path.as_slice()
+            )),
+            Some((&[0][..], &[0][..])),
+            "spatial z should center and select the collapsed root"
+        );
+        assert_eq!(
+            app.editor.breadcrumb(),
+            vec!["Root"],
+            "the PATH should reflect the collapsed root focus"
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn spatial_canvas_z_keeps_focus_when_collapse_does_not_hide_it() {
+        let map_path = temp_map_path("spatial-canvas-z-keep-focus.md");
+        let document = parse_document(
+            "- Root [id:root]\n  - Alpha [id:root/alpha]\n  - Beta [id:root/beta]\n",
+        )
+        .document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.expanded.insert(vec![0]);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE))
+            .expect("m should open the spatial canvas");
+        app.handle_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE))
+            .expect("z should collapse and keep visible focus");
+
+        assert_eq!(
+            app.editor.focus_path(),
+            &[0],
+            "spatial z should preserve focus when the focused node remains visible"
+        );
+        assert!(
+            app.expanded.is_empty(),
+            "spatial z should still collapse the visible scope"
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn spatial_canvas_capital_z_expands_scope_and_chooses_overview_zoom() {
+        let map_path = temp_map_path("spatial-canvas-z-expand.md");
+        let document = parse_document(
+            "- Root [id:root]\n  - Alpha [id:root/alpha]\n    - Alpha child [id:root/alpha/child]\n  - Beta [id:root/beta]\n    - Beta child [id:root/beta/child]\n  - Gamma [id:root/gamma]\n    - Gamma child [id:root/gamma/child]\n",
+        )
+        .document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE))
+            .expect("m should open the spatial canvas");
+        if let Some(canvas) = app.spatial_canvas.as_mut() {
+            canvas.update_viewport(38, 14);
+            canvas.pan(10, 5);
+            canvas.zoom_percent = 150;
+        }
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('Z'), KeyModifiers::NONE))
+            .expect("Z should expand and overview the spatial canvas");
+
+        assert!(
+            app.expanded.contains(&vec![0])
+                && app.expanded.contains(&vec![0, 0])
+                && app.expanded.contains(&vec![0, 1])
+                && app.expanded.contains(&vec![0, 2]),
+            "spatial Z should expand every branch in the current scope"
+        );
+        let scene = app.current_spatial_canvas_scene();
+        let zoom = app
+            .spatial_canvas
+            .as_ref()
+            .map(|canvas| canvas.zoom_percent)
+            .expect("spatial canvas should stay open");
+        assert_eq!(
+            zoom,
+            spatial_overview_zoom(&scene, 38, 14),
+            "spatial Z should choose the fit-ish overview zoom for the expanded scene"
+        );
+        assert_eq!(
+            app.spatial_canvas.as_ref().map(|canvas| (
+                canvas.pan_x,
+                canvas.pan_y,
+                canvas.selected_path.as_slice()
+            )),
+            Some((0, 0, &[0][..])),
+            "spatial Z should clear manual pan and keep the current focus selected"
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn spatial_canvas_right_on_leaf_flashes_right_edge_without_reanchoring() {
+        let map_path = temp_map_path("spatial-canvas-leaf-right.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE))
+            .expect("m should open the spatial canvas");
+        if let Some(canvas) = app.spatial_canvas.as_mut() {
+            canvas.update_viewport(72, 18);
+        }
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .expect("right should move into the visible leaf child");
+        assert_eq!(app.editor.focus_path(), &[0, 0, 0]);
+
+        let before_scene = app.current_spatial_canvas_scene();
+        let before_positions = before_scene
+            .bubbles
+            .iter()
+            .map(|bubble| (bubble.path.clone(), (bubble.x, bubble.y)))
+            .collect::<HashMap<_, _>>();
+        let before_camera = app
+            .spatial_canvas
+            .as_ref()
+            .map(|canvas| canvas.camera_for_scene(&before_scene))
+            .expect("spatial canvas should stay open");
+        let before_layout_path = app
+            .spatial_canvas
+            .as_ref()
+            .map(|canvas| canvas.layout_path.clone())
+            .expect("spatial canvas should stay open");
+        let before_expanded = app.expanded.clone();
+
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .expect("right on a leaf should be handled without changing the layout");
+
+        assert_eq!(
+            app.editor.focus_path(),
+            &[0, 0, 0],
+            "right on a leaf should leave focus alone"
+        );
+        assert_eq!(
+            app.expanded, before_expanded,
+            "right on a leaf should not expand or collapse any branch"
+        );
+        assert_eq!(
+            app.spatial_canvas
+                .as_ref()
+                .map(|canvas| canvas.layout_path.as_slice()),
+            Some(before_layout_path.as_slice()),
+            "right on a leaf should not re-anchor the spatial layout"
+        );
+        let after_scene = app.current_spatial_canvas_scene();
+        for bubble in &after_scene.bubbles {
+            if let Some(position) = before_positions.get(&bubble.path) {
+                assert_eq!(
+                    (bubble.x, bubble.y),
+                    *position,
+                    "right on a leaf should not reposition visible nodes"
+                );
+            }
+        }
+        let after_camera = app
+            .spatial_canvas
+            .as_ref()
+            .map(|canvas| canvas.camera_for_scene(&after_scene))
+            .expect("spatial canvas should stay open");
+        assert_eq!(
+            (after_camera.origin_x, after_camera.origin_y),
+            (before_camera.origin_x, before_camera.origin_y),
+            "right on a leaf should not move the camera"
+        );
+        assert!(
+            app.status.text.contains("no children"),
+            "right on a leaf should explain that there is no child to enter"
+        );
+        assert_eq!(
+            app.spatial_canvas
+                .as_ref()
+                .and_then(|canvas| canvas.boundary_cue.as_ref())
+                .map(|cue| (cue.path.as_slice(), cue.edge, cue.is_visible())),
+            Some((&[0, 0, 0][..], BoundaryEdge::Right, true)),
+            "right on a leaf should flash the right edge of the focused node"
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
     fn spatial_canvas_vertical_boundary_stays_in_the_current_branch() {
         let map_path = temp_map_path("spatial-canvas-vertical-boundary.md");
         let document = parse_document(
@@ -14755,8 +15105,8 @@ mod tests {
             app.spatial_canvas
                 .as_ref()
                 .and_then(|canvas| canvas.boundary_cue.as_ref())
-                .map(|cue| (cue.path.as_slice(), cue.edge)),
-            Some((&[0, 0][..], BoundaryEdge::Bottom)),
+                .map(|cue| (cue.path.as_slice(), cue.edge, cue.is_visible())),
+            Some((&[0, 0][..], BoundaryEdge::Bottom, true)),
             "bottom boundary should flash the bottom edge of the focused node"
         );
         assert_eq!(
@@ -14778,9 +15128,37 @@ mod tests {
             app.spatial_canvas
                 .as_ref()
                 .and_then(|canvas| canvas.boundary_cue.as_ref())
-                .map(|cue| (cue.path.as_slice(), cue.edge)),
-            Some((&[0, 0][..], BoundaryEdge::Top)),
+                .map(|cue| (cue.path.as_slice(), cue.edge, cue.is_visible())),
+            Some((&[0, 0][..], BoundaryEdge::Top, true)),
             "top boundary should flash the top edge of the focused node"
+        );
+
+        app.tick();
+        assert_eq!(
+            app.spatial_canvas
+                .as_ref()
+                .and_then(|canvas| canvas.boundary_cue.as_ref())
+                .map(SpatialBoundaryCue::is_visible),
+            Some(false),
+            "boundary cue should turn off between quick flashes"
+        );
+        app.tick();
+        assert_eq!(
+            app.spatial_canvas
+                .as_ref()
+                .and_then(|canvas| canvas.boundary_cue.as_ref())
+                .map(SpatialBoundaryCue::is_visible),
+            Some(true),
+            "boundary cue should pulse on a second time"
+        );
+        app.tick();
+        assert_eq!(
+            app.spatial_canvas
+                .as_ref()
+                .and_then(|canvas| canvas.boundary_cue.as_ref())
+                .map(SpatialBoundaryCue::is_visible),
+            Some(false),
+            "boundary cue should turn off after the second flash"
         );
 
         for _ in 0..SPATIAL_BOUNDARY_CUE_DURATION {

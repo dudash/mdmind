@@ -276,7 +276,7 @@
       - arrow keys pan the canvas
       - 0 recenters the camera
       - p exports a PNG of the current rendered view
-      - visible cross-links also render as relation edges when both linked nodes are on-screen
+      - visible cross-links render as faint dotted relation links when both linked nodes are on-screen
     - Mindmap tips #tip [id:guide/mindmap/tips]
       - open the map after tightening a view or filter, not before
       - if the map feels busy, reduce the working set in the tree first

@@ -46,6 +46,7 @@ Current Phase 1 behavior:
 - normal arrows / `hjkl` navigate and expand/collapse like the outline
 - `Shift` + arrows pan the camera
 - `+` / `=` zoom in and `-` / `_` zoom out
+- `z` collapses the visible scope, resets zoom, and centers the collapsed root; `Z` expands the visible scope and zooms to a fit-ish overview
 - `Tab` / `Shift+Tab` optionally cycle visible bubbles
 - `Enter` toggles the current branch, or focuses a Tab-selected bubble
 
@@ -54,6 +55,7 @@ Current Phase 1 behavior:
 - arrows or `hjkl`: navigate focus, expand, and collapse like the normal outline
 - `Shift` + arrows: move camera
 - `+` / `=` and `-` / `_`: zoom in and out
+- `z` / `Z`: collapse the visible scope or expand it into an overview
 - `Tab`: optionally cycle visible nearby nodes for non-linear jumps
 - `Enter`: toggle the focused branch, or focus a Tab-selected bubble
 - `0`: recenter on the focused node
@@ -94,6 +96,7 @@ Phase 1:
 - visual navigation only - shipped
 - deterministic layout - shipped
 - camera pan and recenter - shipped
+- faint dotted relation/backlink links between visible endpoints - shipped
 
 Phase 2:
 
@@ -103,7 +106,6 @@ Phase 2:
 Phase 3:
 
 - animations
-- relation edges
 - polished export
 
 ## Risks
