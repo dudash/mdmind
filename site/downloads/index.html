@@ -79,9 +79,9 @@ brew install mdmind</code></pre>
           <div class="eyebrow">Agent mode</div>
           <h2>Install mdmind as a skill for your agents.</h2>
           <p>
-            Teach Codex, Claude, Cursor, and similar agents to write native mdmind maps and inspect them with
-            <code>mdm</code>. Clone the repo once, copy one or both skill folders into your
-            agent's skills directory, and restart the client.
+            Teach your coding agents to write native mdmind maps and inspect them with <code>mdm</code>.
+            Clone the repo once, then install the skill pack for one project or for all your work.
+            Some agents use their own paths, so check the full notes.
           </p>
         </section>
 
@@ -101,10 +101,24 @@ brew install mdmind</code></pre>
           </article>
 
           <article class="download-card">
-            <div class="eyebrow">Codex</div>
-            <h2>Install for Codex</h2>
+            <div class="eyebrow">One project</div>
+            <h2>Install for this repo</h2>
             <p>
-              Copy the skill folders into the shared Agent Skills directory.
+              Copy the skill folders into the project Agent Skills directory.
+            </p>
+            <div class="copyable-command">
+              <button class="copy-button" type="button">Copy</button>
+              <pre><code>mkdir -p .agents/skills
+cp -R ~/mdmind/skills/mdmind-map-authoring .agents/skills/
+cp -R ~/mdmind/skills/mdm-cli-inspection .agents/skills/</code></pre>
+            </div>
+          </article>
+
+          <article class="download-card">
+            <div class="eyebrow">All your work</div>
+            <h2>Install for your user</h2>
+            <p>
+              Copy the skill folders into your user-level Agent Skills directory.
             </p>
             <div class="copyable-command">
               <button class="copy-button" type="button">Copy</button>
@@ -115,27 +129,14 @@ cp -R ~/mdmind/skills/mdm-cli-inspection ~/.agents/skills/</code></pre>
           </article>
 
           <article class="download-card">
-            <div class="eyebrow">Claude</div>
-            <h2>Install for Claude</h2>
-            <p>
-              Claude expects each skill folder directly under <code>~/.claude/skills</code>.
-            </p>
-            <div class="copyable-command">
-              <button class="copy-button" type="button">Copy</button>
-              <pre><code>mkdir -p ~/.claude/skills
-cp -R ~/mdmind/skills/mdmind-map-authoring ~/.claude/skills/
-cp -R ~/mdmind/skills/mdm-cli-inspection ~/.claude/skills/</code></pre>
-            </div>
-          </article>
-
-          <article class="download-card">
             <div class="eyebrow">Need the guide?</div>
             <h2>Full skill install notes</h2>
             <p>
               The repo includes a portable skills README, agent-specific install paths,
-              example prompts, and a compact AGENTS.md snippet.
+              example prompts, customization notes, and a compact AGENTS.md snippet.
             </p>
             <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/skills/README.md" target="_blank" rel="noreferrer">Open the skills README</a>
+            <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/docs/AGENT_SKILL_INSTALLS.md" target="_blank" rel="noreferrer">Open agent install notes</a>
           </article>
         </section>
 

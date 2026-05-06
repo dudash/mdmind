@@ -153,6 +153,7 @@ If you want specific features:
 - [docs/IDS_AND_DEEP_LINKS.md](docs/IDS_AND_DEEP_LINKS.md)
 - [docs/CROSS_LINKS_AND_BACKLINKS.md](docs/CROSS_LINKS_AND_BACKLINKS.md)
 - [docs/NODE_DETAILS.md](docs/NODE_DETAILS.md)
+- [docs/AGENT_SKILL_INSTALLS.md](docs/AGENT_SKILL_INSTALLS.md)
 - [docs/SKILLS_CUSTOMIZING.md](docs/SKILLS_CUSTOMIZING.md)
 - [docs/SAFETY_AND_HISTORY.md](docs/SAFETY_AND_HISTORY.md)
 - [docs/TEMPLATES.md](docs/TEMPLATES.md)

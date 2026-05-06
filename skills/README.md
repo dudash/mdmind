@@ -66,9 +66,23 @@ Skill folders:
 Each skill is a portable package: one directory containing a required `SKILL.md`
 and optional `references/`, `examples/`, and `agents/` metadata.
 
-### Recommended Layout
+### Install For One Project
 
-If your agent supports the shared Agent Skills convention:
+If your agent supports the shared Agent Skills convention, copy the skills into
+the current project:
+
+```bash
+mkdir -p .agents/skills
+cp -R ~/mdmind/skills/mdmind-map-authoring .agents/skills/
+cp -R ~/mdmind/skills/mdm-cli-inspection .agents/skills/
+```
+
+This keeps mdmind behavior scoped to one repository or workspace.
+
+### Install For All Your Work
+
+If your agent supports user-level shared Agent Skills, copy the skills into your
+home directory:
 
 ```bash
 mkdir -p ~/.agents/skills
@@ -78,10 +92,10 @@ cp -R ~/mdmind/skills/mdm-cli-inspection ~/.agents/skills/
 
 This is the most portable user-level layout for Codex, Cursor, Gemini CLI,
 Copilot-compatible tools, OpenCode, Warp, Pi, Windsurf, and similar agents.
+Claude Code currently uses `.claude/skills/` and `~/.claude/skills/` instead.
 
-For one project, copy or symlink the folders into a workspace skills directory
-such as `.agents/skills/`, `.claude/skills/`, or the agent-specific path your
-client documents.
+For a dated agent-specific table, see
+[docs/AGENT_SKILL_INSTALLS.md](../docs/AGENT_SKILL_INSTALLS.md).
 
 ### Alternative: Skills CLI
 
@@ -116,15 +130,9 @@ CLI's telemetry-backed directory.
 ### Codex
 
 Codex can load shared Agent Skills from `~/.agents/skills/` and project-local
-`.agents/skills/` directories. Use the recommended layout above for reusable
-user installs, or copy the same folders into a repo-local `.agents/skills/`
-directory when the skills should travel with one project:
-
-```bash
-mkdir -p .agents/skills
-cp -R ~/mdmind/skills/mdmind-map-authoring .agents/skills/
-cp -R ~/mdmind/skills/mdm-cli-inspection .agents/skills/
-```
+`.agents/skills/` directories. Use project installs when the skills should
+travel with one repository, or user installs when the skills should apply across
+your work.
 
 Then restart Codex if the skills do not appear.
 
