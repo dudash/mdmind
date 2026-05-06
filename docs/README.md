@@ -19,7 +19,7 @@ If you are new to `mdmind`:
 If you want to use `mdmind` with AI agents:
 
 - [AGENT_USAGE.md](AGENT_USAGE.md)
-- [SKILLS.md](SKILLS.md)
+- [SKILLS_CUSTOMIZING.md](SKILLS_CUSTOMIZING.md)
 
 If you want a product-status map instead of a tutorial:
 
@@ -35,7 +35,7 @@ Core map language:
 - [CROSS_LINKS_AND_BACKLINKS.md](CROSS_LINKS_AND_BACKLINKS.md)
 - [NODE_DETAILS.md](NODE_DETAILS.md)
 - [AGENT_USAGE.md](AGENT_USAGE.md)
-- [SKILLS.md](SKILLS.md)
+- [SKILLS_CUSTOMIZING.md](SKILLS_CUSTOMIZING.md)
 
 Day-to-day usage:
 

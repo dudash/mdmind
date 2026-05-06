@@ -159,9 +159,10 @@ Then inspect:
 - `examples/game-world-moonwake.md`
 - `examples/novel-research-writing-map.md`
 
-## Where SKILLS.md Fits
+## Where Skill Customizing Fits
 
-If you want repeatable agent behavior, pair maps with a `SKILLS.md` file that tells the agent:
+If you want repeatable agent behavior, pair maps with a compact `AGENTS.md`
+note or a project-local skill that tells the agent:
 
 - when to use the workflow
 - when not to use it
@@ -169,10 +170,13 @@ If you want repeatable agent behavior, pair maps with a `SKILLS.md` file that te
 - which metadata keys to prefer
 - how to validate the result
 
-See [SKILLS.md](SKILLS.md) for a practical format spec.
+See [SKILLS_CUSTOMIZING.md](SKILLS_CUSTOMIZING.md) for guidance on extending
+the base mdmind skills with project-specific tags, metadata keys, and validation
+loops.
 
 ## Related Docs
 
+- [SKILLS_CUSTOMIZING.md](SKILLS_CUSTOMIZING.md)
 - [USING_MDMIND_AS_OUTLINER.md](USING_MDMIND_AS_OUTLINER.md)
 - [QUERY_LANGUAGE.md](QUERY_LANGUAGE.md)
 - [IDS_AND_DEEP_LINKS.md](IDS_AND_DEEP_LINKS.md)

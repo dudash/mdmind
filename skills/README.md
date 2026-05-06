@@ -63,7 +63,10 @@ Skill folders:
 - `mdmind-map-authoring`
 - `mdm-cli-inspection`
 
-### Portable Layout
+Each skill is a portable package: one directory containing a required `SKILL.md`
+and optional `references/`, `examples/`, and `agents/` metadata.
+
+### Recommended Layout
 
 If your agent supports the shared Agent Skills convention:
 
@@ -73,19 +76,57 @@ cp -R ~/mdmind/skills/mdmind-map-authoring ~/.agents/skills/
 cp -R ~/mdmind/skills/mdm-cli-inspection ~/.agents/skills/
 ```
 
-This is the most portable layout.
+This is the most portable user-level layout for Codex, Cursor, Gemini CLI,
+Copilot-compatible tools, OpenCode, Warp, Pi, Windsurf, and similar agents.
+
+For one project, copy or symlink the folders into a workspace skills directory
+such as `.agents/skills/`, `.claude/skills/`, or the agent-specific path your
+client documents.
+
+### Alternative: Skills CLI
+
+If you already use Vercel Labs' open `skills` CLI, install mdmind from the
+public GitHub repo:
+
+```bash
+npx skills add dudash/mdmind --skill mdmind-map-authoring --skill mdm-cli-inspection
+```
+
+Preview the skills first:
+
+```bash
+npx skills add dudash/mdmind --list
+```
+
+Install globally instead of into the current project:
+
+```bash
+npx skills add dudash/mdmind --skill mdmind-map-authoring --skill mdm-cli-inspection --global
+```
+
+This is a convenience path, not the source of truth. The source of truth remains
+the checked-in skill folders under `skills/`.
+
+For maintainers: there is no separate skills.sh registration flow. Keep the
+skills in a public repo, make sure each `SKILL.md` has valid `name` and
+`description` frontmatter, and verify discovery with `npx skills add dudash/mdmind
+--list`. The skills can appear on skills.sh after users install them through the
+CLI's telemetry-backed directory.
 
 ### Codex
 
-Copy the folders to:
+Codex can load shared Agent Skills from `~/.agents/skills/` and project-local
+`.agents/skills/` directories. Use the recommended layout above for reusable
+user installs, or copy the same folders into a repo-local `.agents/skills/`
+directory when the skills should travel with one project:
 
 ```bash
-mkdir -p ~/.codex/skills
-cp -R ~/mdmind/skills/mdmind-map-authoring ~/.codex/skills/
-cp -R ~/mdmind/skills/mdm-cli-inspection ~/.codex/skills/
+mkdir -p .agents/skills
+cp -R ~/mdmind/skills/mdmind-map-authoring .agents/skills/
+cp -R ~/mdmind/skills/mdm-cli-inspection .agents/skills/
 ```
 
-Then restart Codex.
+Then restart Codex if the skills do not appear.
 
 Optional: install from GitHub with Codex's built-in installer:
 
@@ -115,6 +156,38 @@ cp -R ~/mdmind/skills/mdm-cli-inspection .claude/skills/
 ```
 
 Claude usually picks up skill edits live once the skills directory already exists.
+
+### Other Agents
+
+Most modern coding agents use the same package shape but different search paths.
+Install the two mdmind skill folders directly under the target skills directory.
+
+| Agent | Good install target |
+|---|---|
+| Cursor | `~/.agents/skills/` or `~/.cursor/skills/` |
+| Gemini CLI | `~/.agents/skills/` or `~/.gemini/skills/` |
+| GitHub Copilot / VS Code Copilot | `~/.agents/skills/` or `~/.copilot/skills/` |
+| OpenCode | `~/.agents/skills/` or `~/.config/opencode/skills/` |
+| Warp | `~/.agents/skills/` |
+| Pi Coding Agent | `~/.agents/skills/` or `~/.pi/agent/skills/` |
+| Windsurf Cascade | `~/.agents/skills/` or `~/.codeium/windsurf/skills/` |
+
+Prefer `~/.agents/skills/` first when the agent supports it. Add native paths or
+symlinks only when an agent does not discover the shared location.
+
+### Passive Project Context
+
+Skills load on demand. For projects that frequently use mdmind, add a short
+always-on agent note too:
+
+- [docs/AGENTS_SNIPPET.md](../docs/AGENTS_SNIPPET.md)
+- [docs/SKILLS_CUSTOMIZING.md](../docs/SKILLS_CUSTOMIZING.md)
+
+The snippet explains the basic map format and validation loop without duplicating
+the full skills. The customizing guide shows how to tailor the base skills with
+domain-specific tags, metadata keys, id patterns, relation types, and validation
+commands. Edit the global, user-level, or project-local copy your agent loads and
+add a short `## Project Overrides` section instead of creating a separate skill.
 
 ## Requirements
 
@@ -150,3 +223,5 @@ Check:
 - These skills are instruction-first and intentionally tool-light.
 - They are designed to be portable across agent systems, not tied only to this repo.
 - The `agents/openai.yaml` files are optional UI metadata for systems that support them.
+- Avoid duplicate skill `name` values in the same agent environment unless you
+  have tested that agent's precedence behavior.
