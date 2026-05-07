@@ -2,7 +2,7 @@
   - Read Me First #guide #beginner [id:meeting/start]
     - What this map is
       - a classic outliner-style meeting file with agenda, notes, decisions, action items, and parking lot topics
-      - it is intentionally practical for people who think in OmniOutliner or nested meeting notes
+      - it is intentionally practical for people who think in traditional outliners or nested meeting notes
       - the detail lines show where mdmind can hold longer discussion notes without bloating the outline itself
     - Good first jumps #reference
       - agenda: meeting/agenda

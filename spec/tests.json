@@ -1,0 +1,73 @@
+[
+  {
+    "name": "basic",
+    "input": "fixtures/valid/basic.md",
+    "valid": true,
+    "expect": {
+      "root_count": 1,
+      "ids": ["product", "product/mvp", "prompts/library"],
+      "tags": ["#idea", "#todo", "#prompt"],
+      "metadata": {
+        "status": ["active"],
+        "owner": ["jason"]
+      }
+    }
+  },
+  {
+    "name": "details",
+    "input": "fixtures/valid/details.md",
+    "valid": true,
+    "expect": {
+      "ids": ["product/api-design"],
+      "detail_lines": [
+        "We need one stable auth flow before launch.",
+        "",
+        "Open question: should refresh tokens be scoped by workspace?"
+      ]
+    }
+  },
+  {
+    "name": "relations",
+    "input": "fixtures/valid/relations.md",
+    "valid": true,
+    "expect": {
+      "ids": ["product", "product/mvp", "product/format", "product/requirements", "prompts/library"],
+      "relations": [
+        {
+          "source": "product/mvp",
+          "kind": null,
+          "target": "prompts/library"
+        },
+        {
+          "source": "product/mvp",
+          "kind": "supports",
+          "target": "product/requirements"
+        },
+        {
+          "source": "prompts/library",
+          "kind": "informs",
+          "target": "product/mvp"
+        }
+      ]
+    }
+  },
+  {
+    "name": "bad-indent",
+    "input": "fixtures/invalid/bad-indent.md",
+    "valid": false,
+    "expect_diagnostic": "Indentation must use multiples of two spaces."
+  },
+  {
+    "name": "duplicate-id",
+    "input": "fixtures/invalid/duplicate-id.md",
+    "valid": false,
+    "expect_diagnostic": "Duplicate id"
+  },
+  {
+    "name": "orphan-detail",
+    "input": "fixtures/invalid/orphan-detail.md",
+    "valid": false,
+    "expect_diagnostic": "Detail lines must follow a node."
+  }
+]
+

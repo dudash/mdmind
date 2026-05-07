@@ -1,6 +1,6 @@
 ---
 name: mdmind-map-authoring
-description: Use whenever the user wants source material turned into a native mdmind map or wants an existing mdmind map restructured, cleaned up, or normalized. Trigger for meeting notes, research synthesis, product plans, writing outlines, decision maps, project breakdowns, and similar work where hierarchy, tags, metadata, ids, details, or relations should survive in a durable .md file. Do not use for short prose-only answers, raw transcript cleanup without durable structure, visual-diagram requests, or mdm CLI-first inspection/export tasks.
+description: Create or revise native mdmind maps: plain-text Markdown outlines, mind maps, knowledge maps, and structured notes that stay useful as durable .md files. Use for turning meeting notes, research, product plans, writing outlines, decision maps, project breakdowns, or agent memory into hierarchy with optional tags, metadata, ids, details, and relations. Do not use for short prose-only answers, raw transcript cleanup without durable structure, visual-diagram requests, or mdm CLI-first inspection/export tasks.
 license: Apache-2.0
 metadata:
   author: mdmind

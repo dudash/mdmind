@@ -1,9 +1,9 @@
-- Moonwake Field Guide And Production Map #guide @surface:worldbuilding @genre:fantasy-sci-fi [id:moonwake]
+- Moonwake Field Guide #guide @surface:worldbuilding @genre:fantasy-sci-fi [id:moonwake]
+  | Combined worldbuilding, quest design, production, and playtest map for a narrative exploration game.
   - Start Here #guide #beginner [id:moonwake/start]
     - What this map is
-      - a combined worldbuilding, quest design, production, and playtest map for a narrative exploration game
-      - it is meant to feel like something a small game team would actually live in for weeks
-      - it uses ids, tags, metadata, and deep links heavily so you can explore it like a real working document
+      | This should feel like something a small game team would actually live in for weeks.
+      | It uses ids, tags, metadata, and deep links heavily so you can explore it like a real working document.
     - Good first jumps #reference
       - world overview: moonwake/world
       - active sprint: moonwake/production/current
@@ -17,7 +17,7 @@
       - query @region:glass-marsh
   - Pitch #guide @section:pitch [id:moonwake/pitch]
     - One-line pitch #reference [id:moonwake/pitch/line]
-      - A drifting marsh-world wakes for one impossible night each month, and the player must bargain with cities, ghosts, and machines before dawn closes the paths again
+      | A drifting marsh-world wakes for one impossible night each month, and the player must bargain with cities, ghosts, and machines before dawn closes the paths again.
     - Player fantasy #guide [id:moonwake/pitch/fantasy]
       - navigate a beautiful dangerous world with incomplete maps
       - broker fragile alliances between rival powers
@@ -28,8 +28,8 @@
       - strange technology grounded by human rituals
   - World #guide @section:world [id:moonwake/world]
     - Core premise #guide [id:moonwake/world/premise]
-      - the planet Moonwake has flooded into a maze of marsh basins, mirror canyons, and tide-powered ruins
-      - once each month the silver tide rises and hidden causeways appear for a single night
+      | The planet Moonwake has flooded into a maze of marsh basins, mirror canyons, and tide-powered ruins.
+      | Once each month the silver tide rises and hidden causeways appear for a single night.
     - Regions #guide [id:moonwake/world/regions]
       - Glass Marsh #region @region:glass-marsh [id:moonwake/world/glass-marsh]
         - mirror reeds ring when the tide changes
@@ -86,15 +86,18 @@
       - cheerful smuggler who treats every catastrophe like a networking opportunity
   - Quest Architecture #guide @section:quests [id:moonwake/quests]
     - Main route #quest @arc:main [id:moonwake/quests/main]
-      - Act 1 - Find a map that should not exist #quest @status:active [id:moonwake/quests/main/act-1]
+      - Act 1 - Impossible map #quest @status:active [id:moonwake/quests/main/act-1]
+        | Find a map that should not exist.
         - reach Glass Marsh archive vault
         - choose whether to return the stolen chart
         - meet two factions before the first moon-tide closes
-      - Act 2 - The city that opens by song #quest @status:todo [id:moonwake/quests/main/act-2]
+      - Act 2 - Song-opened city #quest @status:todo [id:moonwake/quests/main/act-2]
+        | Reach the city that opens by song.
         - gain entry to Ember Stair
         - decide which choir verse to restore
         - expose the false census of ferries
-      - Act 3 - What the reef remembers #quest @status:todo [id:moonwake/quests/main/act-3]
+      - Act 3 - Reef memory #quest @status:todo [id:moonwake/quests/main/act-3]
+        | Discover what the reef remembers.
         - dive the Hollow Reef cathedrals
         - learn who built the tide engines
         - choose whether to shut one forever

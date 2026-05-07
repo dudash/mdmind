@@ -1178,7 +1178,7 @@ mod tests {
         create_example_map(asset, &path).expect("example map should be created");
 
         let contents = fs::read_to_string(&path).expect("example map should be readable");
-        assert!(contents.contains("- mdmind Demo [id:demo]"));
+        assert!(contents.contains("- Onboarding Research #project @status:active [id:onboarding]"));
 
         fs::remove_file(path).expect("file should be removable");
         fs::remove_dir(directory).expect("temp directory should be removable");

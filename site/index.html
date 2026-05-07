@@ -20,12 +20,32 @@
           </span>
           <span class="brand-name">mdmind</span>
         </a>
-        <nav class="site-nav">
-          <a href="#features">Features</a>
-          <a href="#workflows">Workflows</a>
-          <a href="#downloads">Downloads</a>
-          <a href="https://github.com/dudash/mdmind" target="_blank" rel="noreferrer">GitHub</a>
-        </nav>
+        <div class="header-actions">
+          <nav class="site-nav">
+            <a href="#features">Features</a>
+            <a href="#workflows">Workflows</a>
+            <a href="#downloads">Downloads</a>
+            <a href="https://github.com/dudash/mdmind" target="_blank" rel="noreferrer">GitHub</a>
+          </nav>
+          <button class="theme-cycler" type="button" data-theme-button aria-label="Switch color theme" title="Switch color theme">
+            <span class="theme-choice theme-choice-paper is-active" data-theme-option="paper" aria-hidden="true">
+              <span class="theme-led"></span>
+              <span class="theme-icon">☀</span>
+            </span>
+            <span class="theme-choice theme-choice-blueprint" data-theme-option="blueprint" aria-hidden="true">
+              <span class="theme-led"></span>
+              <span class="theme-icon">□</span>
+            </span>
+            <span class="theme-choice theme-choice-terminal" data-theme-option="terminal" aria-hidden="true">
+              <span class="theme-led"></span>
+              <span class="theme-icon">#</span>
+            </span>
+            <span class="theme-choice theme-choice-night" data-theme-option="night" aria-hidden="true">
+              <span class="theme-led"></span>
+              <span class="theme-icon">☾</span>
+            </span>
+          </button>
+        </div>
       </header>
 
       <main>
@@ -111,7 +131,7 @@
           </div>
           <div class="proof-item">
             <strong>Agent-ready</strong>
-            <span>Skills help Codex and Claude write native mdmind maps.</span>
+            <span>Skills help Codex, Claude, Cursor, and similar agents write native mdmind maps.</span>
           </div>
         </section>
 
@@ -190,7 +210,7 @@
               <h3>Give agents a format they can use on purpose.</h3>
               <p>
                 mdmind gives agents a small, explicit vocabulary for hierarchy, details, ids, tags,
-                and cross-links. You can also install mdmind skills for Codex and Claude so generated
+                and cross-links. You can also install mdmind skills for Codex, Claude, Cursor, and similar agents so generated
                 maps open cleanly and use the format on purpose.
                 <a class="text-link" href="#agent-skills">Install the skill pack.</a>
               </p>
@@ -352,9 +372,9 @@ brew install mdmind</code></pre>
             <div class="eyebrow">Agent mode</div>
             <h2>Install mdmind as a skill for your agents.</h2>
             <p>
-              Teach Codex or Claude to write native mdmind maps and inspect them with
-              <code>mdm</code>. Clone the repo once, copy one or both skill folders into your
-              agent's skills directory, and restart the client.
+              Teach your coding agents to write native mdmind maps and inspect them with <code>mdm</code>.
+              Clone the repo once, then install the skill pack for one project or for all your work.
+              Some agents use their own paths, so check the full notes.
             </p>
           </div>
 
@@ -374,26 +394,26 @@ brew install mdmind</code></pre>
             </article>
 
             <article class="download-card">
-              <div class="eyebrow">Codex</div>
-              <h3>Install for Codex</h3>
-              <p>Copy the skill folders into <code>~/.codex/skills</code>.</p>
+              <div class="eyebrow">One project</div>
+              <h3>Install for this repo</h3>
+              <p>Copy the skill folders into the project Agent Skills directory.</p>
               <div class="copyable-command">
                 <button class="copy-button" type="button">Copy</button>
-                <pre><code>mkdir -p ~/.codex/skills
-cp -R ~/mdmind/skills/mdmind-map-authoring ~/.codex/skills/
-cp -R ~/mdmind/skills/mdm-cli-inspection ~/.codex/skills/</code></pre>
+                <pre><code>mkdir -p .agents/skills
+cp -R ~/mdmind/skills/mdmind-map-authoring .agents/skills/
+cp -R ~/mdmind/skills/mdm-cli-inspection .agents/skills/</code></pre>
               </div>
             </article>
 
             <article class="download-card">
-              <div class="eyebrow">Claude</div>
-              <h3>Install for Claude</h3>
-              <p>Claude expects each skill folder directly under <code>~/.claude/skills</code>.</p>
+              <div class="eyebrow">All your work</div>
+              <h3>Install for your user</h3>
+              <p>Copy the skill folders into your user-level Agent Skills directory.</p>
               <div class="copyable-command">
                 <button class="copy-button" type="button">Copy</button>
-                <pre><code>mkdir -p ~/.claude/skills
-cp -R ~/mdmind/skills/mdmind-map-authoring ~/.claude/skills/
-cp -R ~/mdmind/skills/mdm-cli-inspection ~/.claude/skills/</code></pre>
+                <pre><code>mkdir -p ~/.agents/skills
+cp -R ~/mdmind/skills/mdmind-map-authoring ~/.agents/skills/
+cp -R ~/mdmind/skills/mdm-cli-inspection ~/.agents/skills/</code></pre>
               </div>
             </article>
 
@@ -401,10 +421,11 @@ cp -R ~/mdmind/skills/mdm-cli-inspection ~/.claude/skills/</code></pre>
               <div class="eyebrow">Need the guide?</div>
               <h3>Full skill install notes</h3>
               <p>
-                The repo includes a portable skills README, example prompts, and a small test harness
-                for isolated Codex installs.
+                The repo includes a portable skills README, agent-specific install paths,
+                example prompts, customization notes, and a compact AGENTS.md snippet.
               </p>
               <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/skills/README.md" target="_blank" rel="noreferrer">Open the skills README</a>
+              <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/docs/AGENT_SKILL_INSTALLS.md" target="_blank" rel="noreferrer">Open agent install notes</a>
             </article>
           </div>
         </section>
@@ -422,6 +443,80 @@ cp -R ~/mdmind/skills/mdm-cli-inspection ~/.claude/skills/</code></pre>
       </main>
     </div>
     <script>
+      const themes = [
+        { id: "paper", label: "Paper" },
+        { id: "blueprint", label: "Blueprint" },
+        { id: "terminal", label: "Terminal" },
+        { id: "night", label: "Night" },
+      ];
+      const themeButton = document.querySelector("[data-theme-button]");
+      const themeChoices = document.querySelectorAll("[data-theme-option]");
+      const themeAliases = {
+        techies: "terminal",
+        writers: "paper",
+        planners: "night",
+        researchers: "blueprint",
+        hacker: "terminal",
+        terminal: "terminal",
+        paper: "paper",
+        night: "night",
+        grove: "blueprint",
+        blueprint: "blueprint",
+        research: "blueprint",
+        layer: "terminal",
+        ember: "terminal",
+      };
+      const searchParams = new URLSearchParams(window.location.search);
+      const requestedTheme =
+        themeAliases[searchParams.get("theme")] ||
+        themeAliases[searchParams.get("audience")] ||
+        themeAliases[searchParams.get("mode")];
+      let storedTheme = window.localStorage.getItem("mdmind-theme");
+      if (storedTheme === "ember" || storedTheme === "layer") storedTheme = "terminal";
+      if (storedTheme === "grove") storedTheme = "blueprint";
+      let activeThemeIndex = themes.findIndex((theme) => theme.id === (requestedTheme || storedTheme || "blueprint"));
+      if (activeThemeIndex < 0) activeThemeIndex = 0;
+
+      const applyTheme = (index) => {
+        const theme = themes[index];
+
+        document.documentElement.dataset.theme = theme.id;
+        themeChoices.forEach((choice) => {
+          choice.classList.toggle("is-active", choice.dataset.themeOption === theme.id);
+        });
+
+        if (themeButton) {
+          themeButton.setAttribute("aria-label", `Switch color theme. Current theme: ${theme.label}`);
+          themeButton.title = `${theme.label} theme`;
+        }
+
+        window.localStorage.setItem("mdmind-theme", theme.id);
+      };
+
+      applyTheme(activeThemeIndex);
+
+      if (window.location.hash) {
+        window.requestAnimationFrame(() => {
+          document.getElementById(decodeURIComponent(window.location.hash.slice(1)))?.scrollIntoView();
+        });
+      }
+
+      themeButton?.addEventListener("click", () => {
+        activeThemeIndex = (activeThemeIndex + 1) % themes.length;
+        applyTheme(activeThemeIndex);
+      });
+
+      const siteHeader = document.querySelector(".site-header");
+
+      if (siteHeader) {
+        const syncHeaderState = () => {
+          siteHeader.classList.toggle("is-scrolled", window.scrollY > 4);
+        };
+
+        syncHeaderState();
+        window.addEventListener("scroll", syncHeaderState, { passive: true });
+      }
+
       document.querySelectorAll(".workflow-option").forEach((option) => {
         const image = document.querySelector("#workflow-preview-image");
         const activate = () => {

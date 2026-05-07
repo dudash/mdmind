@@ -21,3 +21,6 @@ target
 #.idea/
 
 .DS_Store
+
+# Local mdmind runtime sidecars for bundled examples.
+examples/.*.md.mdmind-*.json
