@@ -20,12 +20,32 @@
           </span>
           <span class="brand-name">mdmind</span>
         </a>
-        <nav class="site-nav">
-          <a href="#features">Features</a>
-          <a href="#workflows">Workflows</a>
-          <a href="#downloads">Downloads</a>
-          <a href="https://github.com/dudash/mdmind" target="_blank" rel="noreferrer">GitHub</a>
-        </nav>
+        <div class="header-actions">
+          <nav class="site-nav">
+            <a href="#features">Features</a>
+            <a href="#workflows">Workflows</a>
+            <a href="#downloads">Downloads</a>
+            <a href="https://github.com/dudash/mdmind" target="_blank" rel="noreferrer">GitHub</a>
+          </nav>
+          <button class="theme-cycler" type="button" data-theme-button aria-label="Switch color theme" title="Switch color theme">
+            <span class="theme-choice theme-choice-paper is-active" data-theme-option="paper" aria-hidden="true">
+              <span class="theme-led"></span>
+              <span class="theme-icon">☀</span>
+            </span>
+            <span class="theme-choice theme-choice-blueprint" data-theme-option="blueprint" aria-hidden="true">
+              <span class="theme-led"></span>
+              <span class="theme-icon">□</span>
+            </span>
+            <span class="theme-choice theme-choice-terminal" data-theme-option="terminal" aria-hidden="true">
+              <span class="theme-led"></span>
+              <span class="theme-icon">#</span>
+            </span>
+            <span class="theme-choice theme-choice-night" data-theme-option="night" aria-hidden="true">
+              <span class="theme-led"></span>
+              <span class="theme-icon">☾</span>
+            </span>
+          </button>
+        </div>
       </header>
 
       <main>
@@ -423,6 +443,80 @@ cp -R ~/mdmind/skills/mdm-cli-inspection ~/.agents/skills/</code></pre>
       </main>
     </div>
     <script>
+      const themes = [
+        { id: "paper", label: "Paper" },
+        { id: "blueprint", label: "Blueprint" },
+        { id: "terminal", label: "Terminal" },
+        { id: "night", label: "Night" },
+      ];
+      const themeButton = document.querySelector("[data-theme-button]");
+      const themeChoices = document.querySelectorAll("[data-theme-option]");
+      const themeAliases = {
+        techies: "terminal",
+        writers: "paper",
+        planners: "night",
+        researchers: "blueprint",
+        hacker: "terminal",
+        terminal: "terminal",
+        paper: "paper",
+        night: "night",
+        grove: "blueprint",
+        blueprint: "blueprint",
+        research: "blueprint",
+        layer: "terminal",
+        ember: "terminal",
+      };
+      const searchParams = new URLSearchParams(window.location.search);
+      const requestedTheme =
+        themeAliases[searchParams.get("theme")] ||
+        themeAliases[searchParams.get("audience")] ||
+        themeAliases[searchParams.get("mode")];
+      let storedTheme = window.localStorage.getItem("mdmind-theme");
+      if (storedTheme === "ember" || storedTheme === "layer") storedTheme = "terminal";
+      if (storedTheme === "grove") storedTheme = "blueprint";
+      let activeThemeIndex = themes.findIndex((theme) => theme.id === (requestedTheme || storedTheme || "blueprint"));
+      if (activeThemeIndex < 0) activeThemeIndex = 0;
+
+      const applyTheme = (index) => {
+        const theme = themes[index];
+
+        document.documentElement.dataset.theme = theme.id;
+        themeChoices.forEach((choice) => {
+          choice.classList.toggle("is-active", choice.dataset.themeOption === theme.id);
+        });
+
+        if (themeButton) {
+          themeButton.setAttribute("aria-label", `Switch color theme. Current theme: ${theme.label}`);
+          themeButton.title = `${theme.label} theme`;
+        }
+
+        window.localStorage.setItem("mdmind-theme", theme.id);
+      };
+
+      applyTheme(activeThemeIndex);
+
+      if (window.location.hash) {
+        window.requestAnimationFrame(() => {
+          document.getElementById(decodeURIComponent(window.location.hash.slice(1)))?.scrollIntoView();
+        });
+      }
+
+      themeButton?.addEventListener("click", () => {
+        activeThemeIndex = (activeThemeIndex + 1) % themes.length;
+        applyTheme(activeThemeIndex);
+      });
+
+      const siteHeader = document.querySelector(".site-header");
+
+      if (siteHeader) {
+        const syncHeaderState = () => {
+          siteHeader.classList.toggle("is-scrolled", window.scrollY > 4);
+        };
+
+        syncHeaderState();
+        window.addEventListener("scroll", syncHeaderState, { passive: true });
+      }
+
       document.querySelectorAll(".workflow-option").forEach((option) => {
         const image = document.querySelector("#workflow-preview-image");
         const activate = () => {
