@@ -1,16 +1,26 @@
 # mdmind Format 1
 
-`mdmind` is a CommonMark-friendly Markdown profile for tree-structured mind maps and outlines.
+`mdmind` is a Markdown-compatible profile for tree-structured mind maps and outlines.
 
 The goal is simple: a mind map or outline should stay readable in ordinary Markdown tools, editable in any text editor, and richer when opened with `mdmind`.
 
 This document defines format version 1.
+
+## Normative Words
+
+The words `must`, `must not`, `should`, and `may` are used intentionally.
+
+- `must` means required for a conforming format 1 document.
+- `must not` means forbidden in a conforming format 1 document.
+- `should` means strongly recommended for durable, portable files.
+- `may` means allowed, but not required.
 
 ## Design Goals
 
 - use `.md` files by default
 - keep the source readable as plain text
 - make the tree the primary structure
+- treat mind maps and outlines as first-class surfaces over the same file
 - keep annotations small and inline
 - support durable links without requiring every node to have an id
 - let richer tools exist without trapping the file inside one app
@@ -25,26 +35,26 @@ This document defines format version 1.
 - a graph database
 - a rich document format
 
-It is a narrow profile for structured thinking surfaces where mind maps and outlines are both first-class.
+It is a narrow profile for structured thinking surfaces where the same tree can be read as an outline or explored as a mind map.
 
 ## File Extension
 
-Use `.md` for normal mdmind mind maps and outlines.
+Normal mdmind files should use `.md`.
 
-The file should remain useful when viewed on GitHub, in a text editor, or in a normal Markdown preview. A future tool may choose to recognize `.mdmind`, but format 1 does not require it.
+A future tool may choose to recognize `.mdmind`, but format 1 does not require a custom extension. The durable source should remain useful when viewed on GitHub, in a text editor, or in a normal Markdown preview.
 
 ## Document Shape
 
-An mdmind document is a Markdown unordered list.
+An mdmind document is a Markdown unordered-list profile.
 
-Each non-empty source line is one of:
+Each non-blank source line must be one of:
 
-- a node line beginning with `- `
-- a detail line beginning with `|`
+- a node line
+- a detail line
 
 Blank lines are allowed and ignored by the parser.
 
-Other Markdown block forms, such as headings, fenced code blocks, tables, and block quotes, are not part of mdmind format 1.
+Other Markdown block forms, such as headings, fenced code blocks, tables, block quotes, and standalone paragraphs, are outside format 1. They may be good Markdown, but they are not valid mdmind format 1 content.
 
 Example:
 
@@ -55,17 +65,42 @@ Example:
     | Keep this branch short in the visible tree.
 ```
 
+## Line Grammar
+
+This is the shape of the format, not a full parser grammar:
+
+```text
+document    = *( blank-line / node-line / detail-line )
+blank-line  = whitespace-only line
+node-line   = indent "- " node-content
+detail-line = indent "|" [ " " detail-text ]
+indent      = zero or more spaces, in multiples of two
+```
+
+Tabs must not appear on non-blank lines.
+
+Node content is split into whitespace-delimited tokens. A token is interpreted by its prefix:
+
+- `#` starts a tag token
+- `@` starts a metadata token
+- `[id:` starts an id token
+- `[[` starts a relation token
+- any other token is visible label text
+
+There is no escaping in format 1. If visible prose needs to begin with one of the annotation prefixes, reword the label or put the prose in details.
+
 ## Indentation
 
 Indentation defines hierarchy.
 
 Rules:
 
-- indentation uses spaces only
+- indentation must use spaces only
 - one tree level is two spaces
-- tabs are not valid indentation
+- indentation must be a multiple of two spaces
 - indentation must not jump by more than one level at a time
-- the first node starts at level 0
+- the first node must start at level 0
+- one document may contain more than one level 0 node
 
 Example:
 
@@ -74,24 +109,28 @@ Example:
   - Child
     - Grandchild
   - Sibling
+- Another Root
 ```
 
 ## Nodes
 
-A node line begins with `- ` and then contains a visible label plus optional annotation tokens.
+A node line begins with `- ` after indentation.
+
+The rest of the line is the node content:
 
 ```text
 - API Design #backend @status:active [id:product/api] [[rel:supports->product/mvp]]
 ```
 
-The visible label is the line content after annotation tokens are removed.
+The visible label is built from the tokens that are not parsed as annotations.
 
 Rules:
 
-- every node should have visible text
-- annotation tokens are separated by whitespace
-- annotation tokens may appear after, before, or between label words, but the preferred style is label first, annotations after
-- annotation token values do not contain spaces in format 1
+- every node must have visible text after annotations are removed
+- annotation tokens must be separated by whitespace
+- annotation token values must not contain spaces
+- annotation tokens may appear anywhere in the node content
+- the preferred order is label, tags, metadata, id, relations
 
 Preferred:
 
@@ -99,13 +138,11 @@ Preferred:
 - API Design #backend @status:active [id:product/api]
 ```
 
-Avoid:
+Allowed but harder to scan:
 
 ```text
 - #backend [id:product/api] API Design @status:active
 ```
-
-The second form is parseable, but harder to scan.
 
 ## Tags
 
@@ -127,11 +164,12 @@ Examples:
 
 Rules:
 
-- a tag token starts with `#`
-- a tag must include at least one character after `#`
-- multiple tags are allowed
+- a tag token must start with `#`
+- a tag token must include at least one character after `#`
+- multiple tags are allowed on one node
 - tags are stored with the leading `#`
-- tools may search tags case-insensitively, but should preserve source spelling when displaying them
+- tools may search tags case-insensitively
+- tools should preserve source spelling when displaying tags
 
 Use tags for grouping. Use metadata when the value matters.
 
@@ -154,12 +192,14 @@ Examples:
 
 Rules:
 
-- a metadata token starts with `@`
+- a metadata token must start with `@`
 - the key and value are separated by the first `:`
 - key and value must both be present
 - keys should be lowercase
-- values do not contain spaces in format 1
-- repeated keys are allowed, but maps and outlines are easier to query when one key has one value per node
+- values must not contain spaces
+- repeated keys are allowed
+
+Repeated keys are legal, but mind maps and outlines are easier to query when one key has one value per node.
 
 Good common keys:
 
@@ -188,10 +228,14 @@ Example:
 Rules:
 
 - a node may have zero or one id
+- an id token must start with `[id:` and end with `]`
+- an id value must not be empty
+- an id value must not contain whitespace
 - ids must be unique inside one file
 - ids should be stable across edits
 - ids should be path-like, lowercase, and readable
-- ids are used for deep links, relations, exports, and CLI jumps
+
+Ids are used for deep links, relations, exports, and CLI jumps.
 
 Not every node needs an id. Add ids to branches you expect to revisit, cite, export, or link to.
 
@@ -219,12 +263,30 @@ Syntax:
 
 Rules:
 
-- detail lines begin with `|`
+- a detail line must begin with `|` after indentation
+- a detail line must be indented exactly one level deeper than its owning node
+- detail lines must immediately follow their owning node or another detail line for that same node
+- detail lines must come before child nodes
 - a single optional space after `|` is removed
-- a bare `|` creates a blank detail line
-- detail lines must appear directly under the node they belong to
-- detail lines come before child nodes
-- details are attached prose, not child structure
+- a bare `|` stores a blank detail line
+- additional spaces after `| ` are preserved as detail text
+
+This is valid:
+
+```text
+- Node
+  | Detail line one.
+  | Detail line two.
+  - Child
+```
+
+This is invalid because the detail appears after a child:
+
+```text
+- Node
+  - Child
+  | Too late.
+```
 
 Use details for rationale, meeting notes, quotes, research context, or explanation that belongs to one branch.
 
@@ -253,10 +315,12 @@ Example:
 
 Rules:
 
-- relation tokens use double brackets
+- a relation token must start with `[[` and end with `]]`
 - plain relations have only a target id
-- typed relations use `rel:kind->target`
+- typed relations must use `rel:kind->target`
 - kind and target must both be present in typed relations
+- relation kinds must not contain spaces
+- relation targets must not contain spaces
 - relation targets should point at ids in the same file
 - unresolved relation targets are validation warnings
 - backlinks are derived from incoming relations and are not stored in the file
@@ -280,6 +344,8 @@ Validation warnings may include:
 
 - metadata keys that are not lowercase
 - relations that point to missing ids
+
+Warnings do not make a document structurally invalid, but they do mean the file is less portable or less complete.
 
 ## Serialization
 
@@ -310,7 +376,7 @@ Serializers should preserve:
 - ids
 - relations
 
-They should avoid churn that does not change the map.
+They should avoid churn that does not change the tree.
 
 ## Compatibility
 
@@ -324,7 +390,7 @@ Because mdmind format 1 is a profile, not all Markdown is valid mdmind. A normal
 
 Sidecar files are not part of the mdmind document format.
 
-Tools may store UI state, session state, locations, checkpoints, or preferences next to a map, but those files must not be required to parse the map itself.
+Tools may store UI state, session state, locations, checkpoints, navigation memory, or preferences next to a map. Those files must not be required to parse the `.md` source.
 
 The `.md` file is the durable source.
 
@@ -335,11 +401,11 @@ Format 1 is the current stable contract.
 Future format versions should:
 
 - preserve readable `.md` files
-- remain compatible with existing format 1 maps when practical
+- remain compatible with existing format 1 files when practical
 - add syntax only when the gain is worth the extra surface area
 - prefer optional conventions over required ceremony
 
-If a future version needs explicit file-level metadata, that should be added in a way that does not break the plain Markdown reading experience.
+If a future version needs explicit file-level metadata, it should be added in a way that does not break the plain Markdown reading experience.
 
 ## Complete Example
 

@@ -2,72 +2,198 @@
   {
     "name": "basic",
     "input": "fixtures/valid/basic.md",
-    "valid": true,
-    "expect": {
-      "root_count": 1,
-      "ids": ["product", "product/mvp", "prompts/library"],
-      "tags": ["#idea", "#todo", "#prompt"],
-      "metadata": {
-        "status": ["active"],
-        "owner": ["jason"]
-      }
+    "outcome": "valid",
+    "ids": ["product", "product/mvp", "prompts/library"],
+    "tags": ["#idea", "#todo", "#prompt"],
+    "metadata": {
+      "status": ["active"],
+      "owner": ["jason"]
     }
   },
   {
     "name": "details",
     "input": "fixtures/valid/details.md",
-    "valid": true,
-    "expect": {
-      "ids": ["product/api-design"],
-      "detail_lines": [
-        "We need one stable auth flow before launch.",
-        "",
-        "Open question: should refresh tokens be scoped by workspace?"
-      ]
-    }
+    "outcome": "valid",
+    "ids": ["product/api-design"],
+    "detail_lines": [
+      "We need one stable auth flow before launch.",
+      "",
+      "Open question: should refresh tokens be scoped by workspace?",
+      "  Preserve intentional extra indentation after the marker."
+    ]
   },
   {
     "name": "relations",
     "input": "fixtures/valid/relations.md",
-    "valid": true,
-    "expect": {
-      "ids": ["product", "product/mvp", "product/format", "product/requirements", "prompts/library"],
-      "relations": [
-        {
-          "source": "product/mvp",
-          "kind": null,
-          "target": "prompts/library"
-        },
-        {
-          "source": "product/mvp",
-          "kind": "supports",
-          "target": "product/requirements"
-        },
-        {
-          "source": "prompts/library",
-          "kind": "informs",
-          "target": "product/mvp"
-        }
-      ]
-    }
+    "outcome": "valid",
+    "ids": ["product", "product/mvp", "product/format", "product/requirements", "prompts/library"],
+    "relations": [
+      {
+        "source": "product/mvp",
+        "kind": null,
+        "target": "prompts/library"
+      },
+      {
+        "source": "product/mvp",
+        "kind": "supports",
+        "target": "product/requirements"
+      },
+      {
+        "source": "prompts/library",
+        "kind": "informs",
+        "target": "product/mvp"
+      }
+    ]
+  },
+  {
+    "name": "multiple-roots-and-token-order",
+    "input": "fixtures/valid/multiple-roots-and-token-order.md",
+    "outcome": "valid",
+    "root_count": 2,
+    "ids": ["root/one", "root/one/order", "root/two"]
+  },
+  {
+    "name": "non-lowercase-metadata",
+    "input": "fixtures/warning/non-lowercase-metadata.md",
+    "outcome": "warning",
+    "diagnostics": [
+      {
+        "severity": "warning",
+        "contains": "should be lowercase"
+      }
+    ]
+  },
+  {
+    "name": "unresolved-relation",
+    "input": "fixtures/warning/unresolved-relation.md",
+    "outcome": "warning",
+    "diagnostics": [
+      {
+        "severity": "warning",
+        "contains": "does not match any node id"
+      }
+    ]
   },
   {
     "name": "bad-indent",
     "input": "fixtures/invalid/bad-indent.md",
-    "valid": false,
-    "expect_diagnostic": "Indentation must use multiples of two spaces."
+    "outcome": "invalid",
+    "diagnostics": [
+      {
+        "severity": "error",
+        "contains": "Indentation must use multiples of two spaces"
+      }
+    ]
+  },
+  {
+    "name": "detail-after-child",
+    "input": "fixtures/invalid/detail-after-child.md",
+    "outcome": "invalid",
+    "diagnostics": [
+      {
+        "severity": "error",
+        "contains": "Detail lines must appear directly under their node"
+      }
+    ]
   },
   {
     "name": "duplicate-id",
     "input": "fixtures/invalid/duplicate-id.md",
-    "valid": false,
-    "expect_diagnostic": "Duplicate id"
+    "outcome": "invalid",
+    "diagnostics": [
+      {
+        "severity": "error",
+        "contains": "Duplicate id"
+      }
+    ]
+  },
+  {
+    "name": "empty-id",
+    "input": "fixtures/invalid/empty-id.md",
+    "outcome": "invalid",
+    "diagnostics": [
+      {
+        "severity": "error",
+        "contains": "Invalid id token"
+      }
+    ]
+  },
+  {
+    "name": "empty-node",
+    "input": "fixtures/invalid/empty-node.md",
+    "outcome": "invalid",
+    "diagnostics": [
+      {
+        "severity": "error",
+        "contains": "Nodes must include visible text"
+      }
+    ]
+  },
+  {
+    "name": "indent-jump",
+    "input": "fixtures/invalid/indent-jump.md",
+    "outcome": "invalid",
+    "diagnostics": [
+      {
+        "severity": "error",
+        "contains": "Indentation cannot jump by more than one level"
+      }
+    ]
+  },
+  {
+    "name": "invalid-metadata",
+    "input": "fixtures/invalid/invalid-metadata.md",
+    "outcome": "invalid",
+    "diagnostics": [
+      {
+        "severity": "error",
+        "contains": "Invalid metadata token"
+      }
+    ]
+  },
+  {
+    "name": "invalid-relation",
+    "input": "fixtures/invalid/invalid-relation.md",
+    "outcome": "invalid",
+    "diagnostics": [
+      {
+        "severity": "error",
+        "contains": "Invalid relation token"
+      }
+    ]
+  },
+  {
+    "name": "invalid-tag",
+    "input": "fixtures/invalid/invalid-tag.md",
+    "outcome": "invalid",
+    "diagnostics": [
+      {
+        "severity": "error",
+        "contains": "Tag tokens must include a name"
+      }
+    ]
   },
   {
     "name": "orphan-detail",
     "input": "fixtures/invalid/orphan-detail.md",
-    "valid": false,
-    "expect_diagnostic": "Detail lines must follow a node."
+    "outcome": "invalid",
+    "diagnostics": [
+      {
+        "severity": "error",
+        "contains": "Detail lines must follow a node"
+      }
+    ]
+  },
+  {
+    "name": "tab",
+    "input": "fixtures/invalid/tab.md",
+    "outcome": "invalid",
+    "diagnostics": [
+      {
+        "severity": "error",
+        "contains": "Tabs are not supported"
+      }
+    ]
   }
 ]
 

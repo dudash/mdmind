@@ -316,7 +316,7 @@ fn examples_copy_one_writes_requested_map() {
 
     let copied = destination.join("demo.md");
     let contents = std::fs::read_to_string(&copied).expect("copied example should exist");
-    assert!(contents.contains("- Onboarding Research #project @status:active [id:onboarding]"));
+    assert_eq!(contents, include_str!("../examples/demo.md"));
 
     std::fs::remove_file(copied).expect("copied example should be removable");
     std::fs::remove_dir(destination).expect("temp directory should be removable");

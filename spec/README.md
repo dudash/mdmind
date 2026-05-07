@@ -18,10 +18,25 @@ The short version:
 For format behavior, read these in order:
 
 1. [mdmind-1.md](mdmind-1.md)
-2. fixtures in [fixtures/valid](fixtures/valid) and [fixtures/invalid](fixtures/invalid)
-3. parser and validation tests in [../tests](../tests)
+2. fixtures in [fixtures/valid](fixtures/valid), [fixtures/warning](fixtures/warning), and [fixtures/invalid](fixtures/invalid)
+3. the conformance manifest in [tests.json](tests.json)
+4. parser and validation tests in [../tests](../tests)
 
 Archived docs under `docs/_archive/` are useful background, but they are not the spec.
+
+## Fixture Policy
+
+Fixtures are intentionally small.
+
+Large example maps are for learning and product feel. Spec fixtures are for proving one behavior at a time.
+
+Use:
+
+- `fixtures/valid` for documents that should parse and validate without diagnostics
+- `fixtures/warning` for documents that should parse but produce validation warnings
+- `fixtures/invalid` for documents that should produce parser or validation errors
+
+When the format changes, update the spec, fixtures, manifest, and implementation together.
 
 ## Why This Lives Here
 
