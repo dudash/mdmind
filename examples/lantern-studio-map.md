@@ -66,8 +66,18 @@
         - post-show keepsake polish #todo @status:todo
       - Guides And Ops Docs #feature @area:docs [id:lantern/product/docs]
         - route guide for stewards #doing @status:active
+        - steward route guide rationale #reference @doc:long [id:lantern/product/docs/steward-rationale]
+          | This belongs in details because it is working prose, not a scannable map label.
+          | The steward guide needs to explain judgment calls: when to let guests linger, when to gently move them along, and how to preserve mystery without withholding practical help.
+          | The most important rule is that atmosphere never outranks care. If a guest looks lost, cold, anxious, or separated from their group, the steward breaks character enough to make the next step obvious.
+          | Keep this note attached to the docs branch so agents and humans can revise the operating philosophy without turning the outline into a wall of text.
         - volunteer briefing packet #doing @status:active
         - opening-night runbook #todo @status:active
+        - opening-night runbook scope #reference @doc:long [id:lantern/product/docs/runbook-scope]
+          | The runbook should be the one place a tired lead can look at 6:40 PM and know what happens next.
+          | It should include the call time, route reset checks, radio channel plan, guest check-in sequence, late-arrival handling, weather trigger, performer handoff windows, escalation contacts, and end-of-night teardown.
+          | Avoid burying decisions in beautiful prose. The runbook can sound like Lantern Studio, but its first job is to reduce ambiguity under pressure.
+          | If a route, cast assignment, or launch asset changes, this node should be updated in the same pass as the steward guide and guest-facing copy.
         - printed field cards #todo @status:todo
         - docs cross-link launch work, ownership, and route risk without moving the tree [[rel:supports->lantern/roadmap/help]] [[rel:feeds->lantern/launch/assets]] [[rel:owned-by->lantern/team/leah]]
     - Production Constraints #reference [id:lantern/product/constraints]
@@ -172,6 +182,11 @@
       - teaser copy, cue scripts, performer notes, and guide language all need the same authored voice
     - Active copy work #todo @status:active [id:lantern/prompts/active]
       - guest prep email tone pass @owner:leah
+      - guest prep email long note #reference @doc:long [id:lantern/prompts/active/guest-email-note]
+        | The email has to do two jobs that pull against each other: make the night feel secret and special, while making arrival feel completely unambiguous.
+        | Lead with a concrete promise: where to arrive, what to wear, how long the walk is, what weather means, and how to ask for help. Save the more poetic language for the paragraph after trust has been established.
+        | Do not overexplain the story. Guests should know they are safe, expected, and prepared; they should not feel like they have already read the best parts of the evening.
+        | This is a good place for agents to draft several versions because tone matters more than raw information density.
       - route card naming pass @owner:jason
       - partner venue intro copy @owner:leah
       - copy work feeds launch story and guide polish [[rel:feeds->lantern/launch/story]] [[rel:supports->lantern/product/docs]]
@@ -189,6 +204,11 @@
       - guests arrive curious, not confused
       - stewards feel overprepared rather than barely ready
       - every route pivot has a graceful fallback
+      - arrival brief for box office and stewards #reference @doc:long [id:lantern/launch/week/arrival-brief]
+        | Guests will arrive with uneven information: some will have read every email, some will have skimmed, and some will be following a friend who bought the tickets.
+        | The arrival team should assume good intent and avoid making anyone feel behind. The first sentence should orient, the second should reassure, and the third should hand them the object or cue that starts the night.
+        | If a guest asks whether the event is scary, physically demanding, or easy to leave, answer plainly. Mystery can return after trust is established.
+        | This note is intentionally longer than a node label because it captures service tone, not just a task.
     - Assets #reference [id:lantern/launch/assets]
       - teaser stills and route teaser cards #todo @status:todo @owner:leah
       - rehearsal photo selects #todo @status:todo @owner:mira
@@ -248,6 +268,11 @@
       - cut complexity before cutting emotional clarity
       - keep one fallback per fragile moment
       - update guides, launch materials, and training together whenever a route changes
+      - rain route recovery note #reference @doc:long [id:lantern/risks/recovery/rain-route]
+        | The rain plan should not feel like a lesser version of the show. It should feel like the city changed its mind and the studio was ready for that mood.
+        | Operationally, the fallback needs shorter walking spans, clearer rendezvous points, waterproofed field cards, and a steward at every ambiguous turn. Creatively, it can lean into windows, reflections, ferry horns, and indoor thresholds.
+        | The go/no-go trigger must be decided before guests arrive. Once guests are present, the team should communicate a single confident plan rather than debating weather in front of the audience.
+        | This detail should stay near risk recovery because it is both a logistics plan and a tone guideline.
     - Watch list #reference [id:lantern/risks/watch]
       - signage legibility in rain
       - guest pacing between station encounters

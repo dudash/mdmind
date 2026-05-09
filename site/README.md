@@ -21,6 +21,9 @@ archives and update their SHA-256 values in the skills index.
 
 Assets:
 
-- `assets/novel-focus-branch.png`
+- `assets/lantern-natural-nav.png`
+- `assets/lantern-focused-views.png`
+- `assets/lantern-reading-mode.png`
+- `assets/lantern-spatial-canvas.png`
 
 If you want to publish it with GitHub Pages, the included workflow deploys the `site/` directory as a Pages artifact.
