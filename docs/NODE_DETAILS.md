@@ -49,6 +49,7 @@ Use:
 
 - `d` to open the detail editor for the focused node
 - `Enter` to add a new line
+- `Ctrl+K` to delete the current line
 - `Ctrl+S` to save
 - `Esc` to cancel
 

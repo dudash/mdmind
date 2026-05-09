@@ -1,0 +1,22 @@
+{
+  "name": "mdmind",
+  "url": "https://mdmind.io/",
+  "description": "Local-first plain-text maps for structured thinking, with a full-screen TUI, a CLI, and an Agent Skills pack.",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/dudash/mdmind",
+  "latest_release": "https://github.com/dudash/mdmind/releases/latest",
+  "llms_txt": "https://mdmind.io/llms.txt",
+  "sitemap": "https://mdmind.io/sitemap.xml",
+  "agent_skills": "https://mdmind.io/.well-known/agent-skills/index.json",
+  "capabilities": {
+    "static_site": true,
+    "local_cli": true,
+    "local_tui": true,
+    "agent_skills": true,
+    "hosted_api": false,
+    "oauth": false,
+    "mcp_server": false,
+    "webmcp": false
+  },
+  "notes": "mdmind.io is a public documentation and download site. Install mdmind locally before using the CLI or TUI."
+}

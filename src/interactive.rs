@@ -99,6 +99,15 @@ impl ViewMode {
         }
     }
 
+    fn lamp_label(self) -> &'static str {
+        match self {
+            Self::FullMap => "FULL MAP",
+            Self::FocusBranch => "FOCUS BRANCH",
+            Self::SubtreeOnly => "SUBTREE ONLY",
+            Self::FilteredFocus => "FILTERED FOCUS",
+        }
+    }
+
     fn next(self, has_filter: bool) -> Self {
         match (self, has_filter) {
             (Self::FullMap, _) => Self::FocusBranch,
@@ -451,6 +460,7 @@ impl PaletteItemKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HelpTopic {
     StartHere,
+    TuiTour,
     Outliner,
     Agents,
     Navigation,
@@ -470,7 +480,8 @@ enum HelpTopic {
 impl HelpTopic {
     fn title(self) -> &'static str {
         match self {
-            Self::StartHere => "Start Here",
+            Self::StartHere => "Getting Started",
+            Self::TuiTour => "Get Familiar With The TUI",
             Self::Outliner => "Using mdmind As An Outliner",
             Self::Agents => "Using mdmind With Agents",
             Self::Navigation => "Navigation",
@@ -479,7 +490,7 @@ impl HelpTopic {
             Self::Search => "Search And Browse",
             Self::Views => "View Modes",
             Self::Palette => "Command Palette",
-            Self::Safety => "Safety And History",
+            Self::Safety => "Saving And Safety",
             Self::Themes => "Themes",
             Self::Mindmap => "Visual Mindmap",
             Self::Syntax => "Tags And Metadata",
@@ -490,12 +501,13 @@ impl HelpTopic {
 
     fn summary(self) -> &'static str {
         match self {
-            Self::StartHere => "Learn the core mental model and the first few things worth trying.",
+            Self::StartHere => "Welcome, first steps, and a few small experiments to try next.",
+            Self::TuiTour => "Learn the map, focus panels, bars, and overlays in the live TUI.",
             Self::Outliner => {
                 "Use mdmind as a calm, keyboard-first outliner before you think about maps."
             }
             Self::Agents => {
-                "Use mdmind as a structured output format for agent planning, synthesis, and handoff."
+                "Use mdmind with agent skills, TODO maps, and shared branch decomposition."
             }
             Self::Navigation => "Move through the tree, jump quickly, and open major overlays.",
             Self::Editing => "Add, rename, delete, and reshape branches without leaving the map.",
@@ -507,7 +519,7 @@ impl HelpTopic {
             Self::Palette => {
                 "Jump to actions, places, views, relations, and help from one surface."
             }
-            Self::Safety => "Undo, redo, checkpoints, autosave, and recent restore history.",
+            Self::Safety => "Save modes, undo, redo, checkpoints, and recent restore history.",
             Self::Themes => "Change the visual surface without leaving the map.",
             Self::Mindmap => "Inspect the current working set visually and export it as a PNG.",
             Self::Syntax => "Use lightweight inline structure for grouping and structured fields.",
@@ -523,13 +535,16 @@ impl HelpTopic {
     fn hint(self) -> &'static str {
         match self {
             Self::StartHere => {
-                "Intro guide for first-time users, first steps, and what matters most."
+                "Intro guide for first-time users: first steps, next steps, and what can wait."
+            }
+            Self::TuiTour => {
+                "A simple guide to the important parts of the mdmind terminal interface."
             }
             Self::Outliner => {
                 "User guide for people who think in outlines, notes, plans, and writing structures."
             }
             Self::Agents => {
-                "User guide for asking agents to create, validate, and hand off mdmind maps."
+                "User guide for asking agents to use skills, decompose work, and fill in map branches."
             }
             Self::Navigation => "User guide plus movement keys and large-map wayfinding tips.",
             Self::Editing => "User guide plus editing keys, undo safety, and restructuring tips.",
@@ -539,7 +554,7 @@ impl HelpTopic {
             Self::Search => "User guide plus query keys, browse controls, ids, and filtering tips.",
             Self::Views => "User guide plus view-mode keys and focused-workflow tips.",
             Self::Palette => "User guide plus jump patterns, previews, and help recipes.",
-            Self::Safety => "User guide plus undo, checkpoints, autosave, and restore habits.",
+            Self::Safety => "User guide plus save modes, undo, checkpoints, and restore habits.",
             Self::Themes => "User guide plus theme controls and calmer-surface tips.",
             Self::Mindmap => "User guide plus visual-map keys and export tips.",
             Self::Syntax => "User guide plus tags and metadata reference and authoring tips.",
@@ -553,13 +568,16 @@ impl HelpTopic {
     fn keywords(self) -> &'static str {
         match self {
             Self::StartHere => {
-                "start begin beginner intro getting started first steps first five minutes overview basics new user"
+                "start begin beginner intro getting started first steps first five minutes overview basics new user welcome next steps"
+            }
+            Self::TuiTour => {
+                "tui screen tour layout map outline focus panel side lanes context top bar status lamps keybar overlays palette search help visual map terminal interface"
             }
             Self::Outliner => {
                 "outliner outline outlining rows hierarchy notes nested notes planning writing research checklist omnioutliner sections branches details minimal mode reading"
             }
             Self::Agents => {
-                "agent agents ai llm assistant codex claude chatgpt workflow prompt prompts handoff synthesis planning research structured output skills skill validation json export"
+                "agent agents ai llm assistant codex claude chatgpt workflow prompt prompts handoff synthesis planning research structured output skills skill todo decomposition joint branch details append extend validation json export"
             }
             Self::Navigation => {
                 "navigate movement arrows focus jump root open id palette hotkeys relations backlinks related cross links"
@@ -601,7 +619,10 @@ impl HelpTopic {
     fn guide_intro(self) -> &'static str {
         match self {
             Self::StartHere => {
-                "If you are new to mdmind, keep the mental model small: one line is one node, focus is the center of the UI, and view or search can calm things down when the tree gets large."
+                "Welcome to mdmind. Start small: move around, add or edit a branch, search when the tree gets noisy, and use the palette when you know what you want."
+            }
+            Self::TuiTour => {
+                "The TUI is built around the map first. The outline is where you move and edit; the surrounding surfaces explain context, state, and shortcuts without replacing the map."
             }
             Self::Outliner => {
                 "You can use mdmind as an outliner long before you care about visual mind maps. The tree is the real working surface, and features like details, focused views, minimal mode, and search all support that outline-first workflow."
@@ -653,7 +674,18 @@ impl HelpTopic {
             Self::StartHere => &[
                 "You do not need every feature on day one. Start with the core loop: move, add or edit a node, search when the map gets noisy, and use the palette when you know what you want.",
                 "A good first map is small and concrete. One project, one trip, one feature area, one story outline. Add ids and relations later, once the shape starts to matter.",
+                "Good next steps are small experiments: pick a theme that feels comfortable, try minimal mode after the keybar feels familiar, turn on reading mode for a node with details, add a tag like #todo or #idea, then filter by it with search.",
+                "Once tags feel natural, try one metadata field such as @status:active or @owner:mira. Before a bigger restructure, create a checkpoint so you can explore without being timid.",
                 "If you do not want a blank file, start from mdm init and one of the built-in templates.",
+            ],
+            Self::TuiTour => &[
+                "Start with the map. The outline is the main working surface: move through visible rows, expand or collapse branches, add or edit nodes, and keep your attention on the current branch.",
+                "The focus panel explains the selected node. It shows the node label, tags, metadata, id, line number, relation counts, and child counts so you can inspect one branch without leaving the outline.",
+                "The side lanes are supporting context. Parent shows where you came from, Backlinks shows incoming references, and Children previews what sits below the current node.",
+                "The top bar is an instrument panel. Its lamps show view and filter state first, then minimal or reading mode, then save mode and whether the file is modified.",
+                "The path line is your breadcrumb. It shows where the focused branch lives in the map, which matters more as the tree gets deeper.",
+                "The bottom status tells you what just happened and what context is active. The keybar is a reminder strip for common actions; minimal mode hides it when you want a quieter surface.",
+                "Overlays are temporary work surfaces. Search narrows the map, the palette jumps to intent, help answers questions, and the visual map gives a second lens on the current working set.",
             ],
             Self::Outliner => &[
                 "The simplest way to think about mdmind is as a structured outliner with better navigation, filtering, and long-term memory. One line is one row in the outline. Children create hierarchy. If you are used to nested notes, this should feel natural. The TUI just makes moving through that outline feel fast.",
@@ -662,6 +694,9 @@ impl HelpTopic {
             ],
             Self::Agents => &[
                 "Ask agents for native mdmind maps when you want a structured plan, research synthesis, writing outline, decision tree, or project breakdown that a human will keep working in. The format is better than a prose blob when branch structure, tags, metadata, ids, or cross-links actually matter.",
+                "When your agent environment supports skills, name the skill you want. Use mdmind-map-authoring for creating or restructuring maps, and mdm-cli-inspection for validation, search, export, and structural checks.",
+                "A good collaborative shape is a TODO map. Keep durable branches short, then ask agents to append child tasks and fill in detail lines under the branch they own instead of replacing the whole file.",
+                "For larger work, decompose the map first: one branch per workstream, owner, question, or artifact. Agents can then extend their branch with notes, decisions, risks, and next actions while the parent map stays readable.",
                 "Do not force every agent task into a map. Plain Markdown is still better for short prose answers, loose brainstorming, or temporary scratch notes that do not need long-term structure.",
                 "A good agent workflow is: generate the map, run mdm validate, inspect it with mdm view or mdm find, then open it in mdmind for human cleanup. If the output needs machine use later, mdm export --format json is the clean bridge.",
             ],
@@ -722,13 +757,23 @@ impl HelpTopic {
         match self {
             Self::StartHere => &[
                 ("↑ / ↓", "Move through visible nodes"),
+                ("← / →", "Collapse or expand, or move across the tree"),
                 ("a / e", "Add a child or edit the current node"),
                 ("/", "Search by text, tags, or metadata"),
                 (": / Ctrl+P", "Open the command palette"),
                 ("z / Z", "Collapse or expand the current working scope"),
+                ("s / S", "Save now or toggle AUTOSAVE / KEYSAVE"),
                 ("?", "Open built-in help"),
                 ("m", "Open the spatial canvas"),
                 ("M", "Open the legacy visual mindmap"),
+            ],
+            Self::TuiTour => &[
+                ("↑ / ↓", "Move through the map outline"),
+                ("← / →", "Collapse, expand, or move across the tree"),
+                (": / Ctrl+P", "Open the palette overlay"),
+                ("/", "Open the search overlay"),
+                ("?", "Open or close help"),
+                ("m", "Open the spatial canvas"),
             ],
             Self::Outliner => &[
                 ("↑ / ↓", "Move through outline rows"),
@@ -940,7 +985,15 @@ impl HelpTopic {
         match self {
             Self::StartHere => &[
                 "If you are just learning, focus on movement, add or edit, search, and the palette first.",
+                "Treat themes, minimal mode, and reading mode as comfort settings you can try early; treat ids and relations as structure you can add later.",
+                "Open Get Familiar With The TUI when you want a simple tour of the map, panels, bars, and overlays.",
                 "You can adopt ids and relations later. They are power features, not prerequisites.",
+            ],
+            Self::TuiTour => &[
+                "If you feel lost, return your eyes to the outline first. The other surfaces exist to explain or narrow the map.",
+                "The focus panel is the best place to inspect one selected node without changing anything.",
+                "The top lamps are a quick instrument panel: view and filter first, surface settings next, save and modified state last.",
+                "Overlays are temporary. Esc usually brings you back to the main map surface.",
             ],
             Self::Outliner => &[
                 "If you mostly think in outlines, ignore ids, relations, and the mindmap at first. The core outliner loop is already strong without them.",
@@ -950,6 +1003,8 @@ impl HelpTopic {
             ],
             Self::Agents => &[
                 "Ask the agent for concise node labels first. Use detail lines only when a branch genuinely needs prose, rationale, or quoted material.",
+                "If skills are available, ask for the map-authoring skill when creating or restructuring a map and the CLI-inspection skill when checking one.",
+                "For shared work, assign each agent a branch. Let them append child tasks and details under that branch instead of rewriting unrelated parts of the map.",
                 "Prefer a few stable keys like @owner, @status, and [id:...] over lots of one-off metadata invented in one run.",
                 "Use mdm validate as the contract check before you trust a generated map.",
                 "If humans will keep editing the file, optimize for readable labels and stable ids, not maximal structure everywhere.",
@@ -1026,7 +1081,7 @@ impl HelpTopic {
             Self::Details => Some("| This branch still depends on partner auth."),
             Self::Outliner => Some("Minimal mode + Focus Branch + node details"),
             Self::Agents => {
-                Some("Turn these notes into an mdmind map with ids on durable branches.")
+                Some("Use mdmind-map-authoring. Create a TODO map and fill branch details.")
             }
             Self::Syntax => Some("API Design #backend @status:todo @owner:mira"),
             Self::Ids => Some("API Design #backend [id:product/api-design]"),
@@ -1038,26 +1093,27 @@ impl HelpTopic {
     fn order_rank(self) -> usize {
         match self {
             Self::StartHere => 0,
-            Self::Outliner => 1,
-            Self::Agents => 2,
-            Self::Navigation => 3,
-            Self::Editing => 4,
-            Self::Details => 5,
-            Self::Search => 6,
-            Self::Views => 7,
-            Self::Palette => 8,
-            Self::Safety => 9,
-            Self::Syntax => 10,
-            Self::Ids => 11,
-            Self::Relations => 12,
-            Self::Themes => 13,
-            Self::Mindmap => 14,
+            Self::TuiTour => 1,
+            Self::Outliner => 2,
+            Self::Agents => 3,
+            Self::Navigation => 4,
+            Self::Editing => 5,
+            Self::Details => 6,
+            Self::Search => 7,
+            Self::Views => 8,
+            Self::Palette => 9,
+            Self::Safety => 10,
+            Self::Syntax => 11,
+            Self::Ids => 12,
+            Self::Relations => 13,
+            Self::Themes => 14,
+            Self::Mindmap => 15,
         }
     }
 
     fn track_label(self) -> &'static str {
         match self {
-            Self::StartHere | Self::Outliner | Self::Agents => "Basics",
+            Self::StartHere | Self::TuiTour | Self::Outliner | Self::Agents => "Basics",
             Self::Navigation
             | Self::Editing
             | Self::Details
@@ -1151,7 +1207,9 @@ impl PaletteRecipe {
             Self::WorkInsideBranch => "Isolate the current branch as a rooted workspace",
             Self::BrowseFacets => "Browse tags, metadata, and deep-link ids",
             Self::SaveWorkingSet => "Name the current filter as a reusable saved view",
-            Self::VisualizeCurrentView => "Open the mindmap on the current visible working set",
+            Self::VisualizeCurrentView => {
+                "Open the exportable visual mindmap on the current visible working set"
+            }
         }
     }
 
@@ -1198,7 +1256,7 @@ impl PaletteRecipe {
                 "Open the saved-view prompt for the current active filter.\nUse this after you have a working query you expect to revisit."
             }
             Self::VisualizeCurrentView => {
-                "Open the visual mindmap for the current view and filter scope.\nGood for a quick spatial read or for exporting a polished PNG."
+                "Open the legacy visual mindmap for the current view and filter scope.\nGood for a quick static read or for exporting a polished PNG. Use `m` for the navigable spatial canvas."
             }
         }
     }
@@ -1804,6 +1862,22 @@ impl PromptState {
         self.cursor = next_boundary(&self.value, self.cursor);
     }
 
+    fn move_word_left(&mut self) {
+        self.cursor = previous_word_boundary(&self.value, self.cursor);
+    }
+
+    fn move_word_right(&mut self) {
+        self.cursor = next_word_boundary(&self.value, self.cursor);
+    }
+
+    fn move_to_start(&mut self) {
+        self.cursor = 0;
+    }
+
+    fn move_to_end(&mut self) {
+        self.cursor = self.value.len();
+    }
+
     fn insert(&mut self, character: char) {
         self.value.insert(self.cursor, character);
         self.cursor += character.len_utf8();
@@ -1824,6 +1898,50 @@ impl PromptState {
         }
         let next = next_boundary(&self.value, self.cursor);
         self.value.replace_range(self.cursor..next, "");
+    }
+
+    fn delete_word_left(&mut self) {
+        let previous = previous_word_boundary(&self.value, self.cursor);
+        self.value.replace_range(previous..self.cursor, "");
+        self.cursor = previous;
+    }
+
+    fn delete_word_right(&mut self) {
+        let next = next_word_boundary(&self.value, self.cursor);
+        self.value.replace_range(self.cursor..next, "");
+    }
+
+    fn delete_to_line_end(&mut self) {
+        if self.cursor >= self.value.len() {
+            return;
+        }
+        let mut end = line_end(&self.value, self.cursor);
+        if end == self.cursor && end < self.value.len() {
+            end += 1;
+        }
+        self.value.replace_range(self.cursor..end, "");
+    }
+
+    fn delete_current_line(&mut self) {
+        if self.value.is_empty() {
+            return;
+        }
+
+        let start = line_start(&self.value, self.cursor);
+        let end = line_end(&self.value, self.cursor);
+        let (delete_start, delete_end, cursor) = if start == 0 {
+            let delete_end = if end < self.value.len() { end + 1 } else { end };
+            (0, delete_end, 0)
+        } else if end + 1 == self.value.len() {
+            (start - 1, self.value.len(), start - 1)
+        } else if end < self.value.len() {
+            (start, end + 1, start)
+        } else {
+            (start - 1, end, start - 1)
+        };
+
+        self.value.replace_range(delete_start..delete_end, "");
+        self.cursor = cursor.min(self.value.len());
     }
 
     fn move_line_start(&mut self) {
@@ -2423,8 +2541,12 @@ impl TuiApp {
                 return Ok(true);
             }
             KeyCode::Char('0') | KeyCode::Char('c') => {
+                let focus_path = self.editor.focus_path().to_vec();
+                canvas.anchor_layout_to_focus(&focus_path);
+                canvas.selected_path = focus_path;
+                canvas.clear_boundary();
                 canvas.recenter();
-                self.set_status(StatusTone::Info, "Recentered the spatial canvas.");
+                self.set_status(StatusTone::Info, "Centered the current node.");
             }
             KeyCode::Char('+') | KeyCode::Char('=') => {
                 canvas.zoom_in();
@@ -3007,16 +3129,64 @@ impl TuiApp {
                     submit = Some((prompt.mode, prompt.value.trim().to_string()));
                 }
             }
+            KeyCode::Backspace
+                if key.modifiers.contains(KeyModifiers::ALT)
+                    || key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                prompt.delete_word_left();
+            }
+            KeyCode::Delete
+                if key.modifiers.contains(KeyModifiers::ALT)
+                    || key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                prompt.delete_word_right();
+            }
             KeyCode::Backspace => prompt.backspace(),
             KeyCode::Delete => prompt.delete(),
+            KeyCode::Left
+                if key.modifiers.contains(KeyModifiers::ALT)
+                    || key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                prompt.move_word_left();
+            }
+            KeyCode::Right
+                if key.modifiers.contains(KeyModifiers::ALT)
+                    || key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                prompt.move_word_right();
+            }
             KeyCode::Left => prompt.move_left(),
             KeyCode::Right => prompt.move_right(),
             KeyCode::Up if multiline => prompt.move_up(),
             KeyCode::Down if multiline => prompt.move_down(),
+            KeyCode::Up => prompt.move_to_start(),
+            KeyCode::Down => prompt.move_to_end(),
+            KeyCode::Home if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                prompt.move_to_start();
+            }
+            KeyCode::End if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                prompt.move_to_end();
+            }
             KeyCode::Home if multiline => prompt.move_line_start(),
             KeyCode::End if multiline => prompt.move_line_end(),
-            KeyCode::Home => prompt.cursor = 0,
-            KeyCode::End => prompt.cursor = prompt.value.len(),
+            KeyCode::Home => prompt.move_to_start(),
+            KeyCode::End => prompt.move_to_end(),
+            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                prompt.move_line_start();
+            }
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                prompt.move_line_end();
+            }
+            KeyCode::Char(character)
+                if multiline
+                    && character.eq_ignore_ascii_case(&'k')
+                    && key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                prompt.delete_current_line();
+            }
+            KeyCode::Char('k') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                prompt.delete_to_line_end();
+            }
             KeyCode::Char(character)
                 if !key.modifiers.contains(KeyModifiers::CONTROL)
                     && !key.modifiers.contains(KeyModifiers::ALT) =>
@@ -3814,7 +3984,10 @@ impl TuiApp {
                 }
                 PaletteRecipe::VisualizeCurrentView => {
                     self.open_mindmap_overlay();
-                    self.set_status(StatusTone::Info, "Recipe applied: visual mindmap open.");
+                    self.set_status(
+                        StatusTone::Info,
+                        "Recipe applied: legacy visual mindmap open.",
+                    );
                 }
             },
             PaletteTarget::QueryRecipe {
@@ -4109,6 +4282,7 @@ impl TuiApp {
                 matches!(
                     topic,
                     HelpTopic::StartHere
+                        | HelpTopic::TuiTour
                         | HelpTopic::Outliner
                         | HelpTopic::Details
                         | HelpTopic::Search
@@ -4830,6 +5004,7 @@ impl TuiApp {
         let query = raw.trim().to_lowercase();
         let mut topics = [
             HelpTopic::StartHere,
+            HelpTopic::TuiTour,
             HelpTopic::Outliner,
             HelpTopic::Agents,
             HelpTopic::Navigation,
@@ -5986,27 +6161,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
     frame.render_widget(block, area);
 
     let breadcrumb = app.editor.breadcrumb();
-    let badge = if app.editor.dirty() {
-        "MODIFIED"
-    } else {
-        "SAVED"
-    };
-    let badge_color = if app.editor.dirty() {
-        PALETTE.warn
-    } else {
-        PALETTE.accent
-    };
-    let autosave_badge = if app.autosave {
-        (" AUTOSAVE ", PALETTE.sky)
-    } else {
-        (" MANUAL ", PALETTE.border)
-    };
-    let view_badge = format!(" {} ", app.view_mode.label());
-    let (view_bg, view_fg) = view_badge_style(app.view_mode, PALETTE);
-    let filter_badge = app
-        .filter
-        .as_ref()
-        .map(|filter| format!(" FILTER {} ", filter.matches.len()));
+    let status_lamps = header_status_lamps(app, PALETTE);
     if minimal {
         let map_name = app
             .map_path
@@ -6022,31 +6177,14 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw("  "),
-            Span::styled(map_name, Style::default().fg(PALETTE.text)),
-            Span::raw("  "),
-            status_chip("STATE", badge, badge_color, PALETTE.background),
-            Span::raw(" "),
-            status_chip(
-                "SAVE",
-                if app.autosave { "auto" } else { "manual" },
-                PALETTE.surface_alt,
-                PALETTE.text,
-            ),
-            Span::raw(" "),
-            status_chip("VIEW", app.view_mode.label(), view_bg, view_fg),
         ];
-        if let Some(filter) = &app.filter {
-            line.push(Span::raw(" "));
-            line.push(status_chip(
-                "FILTER",
-                &filter.matches.len().to_string(),
-                PALETTE.surface_alt,
-                PALETTE.text,
-            ));
-        }
-        frame.render_widget(
-            Paragraph::new(Line::from(line)).wrap(Wrap { trim: false }),
+        line.extend(status_lamps);
+        render_header_top_row(
+            frame,
             inner,
+            line,
+            map_name,
+            Style::default().fg(PALETTE.text),
         );
         return;
     }
@@ -6063,54 +6201,40 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw("  "),
-        Span::styled(
-            app.map_path.display().to_string(),
-            Style::default()
-                .fg(PALETTE.text)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-        Span::styled(
-            format!(" {badge} "),
-            Style::default()
-                .fg(PALETTE.background)
-                .bg(badge_color)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-        Span::styled(
-            autosave_badge.0,
-            Style::default()
-                .fg(PALETTE.background)
-                .bg(autosave_badge.1)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-        Span::styled(
-            view_badge,
-            Style::default()
-                .fg(view_fg)
-                .bg(view_bg)
-                .add_modifier(Modifier::BOLD),
-        ),
     ];
-    if let Some(filter_badge) = filter_badge {
-        header_spans.push(Span::raw("  "));
-        header_spans.push(Span::styled(
-            filter_badge,
-            Style::default()
-                .fg(PALETTE.background)
-                .bg(PALETTE.warn)
-                .add_modifier(Modifier::BOLD),
-        ));
+    header_spans.extend(status_lamps);
+    let top_row = Rect {
+        x: inner.x,
+        y: inner.y,
+        width: inner.width,
+        height: 1,
+    };
+    render_header_top_row(
+        frame,
+        top_row,
+        header_spans,
+        app.map_path.display().to_string(),
+        Style::default()
+            .fg(PALETTE.text)
+            .add_modifier(Modifier::BOLD),
+    );
+
+    if inner.height > 1 {
+        let breadcrumb_row = Rect {
+            x: inner.x,
+            y: inner.y + 1,
+            width: inner.width,
+            height: inner.height - 1,
+        };
+        frame.render_widget(
+            Paragraph::new(header_breadcrumb_line(
+                &breadcrumb,
+                PALETTE,
+                breadcrumb_row.width as usize,
+            )),
+            breadcrumb_row,
+        );
     }
-
-    let lines = vec![
-        Line::from(header_spans),
-        header_breadcrumb_line(&breadcrumb, PALETTE, inner.width as usize),
-    ];
-
-    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
 fn header_breadcrumb_line(
@@ -6142,6 +6266,78 @@ fn header_breadcrumb_line(
     }
 
     Line::from(spans)
+}
+
+fn render_header_top_row(
+    frame: &mut Frame,
+    area: Rect,
+    left_spans: Vec<Span<'static>>,
+    identity: String,
+    identity_style: Style,
+) {
+    let left_width = spans_render_width(&left_spans);
+    let raw_identity_width = identity.chars().count();
+    let available_for_identity = (area.width as usize).saturating_sub(left_width + 2);
+    let identity_width = raw_identity_width.min(available_for_identity);
+
+    if raw_identity_width > available_for_identity && identity_width < 8 {
+        frame.render_widget(Paragraph::new(Line::from(left_spans)), area);
+        return;
+    }
+
+    let left_area_width = (area.width as usize)
+        .saturating_sub(identity_width + 2)
+        .min(area.width as usize) as u16;
+    let left_area = Rect {
+        x: area.x,
+        y: area.y,
+        width: left_area_width,
+        height: area.height,
+    };
+    let identity_area = Rect {
+        x: area.x + left_area_width + 2,
+        y: area.y,
+        width: identity_width as u16,
+        height: area.height,
+    };
+    let identity = if raw_identity_width > identity_width {
+        truncate_leading(&identity, identity_width)
+    } else {
+        identity
+    };
+
+    frame.render_widget(Paragraph::new(Line::from(left_spans)), left_area);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(identity, identity_style)))
+            .alignment(Alignment::Right),
+        identity_area,
+    );
+}
+
+fn spans_render_width(spans: &[Span<'_>]) -> usize {
+    spans.iter().map(|span| span.content.chars().count()).sum()
+}
+
+fn truncate_leading(value: &str, max_width: usize) -> String {
+    if value.chars().count() <= max_width {
+        return value.to_string();
+    }
+    if max_width == 0 {
+        return String::new();
+    }
+    if max_width == 1 {
+        return "…".to_string();
+    }
+
+    let tail = value
+        .chars()
+        .rev()
+        .take(max_width - 1)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<String>();
+    format!("…{tail}")
 }
 
 fn truncate_breadcrumb_segments(breadcrumb: &[String], max_width: usize) -> Vec<String> {
@@ -6270,13 +6466,68 @@ fn breadcrumb_separator(left_bg: Color, right_bg: Color) -> Span<'static> {
     }
 }
 
-fn view_badge_style(view_mode: ViewMode, palette: Palette) -> (Color, Color) {
-    match view_mode {
-        ViewMode::FullMap => (palette.sky, palette.background),
-        ViewMode::FocusBranch => (palette.accent, palette.background),
-        ViewMode::SubtreeOnly => (palette.border, palette.text),
-        ViewMode::FilteredFocus => (palette.warn, palette.background),
+fn header_status_lamps(app: &TuiApp, palette: Palette) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+
+    push_header_lamp(&mut spans, app.view_mode.lamp_label(), true, palette);
+    push_header_lamp(
+        &mut spans,
+        app.filter
+            .as_ref()
+            .map(|filter| format!("FILTER {}", filter.matches.len()))
+            .unwrap_or_else(|| "FILTER".to_string()),
+        app.filter.is_some(),
+        palette,
+    );
+    push_header_lamp_separator(&mut spans, palette);
+    push_header_lamp(&mut spans, "MINIMAL", app.ui_settings.minimal_mode, palette);
+    push_header_lamp(&mut spans, "READING", app.ui_settings.reading_mode, palette);
+    push_header_lamp_separator(&mut spans, palette);
+    push_header_lamp(
+        &mut spans,
+        if app.autosave { "AUTOSAVE" } else { "KEYSAVE" },
+        true,
+        palette,
+    );
+    push_header_lamp(&mut spans, "MODIFIED", app.editor.dirty(), palette);
+
+    spans
+}
+
+fn push_header_lamp(
+    spans: &mut Vec<Span<'static>>,
+    label: impl Into<String>,
+    active: bool,
+    palette: Palette,
+) {
+    if !spans.is_empty() {
+        spans.push(Span::raw(" "));
     }
+    spans.push(status_lamp(label, active, palette));
+}
+
+fn push_header_lamp_separator(spans: &mut Vec<Span<'static>>, palette: Palette) {
+    if !spans.is_empty() {
+        spans.push(Span::raw(" "));
+    }
+    spans.push(Span::styled(
+        if ascii_accents_enabled() { "|" } else { "│" },
+        Style::default().fg(palette.border),
+    ));
+    spans.push(Span::raw(" "));
+}
+
+fn status_lamp(label: impl Into<String>, active: bool, palette: Palette) -> Span<'static> {
+    let style = if active {
+        Style::default()
+            .fg(palette.background)
+            .bg(palette.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(palette.muted).bg(palette.surface_alt)
+    };
+
+    Span::styled(format!(" {} ", label.into()), style)
 }
 
 fn render_body(frame: &mut Frame, area: Rect, app: &TuiApp) {
@@ -6774,7 +7025,7 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                         if app.autosave {
                             "autosave after each structural edit"
                         } else {
-                            "manual save only"
+                            "keysave: press s to save"
                         },
                         Style::default().fg(PALETTE.text),
                     ),
@@ -6979,23 +7230,34 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let PALETTE = app.theme_colors();
     let status = app.status_model();
     if app.ui_settings.minimal_mode {
-        let mut line = vec![
-            Span::styled(
-                match status.tone {
-                    StatusTone::Info => "info",
-                    StatusTone::Success => "saved",
-                    StatusTone::Warning => "warn",
-                    StatusTone::Error => "error",
-                },
-                Style::default()
-                    .fg(match status.tone {
-                        StatusTone::Info => PALETTE.sky,
-                        StatusTone::Success => PALETTE.accent,
-                        StatusTone::Warning => PALETTE.warn,
-                        StatusTone::Error => PALETTE.danger,
-                    })
-                    .add_modifier(Modifier::BOLD),
-            ),
+        let mut line = vec![Span::styled(
+            match status.tone {
+                StatusTone::Info => "info",
+                StatusTone::Success => "saved",
+                StatusTone::Warning => "warn",
+                StatusTone::Error => "error",
+            },
+            Style::default()
+                .fg(match status.tone {
+                    StatusTone::Info => PALETTE.sky,
+                    StatusTone::Success => PALETTE.accent,
+                    StatusTone::Warning => PALETTE.warn,
+                    StatusTone::Error => PALETTE.danger,
+                })
+                .add_modifier(Modifier::BOLD),
+        )];
+        if let Some(filter) = &status.filter_summary {
+            line.push(Span::raw("  "));
+            line.push(Span::styled(
+                format!("filter {filter}"),
+                Style::default().fg(if motion_level(MotionTarget::FilterResult) > 0 {
+                    PALETTE.warn
+                } else {
+                    PALETTE.accent
+                }),
+            ));
+        }
+        line.extend([
             Span::raw("  "),
             Span::styled(status.message, Style::default().fg(PALETTE.text)),
             Span::raw("  "),
@@ -7016,14 +7278,7 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     PALETTE.muted
                 }),
             ),
-        ];
-        if let Some(filter) = &status.filter_summary {
-            line.push(Span::raw("  "));
-            line.push(Span::styled(
-                format!("filter {filter}"),
-                Style::default().fg(PALETTE.accent),
-            ));
-        }
+        ]);
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(PALETTE.border))
@@ -7051,10 +7306,9 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" "),
-        Span::styled(status.message, Style::default().fg(PALETTE.text)),
     ];
     if let Some(filter) = &status.filter_summary {
-        headline.push(Span::raw(" "));
+        headline.push(Span::raw("  "));
         headline.push(status_chip(
             "FILTER",
             filter,
@@ -7066,6 +7320,11 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
             PALETTE.background,
         ));
     }
+    headline.push(Span::raw(" "));
+    headline.push(Span::styled(
+        status.message,
+        Style::default().fg(PALETTE.text),
+    ));
 
     let mut context = vec![status_chip(
         "FOCUS",
@@ -8660,6 +8919,9 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
                     .to_string()
             }
         }
+        HelpTopic::TuiTour => {
+            "start with the outline; use the surrounding panels and bars as context".to_string()
+        }
         HelpTopic::Outliner => {
             if app.ui_settings.minimal_mode {
                 "minimal mode is on, which already fits the calmer outliner workflow well"
@@ -8701,7 +8963,7 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
             if app.autosave {
                 "autosave is on, so structural edits write immediately".to_string()
             } else {
-                "manual save mode is active, so press s after edits".to_string()
+                "keysave is active, so press s after edits you want to keep".to_string()
             }
         }
         HelpTopic::Details => app
@@ -8752,7 +9014,7 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
                 )
             } else {
                 format!(
-                    "manual save mode with {} undo step(s) and {} checkpoint(s) available",
+                    "keysave mode with {} undo step(s) and {} checkpoint(s) available",
                     app.undo_history.len(),
                     app.checkpoints.checkpoints.len()
                 )
@@ -9821,7 +10083,7 @@ fn render_detail_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptSt
                 .style(Style::default().bg(palette.surface)),
         );
         frame.render_widget(
-            Paragraph::new("Enter: new line  ·  ^S: save  ·  Esc: cancel")
+            Paragraph::new("Enter:new line · Ctrl+S:save · Alt+Left/Right:words · Alt+Backspace:del word · Ctrl+K:del line · Esc:cancel")
                 .style(Style::default().fg(palette.muted)),
             sections[2],
         );
@@ -9882,7 +10144,7 @@ fn render_detail_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptSt
         sections[2],
     );
     frame.render_widget(
-        Paragraph::new("Enter: new line  ·  ^S: save  ·  Esc: cancel")
+        Paragraph::new("Enter:new line · Ctrl+S:save · Alt+Left/Right:words · Alt+Backspace:del word · Ctrl+K:del line · Esc:cancel")
             .style(Style::default().fg(palette.muted))
             .wrap(Wrap { trim: false }),
         sections[3],
@@ -10082,10 +10344,12 @@ fn prompt_feedback_label(tone: PromptAssistTone) -> &'static str {
 fn prompt_footer_text(mode: PromptMode) -> Option<&'static str> {
     match mode {
         PromptMode::AddChild | PromptMode::AddSibling | PromptMode::AddRoot | PromptMode::Edit => {
-            Some("Single-line node syntax: Label #tag @key:value [id:path] [[target]].")
+            Some(
+                "Single-line node syntax: Label #tag @key:value [id:path] [[target]]. ↑/↓ jumps start/end; Alt+←/→ jumps words; Alt+Backspace deletes a word.",
+            )
         }
         PromptMode::EditDetail => Some(
-            "Details are stored below the node as | ... lines and stay separate from the one-line tree label.",
+            "Details are stored below the node as | ... lines. ↑/↓ moves lines; Alt+←/→ jumps words; Ctrl+K deletes the current line.",
         ),
         PromptMode::OpenId => Some("Ids come from [id:...] tokens on node lines."),
         PromptMode::SaveView => Some("Saves the current active filter under a reusable name."),
@@ -10634,10 +10898,9 @@ fn styled_detail_lines(view: &TextAreaView, palette: Palette) -> Vec<Line<'stati
                 return Line::from(vec![
                     Span::styled(line.clone(), Style::default().fg(palette.text)),
                     Span::styled(
-                        " ",
+                        if ascii_accents_enabled() { "|" } else { "▏" },
                         Style::default()
-                            .fg(palette.background)
-                            .bg(palette.accent)
+                            .fg(palette.accent)
                             .add_modifier(Modifier::BOLD),
                     ),
                 ]);
@@ -10782,6 +11045,16 @@ fn help_track_chip(label: &str, palette: Palette, selected: bool) -> Span<'stati
 
 fn help_preview_lines(app: &TuiApp, topic: HelpTopic) -> Vec<Line<'static>> {
     let palette = app.theme_colors();
+    if topic == HelpTopic::StartHere {
+        return help_getting_started_lines(app, palette);
+    }
+    if topic == HelpTopic::TuiTour {
+        return help_tui_tour_lines(app, palette);
+    }
+    if topic == HelpTopic::Agents {
+        return help_agents_lines(app, palette);
+    }
+
     let mut lines = vec![Line::from(Span::styled(
         topic.summary(),
         Style::default()
@@ -10844,6 +11117,277 @@ fn help_preview_lines(app: &TuiApp, topic: HelpTopic) -> Vec<Line<'static>> {
         ),
     ]));
     lines
+}
+
+fn help_getting_started_lines(app: &TuiApp, palette: Palette) -> Vec<Line<'static>> {
+    let mut lines = vec![Line::from(Span::styled(
+        "Welcome to mdmind. This is a keyboard-first place for shaping structured thoughts in plain text: outlines first, maps when helpful, and safety close at hand.",
+        Style::default()
+            .fg(palette.text)
+            .add_modifier(Modifier::ITALIC),
+    ))];
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading("First Five Minutes", palette.sky));
+    lines.extend(help_bullet_lines(
+        palette,
+        palette.sky,
+        &[
+            "Move with the arrow keys.",
+            "Press a to add a child, A to add a sibling, and e to edit nodes you have already made.",
+            "Press / and search for a normal word before learning tag or metadata syntax.",
+            "Press : or Ctrl+P when you know the branch, action, setting, or help topic you want.",
+            "Press s in KEYSAVE mode, or S to toggle AUTOSAVE.",
+            "Open Get Familiar With The TUI when you want a simple tour of the map and surrounding surfaces.",
+        ],
+    ));
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading("Next Steps", palette.warn));
+    lines.extend(help_bullet_lines(
+        palette,
+        palette.warn,
+        &[
+            "Pick a theme that feels comfortable for the kind of work you are doing.",
+            "Try minimal mode once the keybar feels familiar, and reading mode on a node with details.",
+            "Add a simple tag like #todo or #idea, then filter by it with search.",
+            "When tags feel natural, try one metadata field such as @status:active or @owner:mira.",
+            "Before moving, deleting, or reorganizing a big branch, create a checkpoint so you can restore the old shape if the experiment does not work.",
+        ],
+    ));
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading("Save For Later", palette.border));
+    lines.push(Line::from(Span::styled(
+        "Ids, relations, exports, and the visual map are useful later. You do not need them to have a good first session.",
+        Style::default().fg(palette.text),
+    )));
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading("Useful Keys", palette.sky));
+    for (command, description) in HelpTopic::StartHere.command_reference() {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{command:<18}"),
+                Style::default()
+                    .fg(palette.sky)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(*description, Style::default().fg(palette.text)),
+        ]));
+    }
+    lines.push(Line::from(""));
+
+    lines.push(Line::from(vec![
+        Span::styled("Right now ", Style::default().fg(palette.muted)),
+        Span::styled(
+            help_context_line(app, HelpTopic::StartHere),
+            Style::default().fg(palette.warn),
+        ),
+    ]));
+    lines
+}
+
+fn help_tui_tour_lines(app: &TuiApp, palette: Palette) -> Vec<Line<'static>> {
+    let mut lines = vec![Line::from(Span::styled(
+        "mdmind is designed to keep navigation and visualization clean for different working styles.",
+        Style::default()
+            .fg(palette.text)
+            .add_modifier(Modifier::ITALIC),
+    ))];
+    lines.push(Line::from(Span::styled(
+        "View settings persist per map, so each file can keep its own surface.",
+        Style::default()
+            .fg(palette.text)
+            .add_modifier(Modifier::ITALIC),
+    )));
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading("Screen Shape", palette.accent));
+    for row in [
+        "+------------------------------------------------------+",
+        "| top bar: state lamps, save, file                     |",
+        "| path: current branch                                 |",
+        "|                                                      |",
+        "| MAP OUTLINE                            | FOCUS       |",
+        "|  > root                                | selected    |",
+        "|    - branch                            | facts       |",
+        "|    - branch                            | context     |",
+        "|                                        | side lanes  |",
+        "|                                                      |",
+        "| status: latest result                  | keys        |",
+        "+------------------------------------------------------+",
+    ] {
+        lines.push(Line::from(Span::styled(
+            row,
+            Style::default().fg(palette.muted),
+        )));
+    }
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading("Start With The Map", palette.sky));
+    lines.extend(help_bullet_lines(
+        palette,
+        palette.sky,
+        &[
+            "Map outline: move through rows, expand or collapse branches, and add or edit nodes.",
+            "Focus panel: read the selected node's label, tags, metadata, id, line, relations, and child count.",
+            "Side lanes: use Parent, Backlinks, and Children when you need nearby context.",
+        ],
+    ));
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading("Read The Bars", palette.warn));
+    lines.extend(help_bullet_lines(
+        palette,
+        palette.warn,
+        &[
+            "Top bar: lamps show view and filter state, minimal or reading mode, save mode, and modified state.",
+            "Path: the breadcrumb for the focused branch.",
+            "Bottom status: the latest result and any active context.",
+            "Keybar: common actions; minimal mode hides it for a quieter surface.",
+        ],
+    ));
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading(
+        "Open Overlays When Needed",
+        palette.border,
+    ));
+    lines.extend(help_bullet_lines(
+        palette,
+        palette.border,
+        &[
+            "Search narrows the map.",
+            "The palette jumps to an action, setting, branch, or help topic.",
+            "Help answers questions without leaving the TUI.",
+            "The visual map gives a second lens on the current working set.",
+        ],
+    ));
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading("Useful Keys", palette.sky));
+    for (command, description) in HelpTopic::TuiTour.command_reference() {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{command:<18}"),
+                Style::default()
+                    .fg(palette.sky)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(*description, Style::default().fg(palette.text)),
+        ]));
+    }
+    lines.push(Line::from(""));
+
+    lines.push(Line::from(vec![
+        Span::styled("Right now ", Style::default().fg(palette.muted)),
+        Span::styled(
+            help_context_line(app, HelpTopic::TuiTour),
+            Style::default().fg(palette.warn),
+        ),
+    ]));
+    lines
+}
+
+fn help_agents_lines(app: &TuiApp, palette: Palette) -> Vec<Line<'static>> {
+    let mut lines = vec![Line::from(Span::styled(
+        "Use mdmind when an agent should produce a map a human can keep shaping: plans, research, outlines, decisions, TODOs, and handoffs.",
+        Style::default()
+            .fg(palette.text)
+            .add_modifier(Modifier::ITALIC),
+    ))];
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading(
+        "Use Skills Deliberately",
+        palette.accent,
+    ));
+    lines.extend(help_bullet_lines(
+        palette,
+        palette.accent,
+        &[
+            "Ask for the mdmind-map-authoring skill when creating, restructuring, or cleaning up a map.",
+            "Ask for the mdm-cli-inspection skill when validating, querying, exporting, or auditing a map.",
+            "Tell the agent what should stay human-readable: concise labels, useful details, and sparse ids.",
+        ],
+    ));
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading("TODO Map Workflow", palette.sky));
+    lines.extend(help_bullet_lines(
+        palette,
+        palette.sky,
+        &[
+            "Create a short branch for each workstream, owner, question, or artifact.",
+            "Add simple markers like #todo, @owner:name, and @status:active only where they help filtering.",
+            "Ask agents to append child tasks and fill in detail lines under their assigned branch.",
+            "Keep parent branches readable; move long rationale, evidence, and drafts into details.",
+        ],
+    ));
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading("Shared Decomposition", palette.warn));
+    lines.extend(help_bullet_lines(
+        palette,
+        palette.warn,
+        &[
+            "Decompose first, then let agents extend the branch they own.",
+            "Use checkpoints before large agent rewrites so you can compare outcomes.",
+            "Validate with mdm validate before trusting generated structure.",
+            "Inspect with mdm view, mdm find, or mdmind before handing the file to another tool.",
+        ],
+    ));
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading("Useful Commands", palette.sky));
+    for (command, description) in HelpTopic::Agents.command_reference() {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{command:<30}"),
+                Style::default()
+                    .fg(palette.sky)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(*description, Style::default().fg(palette.text)),
+        ]));
+    }
+    lines.push(Line::from(""));
+
+    lines.push(help_section_heading("Try It", palette.border));
+    lines.push(Line::from(Span::styled(
+        "Use the mdmind-map-authoring skill. Turn this project into a TODO map, then fill in details under each branch instead of replacing the outline.",
+        Style::default()
+            .fg(palette.accent)
+            .bg(palette.surface_alt)
+            .add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(""));
+
+    lines.push(Line::from(vec![
+        Span::styled("Right now ", Style::default().fg(palette.muted)),
+        Span::styled(
+            help_context_line(app, HelpTopic::Agents),
+            Style::default().fg(palette.warn),
+        ),
+    ]));
+    lines
+}
+
+fn help_bullet_lines(
+    palette: Palette,
+    bullet_color: Color,
+    items: &[&'static str],
+) -> Vec<Line<'static>> {
+    items
+        .iter()
+        .map(|item| {
+            Line::from(vec![
+                Span::styled("• ", Style::default().fg(bullet_color)),
+                Span::styled(*item, Style::default().fg(palette.text)),
+            ])
+        })
+        .collect()
 }
 
 fn wrapped_preview_height(lines: &[Line<'_>], width: u16) -> usize {
@@ -11135,6 +11679,60 @@ fn next_boundary(value: &str, index: usize) -> usize {
         .nth(1)
         .map(|(offset, _)| index + offset)
         .unwrap_or(value.len())
+}
+
+fn previous_word_boundary(value: &str, index: usize) -> usize {
+    let mut cursor = index.min(value.len());
+    while cursor > 0 {
+        let previous = previous_boundary(value, cursor);
+        let character = value[previous..cursor]
+            .chars()
+            .next()
+            .expect("previous boundary should contain a character");
+        if !character.is_whitespace() {
+            break;
+        }
+        cursor = previous;
+    }
+    while cursor > 0 {
+        let previous = previous_boundary(value, cursor);
+        let character = value[previous..cursor]
+            .chars()
+            .next()
+            .expect("previous boundary should contain a character");
+        if character.is_whitespace() {
+            break;
+        }
+        cursor = previous;
+    }
+    cursor
+}
+
+fn next_word_boundary(value: &str, index: usize) -> usize {
+    let mut cursor = index.min(value.len());
+    while cursor < value.len() {
+        let next = next_boundary(value, cursor);
+        let character = value[cursor..next]
+            .chars()
+            .next()
+            .expect("next boundary should contain a character");
+        if !character.is_whitespace() {
+            break;
+        }
+        cursor = next;
+    }
+    while cursor < value.len() {
+        let next = next_boundary(value, cursor);
+        let character = value[cursor..next]
+            .chars()
+            .next()
+            .expect("next boundary should contain a character");
+        if character.is_whitespace() {
+            break;
+        }
+        cursor = next;
+    }
+    cursor
 }
 
 fn line_start(value: &str, index: usize) -> usize {
@@ -11561,7 +12159,7 @@ mod tests {
         assert!(app.help.is_some(), "help should open from the palette");
         let topics = app.help_topics(&app.help.as_ref().expect("help should be open").query);
         assert_eq!(topics.first().copied(), Some(HelpTopic::StartHere));
-        assert!(app.status.text.contains("Start Here"));
+        assert!(app.status.text.contains("Getting Started"));
 
         let session_path =
             crate::session::session_path_for(&map_path).expect("session path should be derivable");
@@ -11925,10 +12523,11 @@ mod tests {
 
         let topics = app.help_topics("");
         assert_eq!(topics.first().copied(), Some(HelpTopic::StartHere));
-        assert_eq!(topics.get(1).copied(), Some(HelpTopic::Outliner));
-        assert_eq!(topics.get(2).copied(), Some(HelpTopic::Agents));
-        assert_eq!(topics.get(3).copied(), Some(HelpTopic::Navigation));
-        assert_eq!(topics.get(4).copied(), Some(HelpTopic::Editing));
+        assert_eq!(topics.get(1).copied(), Some(HelpTopic::TuiTour));
+        assert_eq!(topics.get(2).copied(), Some(HelpTopic::Outliner));
+        assert_eq!(topics.get(3).copied(), Some(HelpTopic::Agents));
+        assert_eq!(topics.get(4).copied(), Some(HelpTopic::Navigation));
+        assert_eq!(topics.get(5).copied(), Some(HelpTopic::Editing));
         assert!(
             topics.iter().position(|topic| *topic == HelpTopic::Palette)
                 < topics.iter().position(|topic| *topic == HelpTopic::Themes),
@@ -11964,7 +12563,7 @@ mod tests {
         let beginner_topics = app.help_topics("first five minutes");
         assert!(
             beginner_topics.contains(&HelpTopic::StartHere),
-            "searching for intro-level guide prose should find the Start Here article"
+            "searching for intro-level guide prose should find the Getting Started article"
         );
 
         let outliner_topics = app.help_topics("nested notes");
@@ -12922,6 +13521,299 @@ mod tests {
     }
 
     #[test]
+    fn single_line_prompts_use_up_down_for_start_and_end() {
+        let map_path = temp_map_path("prompt-up-down-boundaries.md");
+        let document = sample_document();
+        let single_line_modes = [
+            PromptMode::AddChild,
+            PromptMode::AddSibling,
+            PromptMode::AddRoot,
+            PromptMode::Edit,
+            PromptMode::OpenId,
+            PromptMode::SaveView,
+            PromptMode::SaveCheckpoint,
+        ];
+
+        for mode in single_line_modes {
+            let mut app = TuiApp::new(
+                map_path.clone(),
+                document.clone(),
+                vec![0],
+                None,
+                false,
+                SavedViewsState::default(),
+            );
+            let value = "Long node label with tokens #todo @owner:nora".to_string();
+            app.begin_prompt(mode, value.clone());
+
+            app.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE))
+                .expect("up should jump to the start in single-line prompts");
+            assert_eq!(
+                app.prompt.as_ref().map(|prompt| prompt.cursor),
+                Some(0),
+                "{mode:?} should use up as a start-of-box shortcut"
+            );
+
+            app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+                .expect("down should jump to the end in single-line prompts");
+            assert_eq!(
+                app.prompt.as_ref().map(|prompt| prompt.cursor),
+                Some(value.len()),
+                "{mode:?} should use down as an end-of-box shortcut"
+            );
+        }
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn prompt_alt_backspace_deletes_previous_word() {
+        let map_path = temp_map_path("prompt-alt-backspace.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.begin_prompt(
+            PromptMode::Edit,
+            "Moonwake field guide #todo @owner:nora".to_string(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::ALT))
+            .expect("alt-backspace should delete the previous word");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.value.as_str()),
+            Some("Moonwake field guide #todo "),
+            "alt-backspace should delete the previous token without walking character by character"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::CONTROL))
+            .expect("ctrl-backspace should be accepted as a terminal fallback");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.value.as_str()),
+            Some("Moonwake field guide "),
+            "ctrl-backspace should also delete a previous word"
+        );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn detail_prompt_ctrl_k_deletes_the_current_line() {
+        let map_path = temp_map_path("detail-prompt-delete-line.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let value = "first line\nsecond line\nthird line".to_string();
+        app.begin_prompt(PromptMode::EditDetail, value.clone());
+        app.prompt.as_mut().expect("prompt should exist").cursor =
+            value.find("second").expect("second line should exist") + 3;
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL))
+            .expect("ctrl-k should delete the current detail line");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.value.as_str()),
+            Some("first line\nthird line"),
+            "ctrl-k should delete the whole current line even from the middle of the line"
+        );
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.cursor),
+            Some("first line\n".len()),
+            "cursor should land where the deleted line used to start"
+        );
+
+        app.prompt.as_mut().expect("prompt should exist").cursor = "first line\nthird line".len();
+        app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL))
+            .expect("ctrl-k should delete the final detail line");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.value.as_str()),
+            Some("first line"),
+            "ctrl-k should remove the leading newline when deleting the final line"
+        );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn detail_prompt_delete_line_does_not_leave_a_phantom_trailing_line() {
+        let map_path = temp_map_path("detail-prompt-delete-trailing-line.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let value = "first line\nsecond line\n".to_string();
+        app.begin_prompt(PromptMode::EditDetail, value.clone());
+        app.prompt.as_mut().expect("prompt should exist").cursor =
+            value.find("second").expect("second line should exist") + 3;
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL))
+            .expect("ctrl-k should delete the current detail line");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.value.as_str()),
+            Some("first line"),
+            "deleting the final content line should not leave a trailing blank line"
+        );
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.cursor),
+            Some("first line".len()),
+            "cursor should land at the end of the remaining final line"
+        );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn prompt_word_and_box_navigation_moves_cursor_quickly() {
+        let map_path = temp_map_path("prompt-word-navigation.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let value = "Moonwake field guide #todo @owner:nora".to_string();
+        app.begin_prompt(PromptMode::Edit, value.clone());
+
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT))
+            .expect("alt-left should move by one word");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.cursor),
+            Some(
+                value
+                    .find("@owner:nora")
+                    .expect("metadata token should exist")
+            ),
+            "alt-left should jump to the start of the previous token"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT))
+            .expect("alt-left should move by another word");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.cursor),
+            Some(value.find("#todo").expect("tag token should exist")),
+            "repeated alt-left should keep moving token by token"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL))
+            .expect("ctrl-right should also move by word for terminals that send it");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.cursor),
+            Some(value.find("#todo").expect("tag token should exist") + "#todo".len()),
+            "ctrl-right should jump to the end of the current token"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE))
+            .expect("home should move to the beginning");
+        assert_eq!(app.prompt.as_ref().map(|prompt| prompt.cursor), Some(0));
+        app.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE))
+            .expect("end should move to the end");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.cursor),
+            Some(value.len())
+        );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
+    fn detail_prompt_supports_whole_box_start_and_end_navigation() {
+        let map_path = temp_map_path("detail-prompt-boundary-navigation.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let value = "first line\nsecond longer line\nthird".to_string();
+        app.begin_prompt(PromptMode::EditDetail, value.clone());
+
+        app.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::CONTROL))
+            .expect("ctrl-home should move to the beginning of detail text");
+        assert_eq!(app.prompt.as_ref().map(|prompt| prompt.cursor), Some(0));
+        app.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::CONTROL))
+            .expect("ctrl-end should move to the end of detail text");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.cursor),
+            Some(value.len())
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL))
+            .expect("ctrl-a should move to the current line start");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.cursor),
+            Some(value.rfind('\n').expect("detail should have a final line") + 1)
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE))
+            .expect("up should move to the previous line in detail text");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.cursor),
+            Some(value.find("second").expect("second line should exist")),
+            "detail up should preserve multiline line navigation"
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("down should move to the next line in detail text");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.cursor),
+            Some(value.find("third").expect("third line should exist")),
+            "detail down should preserve multiline line navigation"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL))
+            .expect("ctrl-e should move to the current line end");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.cursor),
+            Some(value.len())
+        );
+
+        let session_path =
+            crate::session::session_path_for(&map_path).expect("session path should be derivable");
+        if session_path.exists() {
+            std::fs::remove_file(session_path).ok();
+        }
+    }
+
+    #[test]
     fn detail_prompt_inserts_new_lines_and_saves_with_ctrl_s() {
         let map_path = temp_map_path("detail-prompt.md");
         let document = sample_document();
@@ -13841,8 +14733,8 @@ mod tests {
             },
             PaletteItem {
                 kind: PaletteItemKind::Help,
-                title: "Start Here".to_string(),
-                subtitle: "Learn the core mental model".to_string(),
+                title: "Getting Started".to_string(),
+                subtitle: "Learn the live layout".to_string(),
                 preview: String::new(),
                 score: 6,
                 target: PaletteTarget::HelpTopic(HelpTopic::StartHere),
@@ -14551,6 +15443,56 @@ mod tests {
                 .map(|canvas| (canvas.pan_x, canvas.pan_y)),
             Some((6, 3)),
             "normal spatial navigation should keep the camera still when the destination is visible"
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn spatial_canvas_center_reanchors_to_current_focus_after_visible_navigation() {
+        let map_path = temp_map_path("spatial-canvas-center-current-focus.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE))
+            .expect("m should open the spatial canvas");
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT))
+            .expect("shift-right should pan the canvas");
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .expect("right should focus the visible child without reanchoring");
+        assert_eq!(app.editor.focus_path(), &[0, 0, 0]);
+        assert_eq!(
+            app.spatial_canvas
+                .as_ref()
+                .map(|canvas| canvas.layout_path.as_slice()),
+            Some(&[0, 0][..]),
+            "visible navigation should keep the previous layout anchor until the user centers"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE))
+            .expect("c should center the current spatial focus");
+
+        assert_eq!(
+            app.editor.focus_path(),
+            &[0, 0, 0],
+            "centering should not change the editor focus"
+        );
+        assert_eq!(
+            app.spatial_canvas.as_ref().map(|canvas| (
+                canvas.pan_x,
+                canvas.pan_y,
+                canvas.layout_path.as_slice(),
+                canvas.selected_path.as_slice()
+            )),
+            Some((0, 0, &[0, 0, 0][..], &[0, 0, 0][..])),
+            "c should clear pan and re-anchor the canvas on the current focus"
         );
 
         cleanup_sidecars(&map_path);

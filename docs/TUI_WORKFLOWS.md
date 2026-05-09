@@ -73,6 +73,12 @@ Use:
 
 The important part is that edits happen relative to the current focus. You are shaping a branch, not switching into a different editing application.
 
+Single-line prompt boxes support small editor-style shortcuts:
+
+- `↑ / ↓` to jump to the start or end of the prompt
+- `Alt+← / Alt+→` to move by word
+- `Alt+Backspace` to delete the previous word
+
 ### When To Use Details
 
 Node labels should stay short enough to scan quickly in the tree.
@@ -85,7 +91,7 @@ Use details when one branch needs:
 - a scene note
 - a short research excerpt
 
-In the raw file, details are stored as `| ...` lines directly under the node. In the TUI, press `d` to open the detail editor, use `Enter` for new lines, and `Ctrl+S` to save.
+In the raw file, details are stored as `| ...` lines directly under the node. In the TUI, press `d` to open the detail editor, use `Enter` for new lines, `Ctrl+K` to delete the current line, and `Ctrl+S` to save.
 
 ## Narrowing The Working Set
 
@@ -182,23 +188,29 @@ Daily interaction model:
 
 Relations should add clarity, not replace basic structure.
 
-## The Visual Mindmap
+## Spatial Canvas And Visual Map
 
-The mindmap is best used after you already have the right working set.
+The spatial canvas and the older fixed visual mindmap are best used after you already have the right working set.
 
-Good times to open it:
+Good times to open the spatial canvas with `m`:
 
 - after isolating a branch
 - after applying a filter
+- when you want to navigate visually without leaving the current focus model
+- when you want the map to behave like the outline, with arrow-key navigation and explicit expand/collapse state
+
+Good times to open the legacy visual mindmap with `M`:
+
 - when presenting or reviewing branch shape
 - when exporting a PNG
+- when you want a fixed visual projection rather than a navigation surface
 
-Poor times to open it:
+Poor times to open either visual surface:
 
 - before you know what scope you care about
 - when the full map is still too noisy to read in the tree
 
-The tree should usually lead. The mindmap is the second lens.
+The tree should usually lead. The spatial canvas and visual mindmap are second lenses.
 
 ## Reading Heavy Branches
 

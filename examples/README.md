@@ -251,5 +251,6 @@ If you are trying to learn the product quickly:
 1. Open one example in `mdmind`.
 2. Use `:` or `Ctrl+P` to jump by branch name, id, `#tag`, or `@metadata`.
 3. Use `/` and `b` to compare freeform queries with browse-driven discovery.
-4. Use `m` after narrowing the working set to see how the mindmap reflects the same scope.
-5. Use the same file in `mdm` with `find`, `tags`, `kv`, and `links` to see the read-only CLI model.
+4. Use `m` after narrowing the working set to navigate the same scope in the spatial canvas.
+5. Use `M` if you want the older fixed visual mindmap for a static read or PNG export.
+6. Use the same file in `mdm` with `find`, `tags`, `kv`, and `links` to see the read-only CLI model.

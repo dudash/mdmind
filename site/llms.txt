@@ -1,0 +1,50 @@
+# mdmind
+
+> Local-first plain-text maps for structured thinking.
+
+mdmind is an Apache-2.0 licensed thinking tool for structured maps that stay in readable Markdown files. It includes `mdmind`, a full-screen TUI for editing and navigating maps, and `mdm`, a CLI for validating, searching, viewing, exporting, and inspecting those same files.
+
+## Primary resources
+
+- [Overview](https://mdmind.io/): Product overview, themes, features, workflows, screenshots, and install summary.
+- [Downloads](https://mdmind.io/downloads/): Release, Homebrew, Linux, Windows, source, and agent skill install paths.
+- [GitHub repository](https://github.com/dudash/mdmind): Source code, issues, documentation, and release workflow.
+- [Latest release](https://github.com/dudash/mdmind/releases/latest): Public binaries and release assets.
+- [Agent skills index](https://mdmind.io/.well-known/agent-skills/index.json): Machine-readable index for the mdmind Agent Skills pack.
+- [Agent skills README](https://github.com/dudash/mdmind/blob/main/skills/README.md): Human-readable installation notes for Codex, Claude, Cursor, Gemini CLI, and similar agents.
+- [Agent install notes](https://github.com/dudash/mdmind/blob/main/docs/AGENT_SKILL_INSTALLS.md): Expanded compatibility notes for agent skill directories.
+- [Agent usage snippet](https://github.com/dudash/mdmind/blob/main/docs/AGENTS_SNIPPET.md): Compact mdmind guidance for project `AGENTS.md` files.
+
+## When to use mdmind
+
+- Planning product work, project breakdowns, or backlogs.
+- Structuring research, writing, outlines, scenes, or long-running notes.
+- Keeping prompt libraries or agent-readable project memory in plain text.
+- Validating map syntax, ids, metadata, tags, relations, and exports with `mdm`.
+
+## Map syntax summary
+
+Native mdmind maps are Markdown outline trees with optional lightweight structure:
+
+- `#tag` for grouping and workflow markers.
+- `@key:value` for repeated structured metadata.
+- `[id:stable/id]` for durable deep links.
+- `[[target/id]]` or `[[rel:kind->target/id]]` for cross-branch references.
+- `| detail text` for prose, rationale, quotes, or context attached to a node.
+
+## Install summary
+
+```bash
+brew tap dudash/tap
+brew install mdmind
+```
+
+Linux and Windows users should use the latest GitHub release assets. Developers can install from source with:
+
+```bash
+cargo install --path .
+```
+
+## Agent surfaces
+
+mdmind.io is a static documentation and download site. It does not currently host an OAuth surface, hosted HTTP API, MCP server endpoint, or browser-side WebMCP tools. The agent-ready surface that does exist today is the checked-in mdmind Agent Skills pack.

@@ -8,6 +8,10 @@
       name="description"
       content="mdmind is a local-first plain-text mapping tool with a CLI and full-screen TUI for planning, writing, research, and large structured outlines."
     >
+    <link rel="canonical" href="https://mdmind.io/">
+    <link rel="alternate" type="text/plain" href="https://mdmind.io/llms.txt" title="llms.txt">
+    <link rel="sitemap" type="application/xml" href="https://mdmind.io/sitemap.xml">
+    <link rel="agent-manifest" type="application/json" href="https://mdmind.io/.well-known/agent.json">
     <link rel="icon" type="image/png" href="./assets/mdmind-icon-web.png">
     <link rel="stylesheet" href="./styles.css">
   </head>
@@ -28,17 +32,17 @@
             <a href="https://github.com/dudash/mdmind" target="_blank" rel="noreferrer">GitHub</a>
           </nav>
           <button class="theme-cycler" type="button" data-theme-button aria-label="Switch color theme" title="Switch color theme">
-            <span class="theme-choice theme-choice-paper is-active" data-theme-option="paper" aria-hidden="true">
-              <span class="theme-led"></span>
-              <span class="theme-icon">☀</span>
-            </span>
-            <span class="theme-choice theme-choice-blueprint" data-theme-option="blueprint" aria-hidden="true">
+            <span class="theme-choice theme-choice-blueprint is-active" data-theme-option="blueprint" aria-hidden="true">
               <span class="theme-led"></span>
               <span class="theme-icon">□</span>
             </span>
             <span class="theme-choice theme-choice-terminal" data-theme-option="terminal" aria-hidden="true">
               <span class="theme-led"></span>
               <span class="theme-icon">#</span>
+            </span>
+            <span class="theme-choice theme-choice-paper" data-theme-option="paper" aria-hidden="true">
+              <span class="theme-led"></span>
+              <span class="theme-icon">☀</span>
             </span>
             <span class="theme-choice theme-choice-night" data-theme-option="night" aria-hidden="true">
               <span class="theme-led"></span>
@@ -173,7 +177,7 @@
         <section class="section-band features" id="features">
           <div class="section-heading">
             <div class="eyebrow">Core features</div>
-            <h2>The pieces that make large plain-text maps workable.</h2>
+            <h2>Make large plain-text maps workable.</h2>
           </div>
           <div class="feature-grid">
             <article class="feature-card feature-card-wide">
@@ -221,7 +225,7 @@
         <section class="section-band workflow-lab" id="workflows">
           <div class="section-heading">
             <div class="eyebrow">Working modes</div>
-            <h2>Hover through the ways a map can become useful.</h2>
+            <h2>Different views into the same map.</h2>
             <p>
               One file can act like an outline, a reading surface, or a visual map depending on the work in front of you.
             </p>
@@ -307,7 +311,7 @@
           </div>
           <div class="callout-panel">
             <div class="eyebrow">Open and free</div>
-            <h2>Apache 2.0 licensed and fully local-first.</h2>
+            <h2>Apache 2.0 licensed and local-first.</h2>
             <ul class="feature-list">
               <li>No hosted dependency required.</li>
               <li>Readable Markdown files, Git-friendly workflows, and open code.</li>
@@ -332,7 +336,7 @@
           </div>
 
           <div class="downloads-grid">
-            <article class="download-card">
+            <article class="download-card download-card-brew">
               <div class="eyebrow">macOS</div>
               <h3>Homebrew</h3>
               <p>The cleanest public install path on macOS.</p>
@@ -343,21 +347,21 @@ brew install mdmind</code></pre>
               </div>
             </article>
 
-            <article class="download-card">
+            <article class="download-card download-card-tar">
               <div class="eyebrow">Linux</div>
               <h3>Release tarball</h3>
               <p>Download the latest archive from the GitHub release page and put the binaries on your path.</p>
               <a class="text-link" href="https://github.com/dudash/mdmind/releases/latest" target="_blank" rel="noreferrer">Open latest release</a>
             </article>
 
-            <article class="download-card">
+            <article class="download-card download-card-zip">
               <div class="eyebrow">Windows</div>
               <h3>Release zip</h3>
               <p>Grab the latest Windows zip from GitHub releases and extract both binaries together.</p>
               <a class="text-link" href="https://github.com/dudash/mdmind/releases/latest" target="_blank" rel="noreferrer">Open latest release</a>
             </article>
 
-            <article class="download-card">
+            <article class="download-card download-card-src">
               <div class="eyebrow">Development</div>
               <h3>Install from source</h3>
               <p>For local development or testing directly from the repo:</p>
@@ -396,7 +400,7 @@ brew install mdmind</code></pre>
             <article class="download-card">
               <div class="eyebrow">One project</div>
               <h3>Install for this repo</h3>
-              <p>Copy the skill folders into the project Agent Skills directory.</p>
+              <p>Copy the skill folders into the project Agent Skills directory so each repo can customize its own mdmind behavior.</p>
               <div class="copyable-command">
                 <button class="copy-button" type="button">Copy</button>
                 <pre><code>mkdir -p .agents/skills
@@ -444,10 +448,10 @@ cp -R ~/mdmind/skills/mdm-cli-inspection ~/.agents/skills/</code></pre>
     </div>
     <script>
       const themes = [
-        { id: "paper", label: "Paper" },
         { id: "blueprint", label: "Blueprint" },
         { id: "terminal", label: "Terminal" },
         { id: "night", label: "Night" },
+        { id: "paper", label: "Paper" },
       ];
       const themeButton = document.querySelector("[data-theme-button]");
       const themeChoices = document.querySelectorAll("[data-theme-option]");
@@ -471,10 +475,7 @@ cp -R ~/mdmind/skills/mdm-cli-inspection ~/.agents/skills/</code></pre>
         themeAliases[searchParams.get("theme")] ||
         themeAliases[searchParams.get("audience")] ||
         themeAliases[searchParams.get("mode")];
-      let storedTheme = window.localStorage.getItem("mdmind-theme");
-      if (storedTheme === "ember" || storedTheme === "layer") storedTheme = "terminal";
-      if (storedTheme === "grove") storedTheme = "blueprint";
-      let activeThemeIndex = themes.findIndex((theme) => theme.id === (requestedTheme || storedTheme || "blueprint"));
+      let activeThemeIndex = themes.findIndex((theme) => theme.id === (requestedTheme || "blueprint"));
       if (activeThemeIndex < 0) activeThemeIndex = 0;
 
       const applyTheme = (index) => {
@@ -490,15 +491,22 @@ cp -R ~/mdmind/skills/mdm-cli-inspection ~/.agents/skills/</code></pre>
           themeButton.title = `${theme.label} theme`;
         }
 
-        window.localStorage.setItem("mdmind-theme", theme.id);
       };
 
       applyTheme(activeThemeIndex);
 
+      const scrollToHashTarget = () => {
+        if (!window.location.hash) return;
+        document
+          .getElementById(decodeURIComponent(window.location.hash.slice(1)))
+          ?.scrollIntoView({ block: "start" });
+      };
+
       if (window.location.hash) {
-        window.requestAnimationFrame(() => {
-          document.getElementById(decodeURIComponent(window.location.hash.slice(1)))?.scrollIntoView();
-        });
+        window.requestAnimationFrame(scrollToHashTarget);
+        window.addEventListener("load", () => window.requestAnimationFrame(scrollToHashTarget), { once: true });
+        window.setTimeout(scrollToHashTarget, 160);
+        window.setTimeout(scrollToHashTarget, 700);
       }
 
       themeButton?.addEventListener("click", () => {

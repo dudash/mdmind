@@ -1,0 +1,33 @@
+{
+  "schema_version": "0.2.0-draft",
+  "publisher": {
+    "name": "mdmind",
+    "url": "https://mdmind.io/",
+    "repository": "https://github.com/dudash/mdmind"
+  },
+  "generated_at": "2026-05-07",
+  "skills": [
+    {
+      "id": "mdmind-map-authoring",
+      "name": "mdmind-map-authoring",
+      "description": "Create or revise native mdmind maps: plain-text Markdown outlines, mind maps, knowledge maps, and structured notes that stay useful as durable .md files.",
+      "license": "Apache-2.0",
+      "version": "0.4.0",
+      "archive_url": "https://mdmind.io/.well-known/agent-skills/mdmind-map-authoring.tar.gz",
+      "archive_sha256": "161b7c4ebcf9ee406d081db406d4f9aaaa9739c165bfe62f200c7b6fc136044a",
+      "entrypoint": "mdmind-map-authoring/SKILL.md",
+      "homepage": "https://github.com/dudash/mdmind/tree/main/skills/mdmind-map-authoring"
+    },
+    {
+      "id": "mdm-cli-inspection",
+      "name": "mdm-cli-inspection",
+      "description": "Inspect, validate, query, audit, deep-link, or export mdmind Markdown outline and mind map files with the mdm CLI.",
+      "license": "Apache-2.0",
+      "version": "0.4.0",
+      "archive_url": "https://mdmind.io/.well-known/agent-skills/mdm-cli-inspection.tar.gz",
+      "archive_sha256": "36997f8666da878dfcace79cfee4ee5eee45efb1025690f9cb50fa2ff484640e",
+      "entrypoint": "mdm-cli-inspection/SKILL.md",
+      "homepage": "https://github.com/dudash/mdmind/tree/main/skills/mdm-cli-inspection"
+    }
+  ]
+}

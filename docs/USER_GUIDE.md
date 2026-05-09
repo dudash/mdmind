@@ -1,34 +1,106 @@
 - mdmind User Guide #guide @surface:tui @audience:all [id:guide]
-  - Start Here #guide #beginner @section:start [id:guide/start]
+  - Getting Started #guide #beginner @section:start [id:guide/start]
+    - Welcome #guide [id:guide/start/welcome]
+      - welcome to mdmind
+      - this is a keyboard-first place for shaping structured thoughts in plain text
+      - think outlines first, maps when helpful, and safety close at hand
     - What mdmind is #guide [id:guide/start/what-is]
       - mdmind is a local-first mind mapping tool for structured thinking in plain text
       - the same map file works in both the mdm CLI and the mdmind TUI
       - the goal is keyboard-first thinking, not whiteboard-style diagramming
-    - If you are completely new #guide [id:guide/start/new-user]
-      - you do not need ids, relations, exports, or the visual mindmap on day one
+    - First five minutes #recipe [id:guide/start/first-five]
+      - you do not need ids, relations, exports, or visual map modes on day one
       - first learn focus, moving around the tree, adding a child, editing a line, and opening search or the palette
       - the structured features become useful as the map gets bigger and more long-lived
+      - move with the arrow keys
+      - press a to add a child
+      - press A to add a sibling
+      - press e to edit nodes you have already made
+      - press / and search for a normal word before learning tag or metadata syntax
+      - press : to open the command palette
+      - press ? to open built-in help
+      - press s in KEYSAVE mode, or S to toggle AUTOSAVE
+      - open Get Familiar With The TUI when you want a simple tour of the map and surrounding surfaces
     - What a map line can hold #guide [id:guide/start/map-line]
       - a visible label for people
       - #tags for grouping and workflow markers #reference
       - @key:value metadata for structured attributes #reference
       - an id token for stable deep links #reference
       - double-bracket cross-links for lateral references across branches #reference
-    - First five minutes #recipe [id:guide/start/first-five]
-      - run mdmind on a small map file
-      - move with the arrow keys
-      - press a to add a child node
-      - press : to open the command palette
-      - press ? to open built-in help
-      - press m to open the visual mindmap
     - Good first habit #tip [id:guide/start/first-habit]
       - keep node labels short and readable
       - start with just labels, tags, and a little metadata before you worry about ids or relations
       - use ids on important branches you want to revisit later
       - use a few consistent tags and metadata keys across the whole map
+    - Good next steps #recipe [id:guide/start/next-steps]
+      - pick a theme that feels comfortable
+      - try minimal mode after the keybar feels familiar, and reading mode on a node with details
+      - add a tag like #todo or #idea
+      - filter by that tag with search
+      - try one metadata field such as @status:active or @owner:jason once tags feel natural
+      - before moving, deleting, or reorganizing a big branch, create a checkpoint so you can restore the old shape if the experiment does not work
+  - Get Familiar With The TUI #guide #beginner @section:tui [id:guide/tui]
+    - Screen shape #guide [id:guide/tui/glance]
+      - +------------------------------------------------------+
+      - | top bar: state lamps, save, file                     |
+      - | path: current branch                                 |
+      - |                                                      |
+      - | MAP OUTLINE                            | FOCUS       |
+      - |  > root                                | selected    |
+      - |    - branch                            | facts       |
+      - |    - branch                            | context     |
+      - |                                        | side lanes  |
+      - |                                                      |
+      - | status: latest result                  | keys        |
+      - +------------------------------------------------------+
+    - Start with the map #guide [id:guide/tui/map]
+      - the outline is the main working surface
+      - use it to move through visible rows, expand or collapse branches, add or edit nodes, and review structure
+      - the rest of the interface exists to explain, narrow, or support the map
+    - Focus panel #guide [id:guide/tui/focus]
+      - the focus panel explains the selected node
+      - it shows the node label, tags, metadata, id, line number, relation counts, and child counts
+      - use it when you want to inspect one branch without changing anything
+    - Side lanes #guide [id:guide/tui/lanes]
+      - parent shows where you came from
+      - backlinks show incoming references
+      - children preview what sits below the current node
+    - Top bar and path #guide [id:guide/tui/top-bar]
+      - the top bar is an instrument panel
+      - lamps show view and filter state first, then minimal or reading mode, then save mode and modified state
+      - the path line is your breadcrumb, showing where the focused branch lives in the map
+    - Bottom status and keybar #guide [id:guide/tui/status]
+      - the bottom status tells you what just happened and what context is active
+      - the keybar is a reminder strip for common actions
+      - minimal mode hides the keybar when you want a quieter surface
+    - Overlays #guide [id:guide/tui/overlays]
+      - search narrows the map
+      - the palette jumps to intent
+      - help answers questions
+      - the visual map gives a second lens on the current working set
+  - Using mdmind With Agents #guide #beginner @section:agents [id:guide/agents]
+    - When to ask for a map #guide [id:guide/agents/when]
+      - use mdmind when an agent should produce a plan, research synthesis, writing outline, decision tree, TODO list, or project breakdown that a human will keep shaping
+      - use normal Markdown for short prose answers, loose brainstorming, or temporary scratch notes
+      - ask for concise node labels first, then detail lines where a branch needs rationale, evidence, or drafts
+    - Use skills deliberately #guide [id:guide/agents/skills]
+      - ask for the mdmind-map-authoring skill when creating, restructuring, or cleaning up a map
+      - ask for the mdm-cli-inspection skill when validating, querying, exporting, or auditing a map
+      - tell the agent what should stay human-readable: concise labels, useful details, sparse ids, and a tree that still scans
+    - TODO map workflow #recipe [id:guide/agents/todo]
+      - create a short branch for each workstream, owner, question, or artifact
+      - add simple markers like #todo, @owner:name, and @status:active only where they help filtering
+      - ask agents to append child tasks and fill in detail lines under their assigned branch
+      - keep parent branches readable
+      - move long rationale, evidence, and drafts into details
+    - Shared decomposition #guide [id:guide/agents/decomposition]
+      - decompose first, then let agents extend the branch they own
+      - use checkpoints before large agent rewrites so you can compare outcomes
+      - validate with mdm validate before trusting generated structure
+      - inspect with mdm view, mdm find, or mdmind before handing the file to another tool
   - Core Mental Model #guide @section:model [id:guide/model]
     - Focus is the center of the interface #guide [id:guide/model/focus]
-      - the outline, focus card, and mindmap follow the current node
+      - the outline, focus card, spatial canvas, and visual map follow the current node
       - most actions happen relative to the focused node
       - if you understand focus, the rest of the TUI becomes easier to predict
     - Views change projection, not data #guide [id:guide/model/views]
@@ -41,7 +113,7 @@
     - Safety is part of the product #guide [id:guide/model/safety]
       - undo and redo restore structural edits
       - checkpoints let you capture and restore named snapshots
-      - autosave and manual save are both supported depending on your workflow
+      - AUTOSAVE and KEYSAVE are both supported depending on your workflow
   - Navigation #guide @section:navigation [id:guide/navigation]
     - How to move #reference [id:guide/navigation/keys]
       - ↑ / ↓ moves through visible nodes
@@ -77,7 +149,7 @@
       - help
     - Built-in help #guide [id:guide/palette/help]
       - ? opens searchable help with beginner guides, reference, and tips
-      - the best reading order for new users is Start Here, Navigation, Editing, and Search
+      - the best reading order for new users is Getting Started, Navigation, Editing, and Search
       - ids and relations are worth reading later, once the basics feel natural
     - Palette tips #tip [id:guide/palette/tips]
       - use the palette when you know the target
@@ -96,6 +168,7 @@
       - details stay attached to a node without bloating the main tree label
       - in raw files, detail lines use | ... directly under the node
       - in mdmind, d opens the detail editor and Ctrl+S saves it
+      - in the detail editor, Ctrl+K deletes the current line
     - Reshaping the tree #reference [id:guide/editing/reshape]
       - Alt+↑ and Alt+↓ reorder a node among siblings
       - Alt+← moves a node out one level
@@ -104,6 +177,8 @@
       - add and edit prompts keep one logical node line
       - inline syntax is previewed while you type
       - duplicate ids are flagged before you commit
+      - ↑ and ↓ jump to the start and end of single-line prompt boxes
+      - Alt+← and Alt+→ jump by word; Alt+Backspace deletes the previous word
       - minimal mode uses a quieter prompt surface with less chrome
     - Editing tips #tip [id:guide/editing/tips]
       - treat node labels as concise map lines and use details when one branch needs more prose
@@ -266,22 +341,29 @@
       - Monograph plus minimal mode is the calmest current working surface
       - motion helps guide attention, while minimal mode reduces explanatory noise
       - reading mode is for content emphasis, not for changing the active tree scope
-  - Mindmap Mode #guide @section:mindmap [id:guide/mindmap]
-    - What the visual map is for #guide [id:guide/mindmap/why]
-      - it is a second lens on the current working set
-      - it is useful for cluster recognition, branch shape, and presentation
-      - it is less about direct editing and more about seeing structure clearly
-    - Mindmap controls #reference [id:guide/mindmap/controls]
-      - m opens or closes the visual mindmap
-      - arrow keys pan the canvas
+  - Spatial Canvas And Visual Map #guide @section:mindmap [id:guide/mindmap]
+    - What the spatial canvas is for #guide [id:guide/mindmap/why]
+      - it is a full-screen visual navigation surface for the current working set
+      - it is useful when you want to stay in a spatial view while moving through the outline
+      - it follows the same focus, expanded branches, view mode, and filter context as the tree
+    - Spatial canvas controls #reference [id:guide/mindmap/controls]
+      - m opens or closes the spatial canvas
+      - ↑ / ↓ / ← / → navigate like the outline
+      - Shift plus arrows pans without changing focus
       - 0 recenters the camera
-      - p exports a PNG of the current rendered view
+      - + / = zooms in, and - / _ zooms out
+      - z collapses the current spatial scope, and Z expands it into an overview
+      - Enter focuses the selected bubble
+    - Legacy visual mindmap #reference [id:guide/mindmap/legacy]
+      - M opens or closes the older fixed visual mindmap
+      - use it for a quick static read or PNG export
+      - arrow keys pan, 0 recenters, and p exports a PNG of the current rendered view
       - visible cross-links render as faint dotted relation links when both linked nodes are on-screen
-    - Mindmap tips #tip [id:guide/mindmap/tips]
-      - open the map after tightening a view or filter, not before
+    - Visual map tips #tip [id:guide/mindmap/tips]
+      - open the canvas after tightening a view or filter, not before
       - if the map feels busy, reduce the working set in the tree first
-      - because the mindmap follows view modes, it is especially useful after isolating a branch
-  - Safety And History #guide @section:safety [id:guide/safety]
+      - use the spatial canvas for navigation and the legacy visual mindmap for export-oriented review
+  - Saving And Safety #guide @section:safety [id:guide/safety]
     - Undo and redo #reference [id:guide/safety/history]
       - u undoes the last structural change
       - U redoes the last undone change

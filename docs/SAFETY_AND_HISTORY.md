@@ -1,4 +1,4 @@
-# Safety And History
+# Saving And Safety
 
 `mdmind` should feel safe to work quickly in.
 
@@ -62,7 +62,7 @@ You can work either way:
 
 If autosave is on, restored history still writes back to disk so the file and the TUI stay aligned.
 
-If manual save is on, remember to save intentionally after edits you want to keep.
+If KEYSAVE is on, remember to press `s` after edits you want to keep.
 
 ## Reloading From Disk
 

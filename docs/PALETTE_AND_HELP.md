@@ -87,7 +87,7 @@ That keeps it unified in the product while still letting different topics teach 
 
 If you are new:
 
-- start with `Start Here`
+- start with `Getting Started`
 - then read `Using mdmind As An Outliner` if that framing fits how you work
 - read `Using mdmind With Agents` if you expect an agent to generate maps or outlines for you
 - then read `Navigation`, `Editing`, and `Search And Filters`
