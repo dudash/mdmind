@@ -24,6 +24,7 @@ Complete enough to present as current product:
 
 - plain-text map format with hierarchy, tags, metadata, ids, details, relations, and backlinks
 - TUI outline editing with focus modes, search, browse, saved views, command palette, help, themes, minimal mode, and safety/history
+- checklist/task semantics with checkbox toggles, task-aware filters, and derived parent rollups
 - stable ids and deep links across CLI, TUI navigation, subtree export, and cross-map references
 - CLI inspection for viewing, finding, tags, metadata, links, relations, validation, examples, and export
 - export to JSON, Mermaid, and OPML, including query-filtered and deep-linked scopes
@@ -33,12 +34,12 @@ Complete enough to present as current product:
 Real, but still a moving target:
 
 - spatial canvas phase 1: full-screen visual navigation, focus-centered layout, camera pan/zoom, outline-like navigation, and legacy visual map fallback
+- read-only metadata/task table view over the current visible TUI scope
 
 Not complete yet:
 
 - import from existing outline and mind-map formats
-- checklist/task semantics
-- metadata columns or table view
+- user-selected table columns and direct metadata editing
 - attachments and image references
 - polished presentation-grade visual/outline export
 - terminal-native completions and man pages

@@ -872,6 +872,7 @@ impl HelpTopic {
                     "v / V",
                     "Cycle Full Map, Focus Branch, Subtree Only, and Filtered Focus",
                 ),
+                ("C", "Open a read-only table over the visible scope"),
                 (
                     "z / Z",
                     "Collapse or expand the current working scope in that view",
@@ -1046,6 +1047,7 @@ impl HelpTopic {
             Self::Views => &[
                 "Use Focus Branch when you still need orientation. Use Subtree Only when you want the rest of the map to disappear.",
                 "If a branch feels slippery, remember that Subtree Only keeps a stable root until you leave the mode.",
+                "Use table view when metadata matters more than hierarchy for a moment: owner, status, priority, area, task state, and progress.",
             ],
             Self::Palette => &[
                 "If you already know the target, use the palette instead of scrolling there manually.",
@@ -1176,6 +1178,7 @@ enum PaletteAction {
     OpenSearch,
     OpenFacets,
     OpenSavedViews,
+    OpenTable,
     OpenMindmap,
     OpenSpatialCanvas,
     SaveNow,
@@ -1617,6 +1620,37 @@ struct RelationPickerState {
     kind: RelationPickerKind,
     selected: usize,
     items: Vec<RelationPickerItem>,
+}
+
+#[derive(Debug, Clone)]
+struct TableOverlayState {
+    selected: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TableColumn {
+    Task,
+    Node,
+    Owner,
+    Status,
+    Priority,
+    Area,
+    Progress,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TableRow {
+    path: Vec<usize>,
+    depth: usize,
+    task: String,
+    node: String,
+    owner: String,
+    status: String,
+    priority: String,
+    area: String,
+    progress: String,
+    matched: bool,
+    dimmed: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -2077,6 +2111,7 @@ struct TuiApp {
     recent_locations: Vec<PathAnchor>,
     checkpoints: CheckpointsState,
     relation_picker: Option<RelationPickerState>,
+    table: Option<TableOverlayState>,
     mindmap: Option<MindmapOverlayState>,
     spatial_canvas: Option<SpatialCanvasState>,
     help: Option<HelpOverlayState>,
@@ -2153,6 +2188,7 @@ impl TuiApp {
             recent_locations: Vec::new(),
             checkpoints: CheckpointsState::default(),
             relation_picker: None,
+            table: None,
             mindmap: None,
             spatial_canvas: None,
             help: None,
@@ -2196,6 +2232,12 @@ impl TuiApp {
             self.quit_armed = false;
             self.delete_armed = false;
             return self.handle_relation_picker_key(key);
+        }
+
+        if self.table.is_some() {
+            self.quit_armed = false;
+            self.delete_armed = false;
+            return self.handle_table_key(key);
         }
 
         if self.search.is_some() {
@@ -2298,6 +2340,10 @@ impl TuiApp {
             KeyCode::Char('w') => {
                 self.delete_armed = false;
                 self.open_search_overlay(SearchSection::Views);
+            }
+            KeyCode::Char('C') => {
+                self.delete_armed = false;
+                self.open_table_overlay();
             }
             KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::SHIFT) => {
                 self.delete_armed = false;
@@ -2490,6 +2536,7 @@ impl TuiApp {
 
     fn open_mindmap_overlay(&mut self) {
         self.spatial_canvas = None;
+        self.table = None;
         self.mindmap = Some(MindmapOverlayState::default());
         let scene = self.current_mindmap_scene();
         self.set_status(
@@ -2503,6 +2550,7 @@ impl TuiApp {
 
     fn open_spatial_canvas(&mut self) {
         self.mindmap = None;
+        self.table = None;
         self.spatial_canvas = Some(SpatialCanvasState::new(self.editor.focus_path()));
         let scene = self.current_spatial_canvas_scene();
         self.set_status(
@@ -2512,6 +2560,81 @@ impl TuiApp {
                 scene.describe()
             ),
         );
+    }
+
+    fn open_table_overlay(&mut self) {
+        self.mindmap = None;
+        self.spatial_canvas = None;
+        self.search = None;
+        let rows = self.table_rows();
+        let selected = rows
+            .iter()
+            .position(|row| row.path == self.editor.focus_path())
+            .unwrap_or(0);
+        self.table = Some(TableOverlayState { selected });
+        self.set_status(
+            StatusTone::Info,
+            format!(
+                "Table view open over {} visible row(s). ↑↓ moves, Enter focuses, Esc closes.",
+                rows.len()
+            ),
+        );
+    }
+
+    fn handle_table_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
+        let Some(mut table) = self.table.take() else {
+            return Ok(true);
+        };
+
+        let rows = self.table_rows();
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('C') => {
+                self.set_status(StatusTone::Info, "Closed table view.");
+                return Ok(true);
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                table.selected = table.selected.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if !rows.is_empty() {
+                    table.selected = (table.selected + 1).min(rows.len() - 1);
+                }
+            }
+            KeyCode::PageUp => {
+                table.selected = table.selected.saturating_sub(8);
+            }
+            KeyCode::PageDown => {
+                if !rows.is_empty() {
+                    table.selected = (table.selected + 8).min(rows.len() - 1);
+                }
+            }
+            KeyCode::Home => {
+                table.selected = 0;
+            }
+            KeyCode::End => {
+                table.selected = rows.len().saturating_sub(1);
+            }
+            KeyCode::Enter => {
+                if let Some(row) = rows.get(table.selected) {
+                    self.editor.set_focus_path(row.path.clone())?;
+                    self.finalize_focus_change(MotionTarget::Focus)?;
+                    self.set_status(
+                        StatusTone::Success,
+                        format!("Focused '{}' from table view.", row.node),
+                    );
+                    return Ok(true);
+                }
+            }
+            _ => {}
+        }
+
+        if rows.is_empty() {
+            table.selected = 0;
+        } else {
+            table.selected = table.selected.min(rows.len() - 1);
+        }
+        self.table = Some(table);
+        Ok(true)
     }
 
     fn handle_mindmap_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
@@ -3347,6 +3470,10 @@ impl TuiApp {
         rows
     }
 
+    fn table_rows(&self) -> Vec<TableRow> {
+        visible_rows_to_table_rows(self.editor.document(), &self.visible_rows())
+    }
+
     fn subtree_root_path(&self) -> Option<Vec<usize>> {
         let anchor = self.subtree_root.as_ref()?;
         if let Some(id) = &anchor.id
@@ -3951,6 +4078,7 @@ impl TuiApp {
                 PaletteAction::OpenSearch => self.open_search_overlay(SearchSection::Query),
                 PaletteAction::OpenFacets => self.open_search_overlay(SearchSection::Facets),
                 PaletteAction::OpenSavedViews => self.open_search_overlay(SearchSection::Views),
+                PaletteAction::OpenTable => self.open_table_overlay(),
                 PaletteAction::OpenMindmap => {
                     self.open_mindmap_overlay();
                 }
@@ -4482,6 +4610,12 @@ impl TuiApp {
                 "Open saved filter views",
                 "saved views working sets filters",
                 PaletteAction::OpenSavedViews,
+            ),
+            (
+                "Open Table View",
+                "Scan visible nodes as metadata and task columns",
+                "table columns metadata fields owner status priority area task progress",
+                PaletteAction::OpenTable,
             ),
             (
                 "Open Mindmap",
@@ -6233,6 +6367,10 @@ fn render(frame: &mut Frame, app: &mut TuiApp) {
 
     if let Some(overlay) = &app.mindmap {
         render_mindmap_overlay(frame, centered_rect(92, 88, area), app, overlay);
+    }
+
+    if let Some(table) = &app.table {
+        render_table_overlay(frame, centered_rect(92, 82, area), app, table);
     }
 
     if let Some(search) = &app.search {
@@ -8505,6 +8643,254 @@ fn render_search_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, search: &S
             .style(Style::default().fg(PALETTE.muted)),
         sections[3],
     );
+}
+
+fn render_table_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, table: &TableOverlayState) {
+    let palette = app.theme_colors();
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .title(styled_title("Table View", palette.metadata))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(palette.metadata))
+        .style(Style::default().bg(palette.surface_alt))
+        .padding(Padding::uniform(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Length(1),
+            Constraint::Min(8),
+            Constraint::Length(2),
+        ])
+        .split(inner);
+
+    let rows = app.table_rows();
+    let selected = table.selected.min(rows.len().saturating_sub(1));
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(vec![
+                Span::styled(
+                    "Visible Scope As Columns",
+                    Style::default()
+                        .fg(palette.text)
+                        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+                ),
+                Span::raw("  "),
+                Span::styled(
+                    "Read-only scan of task and metadata fields; edit in the outline.",
+                    Style::default().fg(palette.muted),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    current_scope_label(app, None),
+                    Style::default().fg(palette.sky),
+                ),
+                Span::raw("  "),
+                Span::styled(
+                    format!("{} row(s)", rows.len()),
+                    Style::default().fg(palette.muted),
+                ),
+            ]),
+        ]),
+        sections[0],
+    );
+
+    let columns = table_visible_columns(sections[1].width as usize);
+    frame.render_widget(
+        Paragraph::new(table_header_line(&columns, sections[1].width as usize)),
+        sections[1],
+    );
+
+    let items = rows
+        .iter()
+        .enumerate()
+        .map(|(index, row)| {
+            let mut line = table_row_line(row, &columns, sections[2].width as usize);
+            if row.matched {
+                line.spans
+                    .push(Span::styled("  match", Style::default().fg(palette.warn)));
+            }
+            let style = if index == selected {
+                Style::default()
+                    .fg(palette.selection_text)
+                    .bg(palette.selection)
+                    .add_modifier(Modifier::BOLD)
+            } else if row.dimmed {
+                Style::default().fg(palette.muted)
+            } else {
+                Style::default().fg(palette.text)
+            };
+            ListItem::new(line).style(style)
+        })
+        .collect::<Vec<_>>();
+    let mut state = ListState::default();
+    if !rows.is_empty() {
+        state.select(Some(selected));
+    }
+    frame.render_stateful_widget(List::new(items), sections[2], &mut state);
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            key_hint("↑↓", "select"),
+            separator_span(),
+            key_hint("PgUp/PgDn", "jump"),
+            separator_span(),
+            key_hint("Enter", "focus"),
+            separator_span(),
+            key_hint("C/Esc", "close"),
+        ]))
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(palette.muted)),
+        sections[3],
+    );
+}
+
+fn table_visible_columns(width: usize) -> Vec<TableColumn> {
+    let mut columns = vec![TableColumn::Task, TableColumn::Node];
+    if width >= 46 {
+        columns.push(TableColumn::Owner);
+    }
+    if width >= 58 {
+        columns.push(TableColumn::Status);
+    }
+    if width >= 72 {
+        columns.push(TableColumn::Priority);
+    }
+    if width >= 88 {
+        columns.push(TableColumn::Area);
+    }
+    if width >= 104 {
+        columns.push(TableColumn::Progress);
+    }
+    columns
+}
+
+fn table_header_line(columns: &[TableColumn], width: usize) -> Line<'static> {
+    let palette = active_palette();
+    Line::from(
+        table_cells_for_columns(columns, width, |column| column.header().to_string())
+            .into_iter()
+            .map(|cell| {
+                Span::styled(
+                    cell,
+                    Style::default()
+                        .fg(palette.metadata)
+                        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+                )
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn table_row_line(row: &TableRow, columns: &[TableColumn], width: usize) -> Line<'static> {
+    Line::from(
+        table_cells_for_columns(columns, width, |column| column.value(row))
+            .into_iter()
+            .map(Span::raw)
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn table_cells_for_columns<F>(columns: &[TableColumn], width: usize, mut value: F) -> Vec<String>
+where
+    F: FnMut(TableColumn) -> String,
+{
+    let widths = table_column_widths(columns, width);
+    columns
+        .iter()
+        .copied()
+        .zip(widths)
+        .map(|(column, width)| padded_table_cell(&value(column), width))
+        .collect()
+}
+
+fn table_column_widths(columns: &[TableColumn], width: usize) -> Vec<usize> {
+    let fixed_total: usize = columns
+        .iter()
+        .filter(|column| **column != TableColumn::Node)
+        .map(|column| column.preferred_width())
+        .sum();
+    let node_width = width
+        .saturating_sub(fixed_total)
+        .max(TableColumn::Node.preferred_width());
+
+    columns
+        .iter()
+        .map(|column| {
+            if *column == TableColumn::Node {
+                node_width
+            } else {
+                column.preferred_width()
+            }
+        })
+        .collect()
+}
+
+fn padded_table_cell(value: &str, width: usize) -> String {
+    if width == 0 {
+        return String::new();
+    }
+    let content_width = width.saturating_sub(1);
+    let truncated = truncate_trailing(value, content_width);
+    let padding = content_width.saturating_sub(truncated.chars().count()) + 1;
+    format!("{truncated}{}", " ".repeat(padding))
+}
+
+fn truncate_trailing(value: &str, max_width: usize) -> String {
+    if value.chars().count() <= max_width {
+        return value.to_string();
+    }
+    if max_width == 0 {
+        return String::new();
+    }
+    if max_width == 1 {
+        return "…".to_string();
+    }
+    let mut truncated = value.chars().take(max_width - 1).collect::<String>();
+    truncated.push('…');
+    truncated
+}
+
+impl TableColumn {
+    fn header(self) -> &'static str {
+        match self {
+            Self::Task => "Task",
+            Self::Node => "Node",
+            Self::Owner => "Owner",
+            Self::Status => "Status",
+            Self::Priority => "Pri",
+            Self::Area => "Area",
+            Self::Progress => "Progress",
+        }
+    }
+
+    fn preferred_width(self) -> usize {
+        match self {
+            Self::Task => 8,
+            Self::Node => 24,
+            Self::Owner => 12,
+            Self::Status => 12,
+            Self::Priority => 8,
+            Self::Area => 12,
+            Self::Progress => 16,
+        }
+    }
+
+    fn value(self, row: &TableRow) -> String {
+        match self {
+            Self::Task => row.task.clone(),
+            Self::Node => format!("{}{}", "  ".repeat(row.depth), row.node),
+            Self::Owner => row.owner.clone(),
+            Self::Status => row.status.clone(),
+            Self::Priority => row.priority.clone(),
+            Self::Area => row.area.clone(),
+            Self::Progress => row.progress.clone(),
+        }
+    }
 }
 
 fn search_footer_hints(section: SearchSection) -> Vec<Span<'static>> {
@@ -10936,6 +11322,58 @@ fn collect_visible_rows(
     subtree_has_visible_rows
 }
 
+fn visible_rows_to_table_rows(document: &Document, rows: &[VisibleRow]) -> Vec<TableRow> {
+    rows.iter()
+        .filter_map(|row| {
+            let node = get_node(&document.nodes, &row.path)?;
+            Some(TableRow {
+                path: row.path.clone(),
+                depth: row.depth,
+                task: table_task_value(node),
+                node: if node.text.is_empty() {
+                    "(empty)".to_string()
+                } else {
+                    node.text.clone()
+                },
+                owner: table_metadata_value(node, "owner"),
+                status: table_metadata_value(node, "status"),
+                priority: table_metadata_value(node, "priority"),
+                area: table_metadata_value(node, "area"),
+                progress: table_progress_value(node),
+                matched: row.matched,
+                dimmed: row.dimmed,
+            })
+        })
+        .collect()
+}
+
+fn table_task_value(node: &Node) -> String {
+    if let Some(task) = node.task {
+        task.marker().to_string()
+    } else if node.task_query_matches(crate::model::TaskQuery::Done) {
+        "done".to_string()
+    } else if node.task_query_matches(crate::model::TaskQuery::Blocked) {
+        "blocked".to_string()
+    } else if node.task_query_matches(crate::model::TaskQuery::Open) {
+        "open".to_string()
+    } else {
+        "-".to_string()
+    }
+}
+
+fn table_metadata_value(node: &Node, key: &str) -> String {
+    node.metadata_value(key).unwrap_or("-").to_string()
+}
+
+fn table_progress_value(node: &Node) -> String {
+    let progress = node.child_task_progress();
+    if progress.has_tasks() {
+        progress.display_suffix()
+    } else {
+        "-".to_string()
+    }
+}
+
 fn collect_expandable_paths_in_scope(
     nodes: &[Node],
     projection: ViewProjection<'_>,
@@ -12200,6 +12638,85 @@ mod tests {
             app.editor.current().expect("focus should exist").task,
             Some(TaskState::Open)
         );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn table_rows_surface_task_and_metadata_columns() {
+        let document = parse_document(
+            "- Project [id:project]\n  - [ ] Build table #todo @status:active @owner:jason @priority:high @area:tui [id:project/table]\n    - [x] Model rows #done @status:done\n  - Decision @status:active [id:project/decision]\n",
+        )
+        .document;
+        let mut rows = Vec::new();
+        let projection = ViewProjection {
+            filter: None,
+            filter_visible_paths: None,
+            focus_path: &[0],
+            view_mode: ViewMode::FullMap,
+        };
+        let mut expanded = HashSet::new();
+        expanded.insert(vec![0]);
+        expanded.insert(vec![0, 0]);
+        collect_visible_rows(
+            &document.nodes,
+            &expanded,
+            projection,
+            &mut rows,
+            Vec::new(),
+        );
+
+        let table_rows = visible_rows_to_table_rows(&document, &rows);
+        let task = table_rows
+            .iter()
+            .find(|row| row.node == "Build table")
+            .expect("task row should exist");
+        assert_eq!(task.task, "[ ]");
+        assert_eq!(task.owner, "jason");
+        assert_eq!(task.status, "active");
+        assert_eq!(task.priority, "high");
+        assert_eq!(task.area, "tui");
+        assert_eq!(task.progress, "(1/1 done)");
+
+        let decision = table_rows
+            .iter()
+            .find(|row| row.node == "Decision")
+            .expect("decision row should exist");
+        assert_eq!(decision.task, "-");
+    }
+
+    #[test]
+    fn table_overlay_opens_over_visible_scope_and_focuses_selected_row() {
+        let map_path = temp_map_path("table-overlay.md");
+        let document = parse_document(
+            "- Project [id:project]\n  - [ ] Build table #todo @status:active @owner:jason @priority:high @area:tui [id:project/table]\n  - Decision @status:active [id:project/decision]\n",
+        )
+        .document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::NONE))
+            .expect("C should open table view");
+        assert!(app.table.is_some(), "table overlay should be open");
+        assert_eq!(app.table_rows().len(), 3);
+
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("down should move table selection");
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should focus the selected row");
+
+        assert!(
+            app.table.is_none(),
+            "enter should close table after focusing"
+        );
+        assert_eq!(app.editor.focus_path(), &[0, 0]);
+        assert_eq!(app.status.text, "Focused 'Build table' from table view.");
 
         cleanup_sidecars(&map_path);
     }

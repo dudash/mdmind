@@ -113,6 +113,10 @@
     - Search narrows the working set #guide [id:guide/model/search]
       - queries, browse, and saved views all feed the same filter model
       - filters help you work inside a smaller visible surface without losing the original map
+    - Table view compares fields #guide [id:guide/model/table]
+      - press C when metadata matters more than hierarchy for a moment
+      - scan owner, status, priority, area, task state, and progress
+      - press Enter on a table row to return focus to that outline node
     - Safety is part of the product #guide [id:guide/model/safety]
       - undo and redo restore structural edits
       - checkpoints let you capture and restore named snapshots
@@ -124,6 +128,7 @@
       - → expands a branch or enters the first child
       - Enter toggles branch expansion
       - Space toggles a focused [ ] or [x] TODO item, or falls back to branch expansion on non-task rows
+      - C opens a read-only table over the current visible scope
       - z collapses the current working scope
       - Z expands the current working scope
       - g jumps to the root, or to the subtree root in Subtree Only

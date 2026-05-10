@@ -1,13 +1,22 @@
 # In-Work Features
 
-There are no major product features currently parked in the `inwork` shelf.
+The active in-work feature is the metadata/task table view.
 
-Recent items were either:
+Current slice:
 
-- finished and moved to the shipped shelf
-- or clarified as future work instead of active implementation
+- open a read-only table with `C` or the command palette
+- show the current visible scope, including active filters and focused views
+- scan task state, node label, owner, status, priority, area, and derived progress
+- press `Enter` to focus the selected row back in the outline
 
-So for now, read the shelves like this:
+Still moving:
+
+- user-selected columns
+- saved table presets
+- direct metadata editing
+- additional derived orientation fields
+
+Read the shelves like this:
 
 - [finished/README.md](../finished/README.md) for what ships now
 - [future/README.md](../future/README.md) for the next real capability gaps

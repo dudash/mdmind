@@ -144,6 +144,8 @@ mdm examples copy all
 
 For TODO maps in the TUI, press `t` / `T` to add a TODO child or sibling and `Space` to toggle a focused `[ ]` or `[x]` task item. Use `task:open`, `task:blocked`, and `task:done` when an agent or human needs task-aware filters across checkbox, tag, and status conventions.
 
+For the design recommendation on what belongs in `AGENTS.md`, a durable TODO map, skills, or external issue trackers, see [AGENT_TODO_MEMORY.md](AGENT_TODO_MEMORY.md).
+
 ## Examples Help
 
 The bundled examples are useful prompt references because they show the format being used for real work instead of toy snippets.
@@ -181,6 +183,7 @@ loops.
 ## Related Docs
 
 - [AGENT_SKILL_INSTALLS.md](AGENT_SKILL_INSTALLS.md)
+- [AGENT_TODO_MEMORY.md](AGENT_TODO_MEMORY.md)
 - [SKILLS_CUSTOMIZING.md](SKILLS_CUSTOMIZING.md)
 - [USING_MDMIND_AS_OUTLINER.md](USING_MDMIND_AS_OUTLINER.md)
 - [QUERY_LANGUAGE.md](QUERY_LANGUAGE.md)
