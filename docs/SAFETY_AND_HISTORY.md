@@ -58,7 +58,9 @@ This is especially useful in longer sessions where “go back one step” is not
 You can work either way:
 
 - `s` saves now
-- `S` toggles autosave
+- `S` toggles autosave; when you turn AUTOSAVE on, mdmind saves the current map immediately
+
+The AUTOSAVE or KEYSAVE preference is stored per map in the local `.your-map.md.mdmind-ui.json` sidecar with the other surface settings.
 
 If autosave is on, restored history still writes back to disk so the file and the TUI stay aligned.
 

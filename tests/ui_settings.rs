@@ -35,6 +35,7 @@ fn ui_settings_round_trip_through_disk() {
         ascii_accents: false,
         minimal_mode: true,
         reading_mode: true,
+        autosave: true,
     };
     save_ui_settings_for(&map_path, &settings).expect("ui settings should write");
 
@@ -71,6 +72,29 @@ fn ui_settings_load_older_sidecars_without_minimal_mode() {
     assert!(loaded.ascii_accents);
     assert!(!loaded.minimal_mode);
     assert!(!loaded.reading_mode);
+    assert!(!loaded.autosave);
+
+    std::fs::remove_file(settings_path).ok();
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
+fn ui_settings_load_autosave_preference() {
+    let map_path = temp_map_path("autosave-preference.md");
+    std::fs::write(&map_path, "- Root\n").expect("fixture map should be writable");
+    let settings_path =
+        ui_settings_path_for(&map_path).expect("ui settings path should be derivable");
+    std::fs::write(
+        &settings_path,
+        r#"{
+  "theme": "workbench",
+  "autosave": true
+}"#,
+    )
+    .expect("autosave ui settings should write");
+
+    let loaded = load_ui_settings_for(&map_path).expect("autosave settings should load");
+    assert!(loaded.autosave);
 
     std::fs::remove_file(settings_path).ok();
     std::fs::remove_file(map_path).ok();
@@ -99,6 +123,7 @@ fn ui_settings_load_reduced_motion_sidecars() {
     assert!(!loaded.ascii_accents);
     assert!(!loaded.minimal_mode);
     assert!(!loaded.reading_mode);
+    assert!(!loaded.autosave);
 
     std::fs::remove_file(settings_path).ok();
     std::fs::remove_file(map_path).ok();

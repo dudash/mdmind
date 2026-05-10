@@ -107,6 +107,14 @@ Create a map from a starter template:
 mdm init roadmap.md --template product
 ```
 
+For local task decomposition and agent handoff:
+
+```bash
+mdm init TODO.md --template todo
+```
+
+Inside `mdmind`, press `t` / `T` to add a TODO child or sibling and `Space` to toggle a focused `[ ]` / `[x]` task. Search with `task:open`, `task:blocked`, or `task:done` when you want checkbox-aware filters.
+
 Open the TUI:
 
 ```bash

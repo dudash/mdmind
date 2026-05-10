@@ -16,6 +16,7 @@ Create native `mdmind` map output that stays useful for a human, not just syntac
 - Turn messy source material into a clean `mdmind` outline.
 - Draft or revise `.md` map files used with `mdmind`.
 - Convert notes, plans, research, writing, or strategy material into a durable map without losing the user's intended framing.
+- Create decomposable TODO maps for local execution, agent handoff, and persistent project memory.
 - Improve an existing map’s structure, labels, ids, metadata, details, or relations.
 
 ## Do Not Use For
@@ -187,6 +188,30 @@ Do not jump to ids and relations before the tree shape is already good.
 Use the reference shapes when the task matches a common pattern:
 
 - Common decomposition patterns and optional domain examples live in `references/example-shapes.md`.
+
+## TODO Map Guidance
+
+Use a TODO map shape when the user wants local task decomposition, agent memory, or a durable handoff file that should stay useful across sessions.
+
+Prefer this structure:
+
+- a short root such as `Project TODO Map #todo-map @status:active [id:todo]`
+- `Current Focus`, `Backlog`, `Blocked`, `Decisions`, `Handoff Notes`, and `Done Log`
+- concrete leaf tasks marked with `#todo` and `@status:todo|active|blocked|done`
+- sparse metadata such as `@owner`, `@priority`, and `@area` only where it helps filtering
+- detail lines for acceptance criteria, blockers, or handoff context
+- ids on durable branches and major tasks, not every checklist item
+
+Use familiar checkbox markers like `[ ]` and `[x]` for togglable task rows. In `mdmind`, `Space` toggles a focused checkbox task and `t` / `T` starts a new TODO child or sibling prompt with `[ ] `. Keep `#todo`, `#done`, and `@status` metadata present enough for `task:open`, `task:blocked`, `task:done`, `mdm find`, and `mdm kv` workflows.
+
+Good TODO map commands to include when useful:
+
+```bash
+mdm find TODO.md "#todo @status:active" --plain
+mdm find TODO.md "@status:blocked" --plain
+mdm kv TODO.md --keys status,owner,priority,area --plain
+mdm validate TODO.md
+```
 
 ## Map Conventions
 

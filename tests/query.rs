@@ -29,6 +29,32 @@ fn find_matches_uses_the_shared_query_language() {
 }
 
 #[test]
+fn task_queries_find_checkbox_and_metadata_task_state() {
+    let parsed = parse_document(
+        "- Project\n  - [ ] Checkbox open\n  - [x] Checkbox done\n  - Metadata open #todo @status:active\n  - Blocked metadata #todo @status:blocked\n  - Done metadata #done @done:true\n  - Decision metadata @status:active\n",
+    );
+
+    let open = find_matches(&parsed.document, "task:open");
+    assert_eq!(open.len(), 3);
+    assert!(open.iter().any(|entry| entry.text == "Checkbox open"));
+    assert!(open.iter().any(|entry| entry.text == "Metadata open"));
+    assert!(open.iter().any(|entry| entry.text == "Blocked metadata"));
+
+    let blocked = find_matches(&parsed.document, "task:blocked");
+    assert_eq!(blocked.len(), 1);
+    assert_eq!(blocked[0].text, "Blocked metadata");
+
+    let done = find_matches(&parsed.document, "task:done");
+    assert_eq!(done.len(), 2);
+    assert!(done.iter().any(|entry| entry.text == "Checkbox done"));
+    assert!(done.iter().any(|entry| entry.text == "Done metadata"));
+
+    let any = find_matches(&parsed.document, "task:any");
+    assert_eq!(any.len(), 5);
+    assert!(!any.iter().any(|entry| entry.text == "Decision metadata"));
+}
+
+#[test]
 fn find_matches_and_filter_queries_can_match_node_details() {
     let parsed = parse_document(
         "- Launch Readiness [id:launch]\n  | Partner auth still depends on the same token model.\n  - Notes\n",

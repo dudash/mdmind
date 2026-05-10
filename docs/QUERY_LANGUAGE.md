@@ -11,7 +11,8 @@ If you are new, use search in this order:
 1. plain text
 2. tags
 3. metadata
-4. combinations
+4. task state
+5. combinations
 
 Examples:
 
@@ -19,6 +20,7 @@ Examples:
 rate limit
 #todo
 @status:active
+task:open
 #todo @owner:jason
 ```
 
@@ -76,12 +78,26 @@ Use metadata when the map has consistent structured fields:
 
 Metadata becomes especially useful when a map has stable keys like `status`, `owner`, `priority`, `region`, or `surface`.
 
+### Task State
+
+Use task filters when you want TODO rows regardless of whether they use checkbox markers, tags, or status metadata:
+
+```text
+task:open
+task:blocked
+task:done
+task:any
+```
+
+`task:open` matches `[ ]`, `#todo`, `@done:false`, and open `@status` values such as `todo`, `active`, or `blocked` when the row also has a task signal. `task:done` matches `[x]`, `#done`, `@done:true`, and done status on task rows.
+
 ### Combined Queries
 
 You can combine terms to narrow the working set:
 
 ```text
 #todo @owner:jason
+task:open @owner:jason
 rate limit #backend
 @status:blocked #release
 ```
@@ -109,7 +125,7 @@ Good saved views:
 - “my active work”
 - “blocked items”
 - “story beats”
-- “open launch tasks”
+- “open launch tasks” with `task:open`
 
 Bad saved views:
 
@@ -123,6 +139,7 @@ From the example maps:
 mdm find examples/lantern-studio-map.md "@owner:mira" --plain
 mdm find examples/game-world-moonwake.md "#quest @status:active" --plain
 mdm find examples/novel-research-writing-map.md "#theme" --plain
+mdm find TODO.md "task:open" --plain
 ```
 
 These are useful because they show the same search language from the CLI side.

@@ -36,6 +36,12 @@ const ASSETS: &[ExampleAsset] = &[
         contents: include_str!("../examples/agent-research-handoff.md"),
     },
     ExampleAsset {
+        name: "agent-todo-workflow",
+        file_name: "agent-todo-workflow.md",
+        description: "Codex-friendly TODO map for local task decomposition, handoff, and validation.",
+        contents: include_str!("../examples/agent-todo-workflow.md"),
+    },
+    ExampleAsset {
         name: "lantern-studio-map",
         file_name: "lantern-studio-map.md",
         description: "A larger operating map for a fictional live experience team.",

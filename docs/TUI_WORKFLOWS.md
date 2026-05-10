@@ -50,7 +50,8 @@ Important movement keys:
 - `↑ / ↓` move through visible nodes
 - `←` collapses a branch or moves to the parent
 - `→` expands a branch or enters the first child
-- `Enter` or `Space` toggles expansion
+- `Enter` toggles branch expansion
+- `Space` toggles a focused `[ ]` / `[x]` TODO item, or falls back to branch expansion on non-task rows
 - `z / Z` collapse or expand the current working scope
 - `g` jumps to the root
 
@@ -161,12 +162,12 @@ This is better than manually collapsing unrelated branches because the mode is e
 For task-heavy maps:
 
 1. open search
-2. query `#todo`, `@status:active`, or a combined filter
+2. query `task:open`, `task:blocked`, `#todo`, `@status:active`, or a combined filter
 3. move through results with `n` and `N`
 4. save the filter if it is recurring
 5. switch to `Filtered Focus` if you want the filtered working set to dominate the screen
 
-If the map has stable `@owner` or `@status` values, the palette can also surface contextual recipes so you do not need to remember every exact filter string.
+If the map has stable task markers, `@owner`, or `@status` values, the palette can also surface contextual recipes so you do not need to remember every exact filter string.
 
 ## Relations In Daily Use
 

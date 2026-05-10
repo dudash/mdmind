@@ -34,7 +34,7 @@ use crate::templates::TemplateKind;
     version,
     about = "Inspect and validate local markdown-like thought maps.",
     long_about = "mdm is the CLI for local-first structured maps. It reads plain-text tree files, renders them for humans, and exports machine-friendly output when you ask for --json or --plain.",
-    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
+    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm init TODO.md --template todo\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
 )]
 struct Cli {
     #[command(subcommand)]

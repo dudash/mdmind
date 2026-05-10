@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::editor::get_node;
 use crate::model::{
     Document, LinkEntry, MetadataEntry, MetadataKeyCount, MetadataRow, MetadataValueCount, Node,
-    RelationDirection, RelationRow, SearchMatch, TagCount,
+    RelationDirection, RelationRow, SearchMatch, TagCount, TaskQuery,
 };
 
 pub fn find_matches(document: &Document, query: &str) -> Vec<SearchMatch> {
@@ -49,6 +49,7 @@ enum QueryTerm {
     Text(String),
     Tag(String),
     Metadata { key: String, value: Option<String> },
+    Task(TaskQuery),
 }
 
 impl FilterQuery {
@@ -357,7 +358,19 @@ fn parse_term(token: &str) -> QueryTerm {
         };
     }
 
-    QueryTerm::Text(token.to_lowercase())
+    let lowered_token = token.to_lowercase();
+    if let Some(task_query) = lowered_token.strip_prefix("task:") {
+        return match task_query {
+            "any" | "all" => QueryTerm::Task(TaskQuery::Any),
+            "open" | "todo" => QueryTerm::Task(TaskQuery::Open),
+            "active" => QueryTerm::Task(TaskQuery::Active),
+            "blocked" => QueryTerm::Task(TaskQuery::Blocked),
+            "done" | "closed" | "complete" | "completed" => QueryTerm::Task(TaskQuery::Done),
+            _ => QueryTerm::Text(lowered_token),
+        };
+    }
+
+    QueryTerm::Text(lowered_token)
 }
 
 fn term_matches(term: &QueryTerm, node: &Node) -> bool {
@@ -376,6 +389,7 @@ fn term_matches(term: &QueryTerm, node: &Node) -> bool {
                 None => true,
             }
         }),
+        QueryTerm::Task(query) => node.task_query_matches(*query),
         QueryTerm::Text(lowered) => {
             node.text.to_lowercase().contains(lowered)
                 || node

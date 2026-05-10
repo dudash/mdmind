@@ -389,6 +389,7 @@ pub struct UiSettings {
     pub ascii_accents: bool,
     pub minimal_mode: bool,
     pub reading_mode: bool,
+    pub autosave: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -399,6 +400,7 @@ struct RawUiSettings {
     ascii_accents: Option<bool>,
     minimal_mode: Option<bool>,
     reading_mode: Option<bool>,
+    autosave: Option<bool>,
 }
 
 impl<'de> Deserialize<'de> for UiSettings {
@@ -415,6 +417,7 @@ impl<'de> Deserialize<'de> for UiSettings {
             ascii_accents: raw.ascii_accents.unwrap_or(false),
             minimal_mode: raw.minimal_mode.unwrap_or(false),
             reading_mode: raw.reading_mode.unwrap_or(false),
+            autosave: raw.autosave.unwrap_or(false),
         })
     }
 }
@@ -427,6 +430,7 @@ impl Default for UiSettings {
             ascii_accents: false,
             minimal_mode: false,
             reading_mode: false,
+            autosave: false,
         }
     }
 }

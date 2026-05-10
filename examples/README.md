@@ -8,6 +8,7 @@ Each one demonstrates a different style of thinking in `mdmind`:
 - meeting notes and action follow-up
 - prompt iteration and evaluation
 - decision logging
+- agent TODO maps and handoff loops
 - agent-to-human research handoff
 - studio operating maps
 - game worldbuilding and quest architecture
@@ -26,6 +27,7 @@ mdm view examples/lantern-studio-map.md#lantern/execution/now
 - Want realistic product planning: [product-status.md](./product-status.md)
 - Want meeting notes that still feel like an outliner: [meeting-notes-action-map.md](./meeting-notes-action-map.md)
 - Want an agent-generated handoff shape: [agent-research-handoff.md](./agent-research-handoff.md)
+- Want a Codex-friendly TODO workflow: [agent-todo-workflow.md](./agent-todo-workflow.md)
 - Want a lived-in studio operating map: [lantern-studio-map.md](./lantern-studio-map.md)
 - Want worldbuilding and quests: [game-world-moonwake.md](./game-world-moonwake.md)
 - Want writing and research: [novel-research-writing-map.md](./novel-research-writing-map.md)
@@ -157,6 +159,33 @@ Good CLI probes:
 mdm find examples/agent-research-handoff.md "@source:interview" --plain
 mdm find examples/agent-research-handoff.md "#todo @status:active" --plain
 mdm relations examples/agent-research-handoff.md#agent-handoff/themes/ownership --plain
+```
+
+### `agent-todo-workflow.md`
+
+A local TODO and handoff map for a developer working with Codex or another coding agent.
+
+What it demonstrates:
+
+- decomposable tasks with `#todo`, `@status`, `@owner`, `@priority`, and `@area`
+- short handoff instructions that an agent can follow safely
+- validation and inspection commands embedded near the workflow
+- `[ ]` and `[x]` rows that toggle with `Space` in the TUI
+
+Good first jump:
+
+```bash
+mdm view examples/agent-todo-workflow.md#codex-todo/current
+```
+
+Good CLI probes:
+
+```bash
+mdm find examples/agent-todo-workflow.md "task:open" --plain
+mdm find examples/agent-todo-workflow.md "#todo @status:active" --plain
+mdm kv examples/agent-todo-workflow.md --keys status,owner,priority,area --plain
+mdm find examples/agent-todo-workflow.md "task:blocked" --plain
+mdm find examples/agent-todo-workflow.md "@status:blocked" --plain
 ```
 
 ### `lantern-studio-map.md`

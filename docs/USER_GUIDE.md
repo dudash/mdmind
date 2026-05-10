@@ -19,7 +19,7 @@
       - press / and search for a normal word before learning tag or metadata syntax
       - press : to open the command palette
       - press ? to open built-in help
-      - press s in KEYSAVE mode, or S to toggle AUTOSAVE
+      - press s in KEYSAVE mode, or S to toggle AUTOSAVE and save the current map immediately
       - open Get Familiar With The TUI when you want a simple tour of the map and surrounding surfaces
     - What a map line can hold #guide [id:guide/start/map-line]
       - a visible label for people
@@ -89,6 +89,9 @@
       - tell the agent what should stay human-readable: concise labels, useful details, sparse ids, and a tree that still scans
     - TODO map workflow #recipe [id:guide/agents/todo]
       - create a short branch for each workstream, owner, question, or artifact
+      - press t / T to add a TODO child or sibling starting with [ ]
+      - press Space on a [ ] or [x] row to toggle it
+      - use task:open, task:blocked, and task:done for task-aware filters
       - add simple markers like #todo, @owner:name, and @status:active only where they help filtering
       - ask agents to append child tasks and fill in detail lines under their assigned branch
       - keep parent branches readable
@@ -119,7 +122,8 @@
       - ↑ / ↓ moves through visible nodes
       - ← collapses a branch or moves to the parent
       - → expands a branch or enters the first child
-      - Enter or Space toggles branch expansion
+      - Enter toggles branch expansion
+      - Space toggles a focused [ ] or [x] TODO item, or falls back to branch expansion on non-task rows
       - z collapses the current working scope
       - Z expands the current working scope
       - g jumps to the root, or to the subtree root in Subtree Only
@@ -354,6 +358,7 @@
       - + / = zooms in, and - / _ zooms out
       - z collapses the current spatial scope, and Z expands it into an overview
       - Enter focuses the selected bubble
+      - Space toggles a focused [ ] or [x] TODO item when the selected bubble is focused
     - Legacy visual mindmap #reference [id:guide/mindmap/legacy]
       - M opens or closes the older fixed visual mindmap
       - use it for a quick static read or PNG export
@@ -375,11 +380,14 @@
     - Safety tips #tip [id:guide/safety/tips]
       - take a manual checkpoint before major restructuring if you expect to compare outcomes
       - use recent action history in the palette when you want to jump back more than one step
+      - turning autosave on saves the current map immediately
+      - autosave or keysave preference persists per map in the local .mdmind-ui.json sidecar
       - if autosave is on, restored states still write back to disk so the file and UI stay aligned
   - Recipes #recipe @section:recipes [id:guide/recipes]
     - Review all todo work #recipe [id:guide/recipes/review-todo]
       - open search
       - query for #todo or combine it with @status:active
+      - query task:open when you want checkbox, tag, and status task conventions together
       - step through matches with n and N
       - save the filter if you will revisit it often
     - Work inside one branch #recipe [id:guide/recipes/one-branch]

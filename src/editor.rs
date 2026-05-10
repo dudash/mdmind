@@ -1,5 +1,5 @@
 use crate::app::AppError;
-use crate::model::{Diagnostic, Document, Node, has_errors};
+use crate::model::{Diagnostic, Document, Node, TaskState, has_errors};
 use crate::parser::{parse_document, parse_node_fragment};
 use crate::serializer::serialize_document;
 use crate::session::SessionState;
@@ -210,6 +210,7 @@ impl Editor {
             let node = get_node_mut(&mut document.nodes, &focus_path)
                 .expect("focus path should be valid before mutation");
             node.text = replacement.text;
+            node.task = replacement.task;
             node.detail = current.detail;
             node.tags = replacement.tags;
             node.metadata = replacement.metadata;
@@ -233,6 +234,26 @@ impl Editor {
             node.detail = detail_lines;
             focus_path
         })
+    }
+
+    pub fn toggle_current_task(&mut self) -> Result<TaskState, AppError> {
+        let Some(current) = self.current() else {
+            return Err(AppError::new("The document has no focused node."));
+        };
+        let Some(next_task) = current.task.map(TaskState::toggled) else {
+            return Err(AppError::new(
+                "The focused node does not have an explicit [ ] or [x] task marker.",
+            ));
+        };
+
+        let focus_path = self.focus_path.clone();
+        self.apply_change(move |document| {
+            let node = get_node_mut(&mut document.nodes, &focus_path)
+                .expect("focus path should be valid before mutation");
+            node.task = Some(next_task);
+            focus_path
+        })?;
+        Ok(next_task)
     }
 
     pub fn move_node_up(&mut self) -> Result<(), AppError> {

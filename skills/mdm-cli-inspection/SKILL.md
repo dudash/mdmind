@@ -21,6 +21,7 @@ Use `mdm` as the read, query, validate, and export surface for existing map file
 - List deep-link ids.
 - Check incoming and outgoing relations.
 - Export a full tree, a subtree, or a filtered working set.
+- Inspect TODO maps for active, blocked, done, owner, priority, or area-based work.
 
 ## Do Not Use For
 
@@ -65,6 +66,24 @@ If `mdm` is missing, do not invent command results. Tell the user to install `md
 - Use `mdm links <file>` to list deep-linkable ids.
 - Use `mdm relations <file>` or `mdm relations <file>#id` to inspect graph edges.
 - Use `mdm export <file> --format json|mermaid|opml` for downstream tools.
+
+## TODO Map Inspection
+
+For task-heavy maps, start with active and blocked work before broader summaries:
+
+```bash
+mdm find TODO.md "#todo @status:active" --plain
+mdm find TODO.md "task:open" --plain
+mdm find TODO.md "task:done" --plain
+mdm find TODO.md "@status:blocked" --plain
+mdm kv TODO.md --keys status,owner,priority,area --plain
+mdm view TODO.md#todo/focus
+mdm validate TODO.md
+```
+
+Use `find` for the working set, `kv` for ownership/status audits, and `view` with a deep link when the user needs one branch in context. After agent edits, run `validate` before summarizing the handoff.
+
+In the TUI, `Space` toggles a focused `[ ]` / `[x]` task item and `t` / `T` starts a new TODO child or sibling prompt. When inspecting files, expect explicit checkbox markers to round-trip in the raw map, task-aware filters like `task:open` to find checkbox/tag/status task conventions, and derived parent rollups to appear in rendered views.
 
 ## Workflow
 

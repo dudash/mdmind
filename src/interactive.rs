@@ -34,7 +34,7 @@ use crate::mindmap::{
     BoundaryEdge, Camera as MindmapCamera, MindmapWidget, Scene as MindmapScene,
     Theme as MindmapTheme, default_export_path, export_png,
 };
-use crate::model::{Document, LinkEntry, Node};
+use crate::model::{Document, LinkEntry, Node, TaskProgress, TaskState};
 use crate::parser::parse_node_fragment;
 use crate::query::{
     FilterQuery, backlinks_to, find_matches, link_entries, metadata_key_counts_for_filter,
@@ -762,7 +762,10 @@ impl HelpTopic {
                 ("/", "Search by text, tags, or metadata"),
                 (": / Ctrl+P", "Open the command palette"),
                 ("z / Z", "Collapse or expand the current working scope"),
-                ("s / S", "Save now or toggle AUTOSAVE / KEYSAVE"),
+                (
+                    "s / S",
+                    "Save now or toggle AUTOSAVE / KEYSAVE; enabling AUTOSAVE saves immediately",
+                ),
                 ("?", "Open built-in help"),
                 ("m", "Open the spatial canvas"),
                 ("M", "Open the legacy visual mindmap"),
@@ -811,7 +814,8 @@ impl HelpTopic {
                     "← / →",
                     "Collapse or expand, or move to parent / first child",
                 ),
-                ("Enter / Space", "Toggle expanded or collapsed state"),
+                ("Enter", "Toggle expanded or collapsed state"),
+                ("Space", "Toggle a focused [ ] / [x] TODO item"),
                 ("z / Z", "Collapse or expand the current working scope"),
                 ("g", "Jump to the map root, or subtree root in Subtree Only"),
                 (": / Ctrl+P", "Open the command palette"),
@@ -831,6 +835,7 @@ impl HelpTopic {
             ],
             Self::Editing => &[
                 ("a / A / Shift+R", "Add a child, sibling, or root branch"),
+                ("t / T", "Add a TODO child or sibling starting with [ ]"),
                 ("e", "Edit the selected node inline"),
                 ("x", "Delete after a second confirmation press"),
                 ("u / U", "Undo or redo the last structural change"),
@@ -852,6 +857,10 @@ impl HelpTopic {
                 ("text query", "Start with a normal word or phrase"),
                 ("#tag query", "Filter by a tag like #todo or #blocked"),
                 ("@key:value", "Filter by metadata like @status:active"),
+                (
+                    "task:open",
+                    "Filter by task state like task:open or task:done",
+                ),
                 ("b / w", "Open browse or saved views"),
                 ("Tab", "Switch Query, Browse, and Saved Views"),
                 ("Enter", "Apply the current query or pick"),
@@ -892,7 +901,10 @@ impl HelpTopic {
                     "Create or restore named checkpoints from the palette",
                 ),
                 ("undo / redo", "Browse recent action history in the palette"),
-                ("s / S", "Save now or toggle autosave"),
+                (
+                    "s / S",
+                    "Save now or toggle autosave; enabling autosave saves immediately",
+                ),
                 ("r", "Reload from disk"),
             ],
             Self::Themes => &[
@@ -925,7 +937,8 @@ impl HelpTopic {
                     "Pan the spatial canvas camera without changing focus",
                 ),
                 ("+ / = and - / _", "Zoom the spatial canvas in or out"),
-                ("Enter / Space", "Toggle the focused branch"),
+                ("Enter", "Toggle the focused branch"),
+                ("Space", "Toggle a focused [ ] / [x] TODO item"),
                 (
                     "Tab / Shift+Tab",
                     "Cycle bubbles when you want non-linear jumps",
@@ -1024,11 +1037,11 @@ impl HelpTopic {
                 "Quotes, rationale, meeting notes, scene notes, and research excerpts all fit here well.",
             ],
             Self::Search => &[
-                "Start broad with text, then tighten with #tags or @metadata once you see the pattern you need.",
+                "Start broad with text, then tighten with #tags, @metadata, or task:open once you see the pattern you need.",
                 "If you are learning a new map, use browse before you try to guess every available metadata value or id path.",
                 "Saved views are best for recurring workflows, not one-off ad hoc filters.",
                 "Use palette recipes when you know the workflow you want but do not want to remember the exact filter.",
-                "If your map uses @owner or several @status values, try typing 'owner' or 'status' in the palette to see contextual review recipes.",
+                "If your map uses task markers, @owner, or several @status values, try typing 'open tasks', 'owner', or 'status' in the palette to see contextual review recipes.",
             ],
             Self::Views => &[
                 "Use Focus Branch when you still need orientation. Use Subtree Only when you want the rest of the map to disappear.",
@@ -1042,7 +1055,7 @@ impl HelpTopic {
             ],
             Self::Safety => &[
                 "Use undo for recent edits, checkpoints for larger experiments, and recent history when you want to compare several nearby states.",
-                "If autosave is on, undo still writes the restored state back to disk so the file and the UI stay aligned.",
+                "Turning autosave on saves the current map immediately; after that, undo and edits keep writing back to disk so the file and the UI stay aligned.",
                 "Before a major restructure, a named checkpoint is usually better than cautious micro-edits.",
             ],
             Self::Themes => &[
@@ -1178,8 +1191,10 @@ enum PaletteAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PaletteRecipe {
     ReviewTodo,
+    ReviewOpenTasks,
     ReviewActive,
     ReviewBlocked,
+    ReviewDoneTasks,
     WorkInsideBranch,
     BrowseFacets,
     SaveWorkingSet,
@@ -1190,8 +1205,10 @@ impl PaletteRecipe {
     fn title(self) -> &'static str {
         match self {
             Self::ReviewTodo => "Review Todo Work",
+            Self::ReviewOpenTasks => "Review Open Tasks",
             Self::ReviewActive => "Review Active Work",
             Self::ReviewBlocked => "Review Blocked Work",
+            Self::ReviewDoneTasks => "Review Done Tasks",
             Self::WorkInsideBranch => "Work Inside This Branch",
             Self::BrowseFacets => "Browse Tags And Metadata",
             Self::SaveWorkingSet => "Save Current Working Set",
@@ -1202,8 +1219,10 @@ impl PaletteRecipe {
     fn subtitle(self) -> &'static str {
         match self {
             Self::ReviewTodo => "Filter to #todo items and land on the first match",
+            Self::ReviewOpenTasks => "Filter to task:open items from checkboxes or metadata",
             Self::ReviewActive => "Filter to @status:active work and focus the working set",
-            Self::ReviewBlocked => "Filter to @status:blocked work and review what is stuck",
+            Self::ReviewBlocked => "Filter to blocked task state and review what is stuck",
+            Self::ReviewDoneTasks => "Filter to task:done items from checkboxes or metadata",
             Self::WorkInsideBranch => "Isolate the current branch as a rooted workspace",
             Self::BrowseFacets => "Browse tags, metadata, and deep-link ids",
             Self::SaveWorkingSet => "Name the current filter as a reusable saved view",
@@ -1216,11 +1235,17 @@ impl PaletteRecipe {
     fn keywords(self) -> &'static str {
         match self {
             Self::ReviewTodo => "recipe workflow review todo tasks triage open work filter #todo",
+            Self::ReviewOpenTasks => {
+                "recipe workflow review open task tasks checkbox unchecked filter task:open"
+            }
             Self::ReviewActive => {
                 "recipe workflow review active status current work filter @status:active"
             }
             Self::ReviewBlocked => {
-                "recipe workflow review blocked status stuck work filter @status:blocked"
+                "recipe workflow review blocked status stuck work task tasks filter task:blocked @status:blocked"
+            }
+            Self::ReviewDoneTasks => {
+                "recipe workflow review done complete completed task tasks checkbox checked filter task:done"
             }
             Self::WorkInsideBranch => {
                 "recipe workflow subtree branch isolate focus local workspace"
@@ -1240,11 +1265,17 @@ impl PaletteRecipe {
             Self::ReviewTodo => {
                 "Apply `#todo`, switch to Filtered Focus, and land on the first matching branch.\nUse this when you want to review open work without manually building a query."
             }
+            Self::ReviewOpenTasks => {
+                "Apply `task:open`, switch to Filtered Focus, and land on the first matching branch.\nThis catches `[ ]`, `#todo`, `@done:false`, and open `@status` values on task rows."
+            }
             Self::ReviewActive => {
                 "Apply `@status:active`, switch to Filtered Focus, and land on the first matching branch.\nThis is useful for a quick pass over work already in motion."
             }
             Self::ReviewBlocked => {
-                "Apply `@status:blocked`, switch to Filtered Focus, and land on the first matching branch.\nUse this as a recurring unblock review when your map tracks status."
+                "Apply `task:blocked`, switch to Filtered Focus, and land on the first matching branch.\nUse this as a recurring unblock review when your map tracks status or blocked tags."
+            }
+            Self::ReviewDoneTasks => {
+                "Apply `task:done`, switch to Filtered Focus, and land on the first matching branch.\nUse this when you want to audit completed checkbox, #done, @done:true, or @status:done rows."
             }
             Self::WorkInsideBranch => {
                 "Enter Subtree Only on the current node and keep that node as the rooted workspace.\nThis is best for local edits, cleanup, and presenting one branch."
@@ -1986,6 +2017,8 @@ struct VisibleRow {
     path: Vec<usize>,
     depth: usize,
     text: String,
+    task: Option<TaskState>,
+    task_progress: TaskProgress,
     tags: Vec<String>,
     metadata: Vec<String>,
     relations: Vec<String>,
@@ -2126,7 +2159,7 @@ impl TuiApp {
             palette_preview_base: None,
             quit_armed: false,
             delete_armed: false,
-            autosave,
+            autosave: autosave || ui_settings.autosave,
             motion_cue: None,
             ui_settings,
             undo_history: Vec::new(),
@@ -2239,10 +2272,15 @@ impl TuiApp {
                 self.delete_armed = false;
                 self.expand_or_child()?;
             }
-            KeyCode::Enter | KeyCode::Char(' ') => {
+            KeyCode::Enter => {
                 self.quit_armed = false;
                 self.delete_armed = false;
                 self.toggle_branch()?;
+            }
+            KeyCode::Char(' ') => {
+                self.quit_armed = false;
+                self.delete_armed = false;
+                self.toggle_task_or_branch()?;
             }
             KeyCode::Char('?') => {
                 self.open_help(None);
@@ -2292,6 +2330,14 @@ impl TuiApp {
             KeyCode::Char('a') => {
                 self.delete_armed = false;
                 self.begin_prompt(PromptMode::AddChild, String::new());
+            }
+            KeyCode::Char('t') => {
+                self.delete_armed = false;
+                self.begin_prompt(PromptMode::AddChild, "[ ] ".to_string());
+            }
+            KeyCode::Char('T') => {
+                self.delete_armed = false;
+                self.begin_prompt(PromptMode::AddSibling, "[ ] ".to_string());
             }
             KeyCode::Char('A') => {
                 self.delete_armed = false;
@@ -2359,13 +2405,7 @@ impl TuiApp {
             }
             KeyCode::Char('S') => {
                 self.delete_armed = false;
-                self.autosave = !self.autosave;
-                let message = if self.autosave {
-                    "Autosave enabled. Changes now write to disk immediately."
-                } else {
-                    "Autosave disabled. Press s to save changes manually."
-                };
-                self.set_status(StatusTone::Info, message);
+                self.toggle_autosave()?;
             }
             KeyCode::Char('r') => {
                 self.revert_from_disk()?;
@@ -2684,12 +2724,24 @@ impl TuiApp {
                     );
                 }
             }
-            KeyCode::Enter | KeyCode::Char(' ') => {
+            KeyCode::Enter => {
                 let has_children = self
                     .editor
                     .current()
                     .is_some_and(|node| !node.children.is_empty());
                 self.toggle_branch()?;
+                canvas.clear_boundary();
+                if has_children {
+                    canvas.anchor_layout_to_focus(self.editor.focus_path());
+                }
+                canvas.selected_path = self.editor.focus_path().to_vec();
+            }
+            KeyCode::Char(' ') => {
+                let has_children = self
+                    .editor
+                    .current()
+                    .is_some_and(|node| !node.children.is_empty());
+                self.toggle_task_or_branch()?;
                 canvas.clear_boundary();
                 if has_children {
                     canvas.anchor_layout_to_focus(self.editor.focus_path());
@@ -3630,6 +3682,21 @@ impl TuiApp {
         Ok(())
     }
 
+    fn toggle_task_or_branch(&mut self) -> Result<(), AppError> {
+        let Some(node) = self.editor.current() else {
+            return Ok(());
+        };
+        let Some(next_task) = node.task.map(|task| task.toggled()) else {
+            return self.toggle_branch();
+        };
+
+        self.apply_edit(
+            |editor| editor.toggle_current_task().map(|_| ()),
+            format!("Marked task {}.", next_task.label()),
+            None,
+        )
+    }
+
     fn expand_all_in_scope(&mut self) {
         self.expanded = self.expandable_paths_in_scope();
         self.set_status(
@@ -3894,13 +3961,7 @@ impl TuiApp {
                     self.save_to_disk()?;
                 }
                 PaletteAction::ToggleAutosave => {
-                    self.autosave = !self.autosave;
-                    let message = if self.autosave {
-                        "Autosave enabled. Changes now write to disk immediately."
-                    } else {
-                        "Autosave disabled. Press s to save changes manually."
-                    };
-                    self.set_status(StatusTone::Info, message);
+                    self.toggle_autosave()?;
                 }
                 PaletteAction::RevertFromDisk => {
                     self.revert_from_disk()?;
@@ -3936,6 +3997,16 @@ impl TuiApp {
                         );
                     }
                 }
+                PaletteRecipe::ReviewOpenTasks => {
+                    self.apply_filter("task:open")?;
+                    if self.active_filter_match_count() > 0 {
+                        self.set_view_mode(ViewMode::FilteredFocus);
+                        self.set_status(
+                            StatusTone::Success,
+                            "Recipe applied: reviewing task:open work in Filtered Focus.",
+                        );
+                    }
+                }
                 PaletteRecipe::ReviewActive => {
                     self.apply_filter("@status:active")?;
                     if self.active_filter_match_count() > 0 {
@@ -3947,12 +4018,22 @@ impl TuiApp {
                     }
                 }
                 PaletteRecipe::ReviewBlocked => {
-                    self.apply_filter("@status:blocked")?;
+                    self.apply_filter("task:blocked")?;
                     if self.active_filter_match_count() > 0 {
                         self.set_view_mode(ViewMode::FilteredFocus);
                         self.set_status(
                             StatusTone::Success,
-                            "Recipe applied: reviewing @status:blocked work in Filtered Focus.",
+                            "Recipe applied: reviewing task:blocked work in Filtered Focus.",
+                        );
+                    }
+                }
+                PaletteRecipe::ReviewDoneTasks => {
+                    self.apply_filter("task:done")?;
+                    if self.active_filter_match_count() > 0 {
+                        self.set_view_mode(ViewMode::FilteredFocus);
+                        self.set_status(
+                            StatusTone::Success,
+                            "Recipe applied: reviewing task:done work in Filtered Focus.",
                         );
                     }
                 }
@@ -4484,8 +4565,10 @@ impl TuiApp {
     fn palette_recipe_items(&self, query: &str) -> Vec<PaletteItem> {
         let mut recipes = vec![
             PaletteRecipe::ReviewTodo,
+            PaletteRecipe::ReviewOpenTasks,
             PaletteRecipe::ReviewActive,
             PaletteRecipe::ReviewBlocked,
+            PaletteRecipe::ReviewDoneTasks,
             PaletteRecipe::WorkInsideBranch,
             PaletteRecipe::BrowseFacets,
             PaletteRecipe::VisualizeCurrentView,
@@ -5561,6 +5644,28 @@ impl TuiApp {
             StatusTone::Success,
             format!("Saved '{}'.", self.map_path.display()),
         );
+        Ok(())
+    }
+
+    fn toggle_autosave(&mut self) -> Result<(), AppError> {
+        self.autosave = !self.autosave;
+        self.ui_settings.autosave = self.autosave;
+        if self.autosave {
+            self.write_editor_to_disk()?;
+            self.persist_session()?;
+            self.persist_ui_settings()?;
+            self.set_status(
+                StatusTone::Success,
+                "Autosave enabled and current changes saved. Future changes write to disk immediately.",
+            );
+        } else {
+            self.persist_session()?;
+            self.persist_ui_settings()?;
+            self.set_status(
+                StatusTone::Info,
+                "Autosave disabled. Press s to save changes manually.",
+            );
+        }
         Ok(())
     }
 
@@ -6665,6 +6770,18 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     .fg(PALETTE.warn)
                     .add_modifier(Modifier::UNDERLINED | Modifier::BOLD);
             }
+            if let Some(task) = row.task {
+                spans.push(Span::styled(
+                    format!("{} ", task.marker()),
+                    Style::default().fg(if row.dimmed {
+                        PALETTE.border
+                    } else if task == TaskState::Done {
+                        PALETTE.tag
+                    } else {
+                        PALETTE.warn
+                    }),
+                ));
+            }
             spans.push(Span::styled(row.text.clone(), text_style));
             if show_tags {
                 spans.push(Span::raw(" "));
@@ -6714,6 +6831,17 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                 spans.push(Span::raw(" "));
                 spans.push(Span::styled(
                     format!("({})", row.child_count),
+                    Style::default().fg(if row.dimmed {
+                        PALETTE.border
+                    } else {
+                        PALETTE.count
+                    }),
+                ));
+            }
+            if row.task_progress.has_tasks() && (!minimal || is_selected || row.matched) {
+                spans.push(Span::raw(" "));
+                spans.push(Span::styled(
+                    row.task_progress.display_suffix(),
                     Style::default().fg(if row.dimmed {
                         PALETTE.border
                     } else {
@@ -6887,7 +7015,7 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
         Some(node) => {
             let mut lines = Vec::new();
             lines.push(Line::from(vec![Span::styled(
-                node.text.clone(),
+                focus_node_title(node),
                 Style::default()
                     .fg(PALETTE.text)
                     .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
@@ -7413,6 +7541,11 @@ fn keybar_spans(app: &TuiApp) -> Vec<Span<'static>> {
     if app.filter.is_some() {
         spans.push(separator_span());
         spans.push(key_hint("n/N", "match"));
+    }
+
+    if app.editor.current().is_some_and(|node| node.task.is_some()) {
+        spans.push(separator_span());
+        spans.push(key_hint("Space", "task"));
     }
 
     let has_outgoing_relations = app
@@ -8036,7 +8169,7 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
             Paragraph::new(if minimal {
                 "No matches yet."
             } else {
-                "No matches yet. Try 'review todo', 'save', 'paper', '#todo', '@status:active', 'product/tasks', or a node label like 'tasks'."
+                "No matches yet. Try 'review open tasks', 'save', 'paper', 'task:open', '#todo', '@status:active', 'product/tasks', or a node label like 'tasks'."
             })
             .block(
                 Block::default()
@@ -9471,6 +9604,23 @@ fn palette_branch_index_label(node: &Node) -> String {
     }
 }
 
+fn focus_node_title(node: &Node) -> String {
+    let mut title = if node.text.is_empty() {
+        "(empty)".to_string()
+    } else {
+        node.text.clone()
+    };
+    if let Some(task) = node.task {
+        title = format!("{} {title}", task.marker());
+    }
+    let progress = node.child_task_progress();
+    if progress.has_tasks() {
+        title.push(' ');
+        title.push_str(&progress.display_suffix());
+    }
+    title
+}
+
 fn collect_relation_palette_entries(
     document: &Document,
     focus_path: &[usize],
@@ -10739,6 +10889,8 @@ fn collect_visible_rows(
                 path: path.clone(),
                 depth: visible_row_depth(&path, projection.focus_path, projection.view_mode),
                 text: node.text.clone(),
+                task: node.task,
+                task_progress: node.child_task_progress(),
                 tags: node.tags.clone(),
                 metadata: node
                     .metadata
@@ -11137,7 +11289,7 @@ fn help_getting_started_lines(app: &TuiApp, palette: Palette) -> Vec<Line<'stati
             "Press a to add a child, A to add a sibling, and e to edit nodes you have already made.",
             "Press / and search for a normal word before learning tag or metadata syntax.",
             "Press : or Ctrl+P when you know the branch, action, setting, or help topic you want.",
-            "Press s in KEYSAVE mode, or S to toggle AUTOSAVE.",
+            "Press s in KEYSAVE mode, or S to toggle AUTOSAVE and save the current map immediately.",
             "Open Get Familiar With The TUI when you want a simple tour of the map and surrounding surfaces.",
         ],
     ));
@@ -11320,6 +11472,7 @@ fn help_agents_lines(app: &TuiApp, palette: Palette) -> Vec<Line<'static>> {
         palette.sky,
         &[
             "Create a short branch for each workstream, owner, question, or artifact.",
+            "Press t / T to add a TODO child or sibling; press Space on a [ ] or [x] row to toggle it.",
             "Add simple markers like #todo, @owner:name, and @status:active only where they help filtering.",
             "Ask agents to append child tasks and fill in detail lines under their assigned branch.",
             "Keep parent branches readable; move long rationale, evidence, and drafts into details.",
@@ -11944,6 +12097,138 @@ mod tests {
         if session_path.exists() {
             std::fs::remove_file(session_path).ok();
         }
+    }
+
+    #[test]
+    fn space_toggles_explicit_task_marker_instead_of_branch() {
+        let map_path = temp_map_path("task-toggle.md");
+        let document = parse_document(
+            "- Project [id:project]\n  - [ ] Open task #todo [id:project/open]\n    - Child context\n",
+        )
+        .document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE))
+            .expect("space should toggle explicit tasks");
+
+        let rendered = serialize_document(app.editor.document());
+        assert!(rendered.contains("- [x] Open task #todo [id:project/open]"));
+        assert_eq!(app.status.text, "Marked task done.");
+        assert_eq!(
+            app.editor.current().expect("focus should exist").task,
+            Some(TaskState::Done)
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn t_starts_a_todo_child_prompt() {
+        let map_path = temp_map_path("todo-child-prompt.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 1],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE))
+            .expect("t should start a todo child prompt");
+        assert_eq!(
+            app.prompt.as_ref().expect("prompt should be open").value,
+            "[ ] "
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Char('S'), KeyModifiers::NONE))
+            .expect("typing should extend the todo prompt");
+        for character in "hip docs #todo @status:active".chars() {
+            app.handle_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE))
+                .expect("typing should update the prompt");
+        }
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should add the todo child");
+
+        let rendered = serialize_document(app.editor.document());
+        assert!(rendered.contains("- [ ] Ship docs #todo @status:active"));
+        assert_eq!(
+            app.editor.current().expect("focus should exist").task,
+            Some(TaskState::Open)
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn capital_t_starts_a_todo_sibling_prompt() {
+        let map_path = temp_map_path("todo-sibling-prompt.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 1],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('T'), KeyModifiers::NONE))
+            .expect("T should start a todo sibling prompt");
+        assert_eq!(
+            app.prompt.as_ref().expect("prompt should be open").value,
+            "[ ] "
+        );
+        for character in "Sibling task #todo @status:active".chars() {
+            app.handle_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE))
+                .expect("typing should update the prompt");
+        }
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should add the todo sibling");
+
+        let rendered = serialize_document(app.editor.document());
+        assert!(rendered.contains("- [ ] Sibling task #todo @status:active"));
+        assert_eq!(app.editor.focus_path(), &[0, 2]);
+        assert_eq!(
+            app.editor.current().expect("focus should exist").task,
+            Some(TaskState::Open)
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn enter_still_toggles_task_branches_without_changing_done_state() {
+        let map_path = temp_map_path("task-branch-toggle.md");
+        let document = parse_document(
+            "- Project [id:project]\n  - [ ] Open task #todo [id:project/open]\n    - Child context\n",
+        )
+        .document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.expanded.insert(vec![0, 0]);
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should toggle branch expansion");
+
+        let rendered = serialize_document(app.editor.document());
+        assert!(rendered.contains("- [ ] Open task #todo [id:project/open]"));
+        assert_eq!(app.status.text, "Collapsed the branch.");
+
+        cleanup_sidecars(&map_path);
     }
 
     #[test]
@@ -13881,6 +14166,79 @@ mod tests {
         if session_path.exists() {
             std::fs::remove_file(session_path).ok();
         }
+        std::fs::remove_file(map_path).ok();
+    }
+
+    #[test]
+    fn enabling_autosave_saves_current_keysave_changes() {
+        let map_path = temp_map_path("autosave-toggle-saves-current.md");
+        let source = "- Product Idea [id:product]\n  - Tasks #todo [id:product/tasks]\n";
+        std::fs::write(&map_path, source).expect("fixture map should be writable");
+        let document = parse_document(source).document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.begin_prompt(
+            PromptMode::AddChild,
+            "Unsaved Branch #todo [id:product/unsaved]".to_string(),
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should submit");
+        assert!(
+            app.editor.dirty(),
+            "keysave edit should remain dirty before autosave is enabled"
+        );
+        let before_toggle =
+            std::fs::read_to_string(&map_path).expect("fixture map should be readable");
+        assert!(
+            !before_toggle.contains("Unsaved Branch"),
+            "keysave edit should not write before toggling autosave"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('S'), KeyModifiers::SHIFT))
+            .expect("S should enable autosave and save current changes");
+
+        assert!(app.autosave, "autosave should be enabled");
+        assert!(
+            !app.editor.dirty(),
+            "enabling autosave should mark the saved editor clean"
+        );
+        let saved = std::fs::read_to_string(&map_path).expect("saved map should be readable");
+        assert!(
+            saved.contains("Unsaved Branch #todo [id:product/unsaved]"),
+            "enabling autosave should immediately write pending keysave changes"
+        );
+        assert!(
+            app.status.text.contains("current changes saved"),
+            "status should make the immediate save explicit"
+        );
+        let loaded_settings =
+            load_ui_settings_for(&map_path).expect("ui settings should load after autosave toggle");
+        assert!(
+            loaded_settings.autosave,
+            "autosave preference should persist per map"
+        );
+        let reloaded = TuiApp::new_with_settings(
+            map_path.clone(),
+            app.editor.document().clone(),
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+            loaded_settings,
+        );
+        assert!(
+            reloaded.autosave,
+            "reopening the same map should restore the persisted autosave state"
+        );
+
+        cleanup_sidecars(&map_path);
         std::fs::remove_file(map_path).ok();
     }
 

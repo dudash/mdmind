@@ -4,6 +4,7 @@ pub enum TemplateKind {
     Feature,
     Prompts,
     Backlog,
+    Todo,
     Writing,
 }
 
@@ -14,6 +15,7 @@ impl TemplateKind {
             Self::Feature,
             Self::Prompts,
             Self::Backlog,
+            Self::Todo,
             Self::Writing,
         ]
     }
@@ -24,13 +26,16 @@ impl TemplateKind {
             "feature" => Some(Self::Feature),
             "prompts" => Some(Self::Prompts),
             "backlog" => Some(Self::Backlog),
+            "todo" => Some(Self::Todo),
             "writing" => Some(Self::Writing),
             _ => None,
         }
     }
 
     pub fn names() -> &'static [&'static str] {
-        &["product", "feature", "prompts", "backlog", "writing"]
+        &[
+            "product", "feature", "prompts", "backlog", "todo", "writing",
+        ]
     }
 
     pub fn name(self) -> &'static str {
@@ -39,6 +44,7 @@ impl TemplateKind {
             Self::Feature => "feature",
             Self::Prompts => "prompts",
             Self::Backlog => "backlog",
+            Self::Todo => "todo",
             Self::Writing => "writing",
         }
     }
@@ -49,6 +55,9 @@ impl TemplateKind {
             Self::Feature => "Feature spec with goals, scope, risks, delivery, and open questions.",
             Self::Prompts => "Prompt library, evaluation notes, and operational prompt workflows.",
             Self::Backlog => "Backlog-oriented planning with now, next, later, and blocked work.",
+            Self::Todo => {
+                "Decomposable TODO map for local work, agent handoff, and validation loops."
+            }
             Self::Writing => "Writing and research structure for stories, notes, and chapter work.",
         }
     }
@@ -59,6 +68,7 @@ impl TemplateKind {
             Self::Feature => "feature.md",
             Self::Prompts => "prompts.md",
             Self::Backlog => "backlog.md",
+            Self::Todo => "TODO.md",
             Self::Writing => "writing.md",
         }
     }
@@ -69,6 +79,7 @@ impl TemplateKind {
             Self::Feature => include_str!("../templates/feature.md"),
             Self::Prompts => include_str!("../templates/prompts.md"),
             Self::Backlog => include_str!("../templates/backlog.md"),
+            Self::Todo => include_str!("../templates/todo.md"),
             Self::Writing => include_str!("../templates/writing.md"),
         }
     }
@@ -89,6 +100,7 @@ mod tests {
             TemplateKind::Feature,
             TemplateKind::Prompts,
             TemplateKind::Backlog,
+            TemplateKind::Todo,
             TemplateKind::Writing,
         ] {
             let parsed = parse_document(template.file_contents());

@@ -49,6 +49,7 @@ Current Phase 1 behavior:
 - `z` collapses the visible scope, resets zoom, and centers the collapsed root; `Z` expands the visible scope and zooms to a fit-ish overview
 - `Tab` / `Shift+Tab` optionally cycle visible bubbles
 - `Enter` toggles the current branch, or focuses a Tab-selected bubble
+- `Space` toggles a focused `[ ]` / `[x]` TODO item, or falls back to branch expansion
 
 ## Navigation
 
@@ -58,6 +59,7 @@ Current Phase 1 behavior:
 - `z` / `Z`: collapse the visible scope or expand it into an overview
 - `Tab`: optionally cycle visible nearby nodes for non-linear jumps
 - `Enter`: toggle the focused branch, or focus a Tab-selected bubble
+- `Space`: toggle a focused `[ ]` / `[x]` TODO item
 - `0`: recenter on the focused node
 - `Esc`: return to outline mode
 

@@ -64,6 +64,32 @@ fn find_supports_plain_output() {
 }
 
 #[test]
+fn find_supports_task_state_queries() {
+    let map_path = temp_file("task-query.md");
+    std::fs::write(
+        &map_path,
+        "- Project\n  - [ ] Open checkbox\n  - [x] Done checkbox\n  - Blocked task #todo @status:blocked\n  - Decision @status:active\n",
+    )
+    .expect("task query fixture should be writable");
+
+    let output = run_mdm(&["find", map_path.to_str().unwrap(), "task:open", "--plain"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let open_stdout = stdout(&output);
+    assert!(open_stdout.contains("Open checkbox"));
+    assert!(open_stdout.contains("Blocked task"));
+    assert!(!open_stdout.contains("Done checkbox"));
+    assert!(!open_stdout.contains("Decision"));
+
+    let output = run_mdm(&["find", map_path.to_str().unwrap(), "task:done", "--plain"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let done_stdout = stdout(&output);
+    assert!(done_stdout.contains("Done checkbox"));
+    assert!(!done_stdout.contains("Open checkbox"));
+
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
 fn find_can_inspect_example_metadata_workflows() {
     let output = run_mdm(&[
         "find",
@@ -252,6 +278,19 @@ fn init_supports_the_writing_template() {
 }
 
 #[test]
+fn init_supports_the_todo_template() {
+    let destination = temp_file("TODO.md");
+    let destination_str = destination.to_string_lossy().into_owned();
+    let output = run_mdm(&["init", &destination_str, "--template", "todo"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let contents = std::fs::read_to_string(&destination).expect("template should be written");
+    assert!(contents.contains("- Project TODO Map #todo-map @status:active [id:todo]"));
+    assert!(contents.contains("- [ ] Define next slice #todo @status:active"));
+    assert!(contents.contains("mdm find TODO.md \"#todo @status:active\" --plain"));
+    std::fs::remove_file(destination).expect("temp file should be removable");
+}
+
+#[test]
 fn mdmind_binary_falls_back_to_preview() {
     let output = Command::new(env!("CARGO_BIN_EXE_mdmind"))
         .args([
@@ -334,6 +373,7 @@ fn examples_copy_all_writes_gallery_and_maps() {
     assert!(destination.join("product-status.md").is_file());
     assert!(destination.join("meeting-notes-action-map.md").is_file());
     assert!(destination.join("agent-research-handoff.md").is_file());
+    assert!(destination.join("agent-todo-workflow.md").is_file());
 
     std::fs::remove_file(destination.join("README.md")).expect("README should be removable");
     for file_name in [
@@ -341,6 +381,7 @@ fn examples_copy_all_writes_gallery_and_maps() {
         "product-status.md",
         "meeting-notes-action-map.md",
         "agent-research-handoff.md",
+        "agent-todo-workflow.md",
         "lantern-studio-map.md",
         "game-world-moonwake.md",
         "novel-research-writing-map.md",

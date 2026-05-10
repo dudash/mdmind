@@ -131,6 +131,7 @@ Start with plain `[[target]]`. Typed relations are useful, but they are the adva
 
 ```bash
 mdm init notes.md --template product
+mdm init TODO.md --template todo
 mdm validate notes.md
 mdm view notes.md
 mdm find notes.md "@status:blocked"
@@ -140,6 +141,8 @@ mdm export notes.md --format json
 mdm examples list
 mdm examples copy all
 ```
+
+For TODO maps in the TUI, press `t` / `T` to add a TODO child or sibling and `Space` to toggle a focused `[ ]` or `[x]` task item. Use `task:open`, `task:blocked`, and `task:done` when an agent or human needs task-aware filters across checkbox, tag, and status conventions.
 
 ## Examples Help
 
@@ -153,6 +156,7 @@ mdm examples copy all
 
 Then inspect:
 
+- `examples/agent-todo-workflow.md`
 - `examples/agent-research-handoff.md`
 - `examples/meeting-notes-action-map.md`
 - `examples/lantern-studio-map.md`

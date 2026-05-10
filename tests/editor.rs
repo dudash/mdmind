@@ -1,4 +1,5 @@
 use mdmind::editor::{Editor, default_focus_path};
+use mdmind::model::TaskState;
 use mdmind::parser::parse_document;
 use mdmind::serializer::serialize_document;
 use mdmind::session::{SessionState, resolve_session_focus};
@@ -65,6 +66,30 @@ fn editor_can_edit_node_details_and_round_trip_them() {
         reparsed.document.nodes[0].children[0].detail,
         current.detail
     );
+}
+
+#[test]
+fn editor_can_toggle_explicit_task_markers() {
+    let parsed = parse_document("- Project\n  - [ ] Open task #todo [id:project/open]\n");
+    let mut editor = Editor::new(parsed.document, vec![0, 0]);
+
+    let next = editor
+        .toggle_current_task()
+        .expect("explicit task should toggle");
+    assert_eq!(next, TaskState::Done);
+    assert_eq!(
+        editor.current().expect("focus should exist").task,
+        Some(TaskState::Done)
+    );
+
+    let source = serialize_document(editor.document());
+    assert!(source.contains("- [x] Open task #todo [id:project/open]"));
+
+    let next = editor
+        .toggle_current_task()
+        .expect("explicit task should toggle back");
+    assert_eq!(next, TaskState::Open);
+    assert!(serialize_document(editor.document()).contains("- [ ] Open task #todo"));
 }
 
 #[test]

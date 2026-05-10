@@ -58,6 +58,13 @@ fn mermaid_node_ref(path: &[usize]) -> String {
 fn mermaid_label(node: &ExportNode) -> String {
     let mut parts = Vec::new();
     let mut primary = node.text.clone();
+    if let Some(task) = node.task {
+        if primary.is_empty() {
+            primary.push_str(task.marker());
+        } else {
+            primary = format!("{} {primary}", task.marker());
+        }
+    }
     if !node.detail.is_empty() {
         if !primary.is_empty() {
             primary.push_str("\\n");
@@ -71,6 +78,16 @@ fn mermaid_label(node: &ExportNode) -> String {
     parts.extend(node.kv.iter().map(|(key, value)| format!("@{key}:{value}")));
     if let Some(id) = &node.id {
         parts.push(format!("[id:{id}]"));
+    }
+    if let Some(progress) = &node.task_progress {
+        if progress.blocked == 0 {
+            parts.push(format!("({}/{} done)", progress.done, progress.total));
+        } else {
+            parts.push(format!(
+                "({}/{} done, {} blocked)",
+                progress.done, progress.total, progress.blocked
+            ));
+        }
     }
 
     if parts.is_empty() {
@@ -121,6 +138,18 @@ fn render_opml_node(node: &ExportNode, depth: usize, lines: &mut Vec<String>) {
 fn opml_attributes(node: &ExportNode) -> String {
     let mut attributes = vec![format!(r#" text="{}""#, escape_xml_attr(&node.text))];
 
+    if let Some(task) = node.task {
+        attributes.push(format!(r#" mdm_task="{}""#, task.label()));
+    }
+    if let Some(progress) = &node.task_progress {
+        attributes.push(format!(
+            r#" mdm_task_progress="{}/{}""#,
+            progress.done, progress.total
+        ));
+        if progress.blocked > 0 {
+            attributes.push(format!(r#" mdm_task_blocked="{}""#, progress.blocked));
+        }
+    }
     if let Some(id) = &node.id {
         attributes.push(format!(r#" mdm_id="{}""#, escape_xml_attr(id)));
     }

@@ -16,6 +16,7 @@ The live template files are in the repo `templates/` directory. They are not jus
 - `feature`: one feature plan with flow, acceptance, rollout, and risks
 - `prompts`: prompt library, variants, eval loop, and open issues
 - `backlog`: a practical now/next/blocked/done working map
+- `todo`: decomposable local TODOs, agent handoff, and validation commands
 - `writing`: premise, characters, places, plot lines, themes, and chapters
 
 ## When To Use Them
@@ -42,6 +43,7 @@ mdm init roadmap.md --template product
 mdm init auth-feature.md --template feature
 mdm init prompt-library.md --template prompts
 mdm init weekly-backlog.md --template backlog
+mdm init TODO.md --template todo
 mdm init novel.md --template writing
 ```
 
@@ -51,7 +53,10 @@ mdm init novel.md --template writing
 - use `feature` when one workflow or delivery slice is the center of the work
 - use `prompts` when you are iterating on model behavior and review loops
 - use `backlog` when you mostly need a calm execution board
+- use `todo` when you want a git-friendly TODO map for local work and agent handoff
 - use `writing` when you are connecting cast, locations, themes, and chapter plans
+
+In `mdmind`, press `t` / `T` to add a TODO child or sibling from anywhere in the tree, and press `Space` on a `[ ]` or `[x]` row to toggle it. Use `task:open`, `task:blocked`, and `task:done` when you want filters that understand checkbox markers, tags, and status metadata. You can still type checkbox markers manually in add/edit prompts when you want full raw-file control.
 
 ## What Happens Next
 

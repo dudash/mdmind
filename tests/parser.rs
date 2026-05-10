@@ -1,3 +1,4 @@
+use mdmind::model::TaskState;
 use mdmind::parser::parse_document;
 use mdmind::query::{
     find_matches, link_entries, metadata_rows, relation_entries, relation_entries_for_anchor,
@@ -55,6 +56,32 @@ fn parser_attaches_detail_lines_to_the_previous_node() {
         ]
     );
     assert_eq!(node.children[0].text, "Auth Flow");
+}
+
+#[test]
+fn parser_extracts_explicit_task_markers() {
+    let parsed = parse_document(
+        "- Project\n  - [ ] Open item #todo @status:active [id:project/open]\n  - [x] Done item #done @status:done [id:project/done]\n",
+    );
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "parser diagnostics: {:?}",
+        parsed.diagnostics
+    );
+
+    let open = &parsed.document.nodes[0].children[0];
+    assert_eq!(open.task, Some(TaskState::Open));
+    assert_eq!(open.text, "Open item");
+    assert_eq!(open.tags, vec!["#todo"]);
+
+    let done = &parsed.document.nodes[0].children[1];
+    assert_eq!(done.task, Some(TaskState::Done));
+    assert_eq!(done.text, "Done item");
+    assert_eq!(done.tags, vec!["#done"]);
+
+    let progress = parsed.document.nodes[0].child_task_progress();
+    assert_eq!(progress.total, 2);
+    assert_eq!(progress.done, 1);
 }
 
 #[test]
@@ -154,6 +181,43 @@ fn validate_reports_unresolved_relation_targets() {
             .message
             .contains("Relation target 'missing/target'")),
         "expected unresolved relation diagnostic, got: {:?}",
+        diagnostics
+    );
+}
+
+#[test]
+fn validate_reports_conflicting_task_state_warnings() {
+    let parsed = parse_document(
+        "- Project\n  - [x] Active conflict #todo @status:active\n  - [ ] Done conflict #done @done:true\n  - Tag conflict #todo #done\n",
+    );
+    let diagnostics = validate_document(&parsed.document);
+
+    assert!(
+        diagnostics.iter().any(|diagnostic| diagnostic
+            .message
+            .contains("[x] appears with open task metadata")),
+        "expected checkbox done/open metadata conflict, got: {:?}",
+        diagnostics
+    );
+    assert!(
+        diagnostics.iter().any(|diagnostic| diagnostic
+            .message
+            .contains("[ ] appears with done task metadata")),
+        "expected checkbox open/done metadata conflict, got: {:?}",
+        diagnostics
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("both #todo and #done")),
+        "expected tag conflict, got: {:?}",
+        diagnostics
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.severity == mdmind::model::Severity::Warning),
+        "task conflicts should be warnings, got: {:?}",
         diagnostics
     );
 }

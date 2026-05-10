@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::model::{Diagnostic, Document, Node, Severity};
+use crate::model::{Diagnostic, Document, Node, Severity, TaskState};
 
 pub fn validate_document(document: &Document) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
@@ -27,6 +27,8 @@ pub fn validate_document(document: &Document) -> Vec<Diagnostic> {
                 });
             }
         }
+
+        validate_task_state(node, &mut diagnostics);
 
         if let Some(id) = &node.id {
             if let Some(first_seen_line) = seen_ids.insert(id.clone(), node.line) {
@@ -59,6 +61,95 @@ pub fn validate_document(document: &Document) -> Vec<Diagnostic> {
     });
 
     diagnostics
+}
+
+fn validate_task_state(node: &Node, diagnostics: &mut Vec<Diagnostic>) {
+    let has_todo = node.has_tag("#todo");
+    let has_done = node.has_tag("#done");
+    let done_value = node.metadata_value("done");
+    let status = node.metadata_value("status");
+
+    if has_todo && has_done {
+        push_task_warning(
+            diagnostics,
+            node.line,
+            "Task state conflict: node has both #todo and #done.",
+        );
+    }
+
+    if done_value.is_some_and(|value| value.eq_ignore_ascii_case("true")) && has_todo {
+        push_task_warning(
+            diagnostics,
+            node.line,
+            "Task state conflict: @done:true appears with #todo.",
+        );
+    }
+
+    if done_value.is_some_and(|value| value.eq_ignore_ascii_case("false")) && has_done {
+        push_task_warning(
+            diagnostics,
+            node.line,
+            "Task state conflict: @done:false appears with #done.",
+        );
+    }
+
+    if status.is_some_and(is_open_task_status) && has_done {
+        push_task_warning(
+            diagnostics,
+            node.line,
+            "Task state conflict: open @status appears with #done.",
+        );
+    }
+
+    if status.is_some_and(|value| value.eq_ignore_ascii_case("done")) && has_todo {
+        push_task_warning(
+            diagnostics,
+            node.line,
+            "Task state conflict: @status:done appears with #todo.",
+        );
+    }
+
+    match node.task {
+        Some(TaskState::Open) => {
+            if has_done
+                || done_value.is_some_and(|value| value.eq_ignore_ascii_case("true"))
+                || status.is_some_and(|value| value.eq_ignore_ascii_case("done"))
+            {
+                push_task_warning(
+                    diagnostics,
+                    node.line,
+                    "Task state conflict: [ ] appears with done task metadata.",
+                );
+            }
+        }
+        Some(TaskState::Done) => {
+            if has_todo
+                || done_value.is_some_and(|value| value.eq_ignore_ascii_case("false"))
+                || status.is_some_and(is_open_task_status)
+            {
+                push_task_warning(
+                    diagnostics,
+                    node.line,
+                    "Task state conflict: [x] appears with open task metadata.",
+                );
+            }
+        }
+        None => {}
+    }
+}
+
+fn is_open_task_status(value: &str) -> bool {
+    value.eq_ignore_ascii_case("todo")
+        || value.eq_ignore_ascii_case("active")
+        || value.eq_ignore_ascii_case("blocked")
+}
+
+fn push_task_warning(diagnostics: &mut Vec<Diagnostic>, line: usize, message: &str) {
+    diagnostics.push(Diagnostic {
+        severity: Severity::Warning,
+        line,
+        message: message.to_string(),
+    });
 }
 
 fn walk_nodes<F>(nodes: &[Node], visitor: &mut F)

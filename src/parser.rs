@@ -1,4 +1,4 @@
-use crate::model::{Diagnostic, Document, MetadataEntry, Node, Relation, Severity};
+use crate::model::{Diagnostic, Document, MetadataEntry, Node, Relation, Severity, TaskState};
 
 #[derive(Debug, Clone)]
 pub struct ParseOutput {
@@ -158,6 +158,7 @@ fn build_nodes(flat_nodes: &[FlatNode], start: usize, level: usize) -> (Vec<Node
 }
 
 fn parse_node_content(content: &str, line: usize, diagnostics: &mut Vec<Diagnostic>) -> Node {
+    let (task, content) = parse_task_marker(content);
     let mut text_parts = Vec::new();
     let mut tags = Vec::new();
     let mut metadata = Vec::new();
@@ -255,6 +256,7 @@ fn parse_node_content(content: &str, line: usize, diagnostics: &mut Vec<Diagnost
 
     Node {
         text: text_parts.join(" ").trim().to_string(),
+        task,
         detail: Vec::new(),
         tags,
         metadata,
@@ -263,6 +265,24 @@ fn parse_node_content(content: &str, line: usize, diagnostics: &mut Vec<Diagnost
         children: Vec::new(),
         line,
     }
+}
+
+fn parse_task_marker(content: &str) -> (Option<TaskState>, &str) {
+    if let Some(rest) = content.strip_prefix("[ ]")
+        && (rest.is_empty() || rest.starts_with(' '))
+    {
+        return (Some(TaskState::Open), rest.trim_start());
+    }
+
+    if let Some(rest) = content
+        .strip_prefix("[x]")
+        .or_else(|| content.strip_prefix("[X]"))
+        && (rest.is_empty() || rest.starts_with(' '))
+    {
+        return (Some(TaskState::Done), rest.trim_start());
+    }
+
+    (None, content)
 }
 
 fn parse_detail_content(content: &str) -> String {

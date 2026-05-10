@@ -230,7 +230,10 @@ fn render_node(
     } else {
         "├── ".to_string()
     };
-    lines.push(format!("{prefix}{branch}{}", node.display_line()));
+    lines.push(format!(
+        "{prefix}{branch}{}",
+        node.display_line_with_task_rollup()
+    ));
     let detail_prefix = if depth == 0 {
         "│ ".to_string()
     } else if is_last {
