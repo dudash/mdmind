@@ -110,30 +110,29 @@ fn validate_task_state(node: &Node, diagnostics: &mut Vec<Diagnostic>) {
     }
 
     match node.task {
-        Some(TaskState::Open) => {
+        Some(TaskState::Open)
             if has_done
                 || done_value.is_some_and(|value| value.eq_ignore_ascii_case("true"))
-                || status.is_some_and(|value| value.eq_ignore_ascii_case("done"))
-            {
-                push_task_warning(
-                    diagnostics,
-                    node.line,
-                    "Task state conflict: [ ] appears with done task metadata.",
-                );
-            }
+                || status.is_some_and(|value| value.eq_ignore_ascii_case("done")) =>
+        {
+            push_task_warning(
+                diagnostics,
+                node.line,
+                "Task state conflict: [ ] appears with done task metadata.",
+            );
         }
-        Some(TaskState::Done) => {
+        Some(TaskState::Done)
             if has_todo
                 || done_value.is_some_and(|value| value.eq_ignore_ascii_case("false"))
-                || status.is_some_and(is_open_task_status)
-            {
-                push_task_warning(
-                    diagnostics,
-                    node.line,
-                    "Task state conflict: [x] appears with open task metadata.",
-                );
-            }
+                || status.is_some_and(is_open_task_status) =>
+        {
+            push_task_warning(
+                diagnostics,
+                node.line,
+                "Task state conflict: [x] appears with open task metadata.",
+            );
         }
+        Some(_) => {}
         None => {}
     }
 }

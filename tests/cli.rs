@@ -327,6 +327,23 @@ fn mdmind_without_a_target_requires_an_interactive_terminal_for_startup() {
 }
 
 #[test]
+fn mdmind_key_diagnostics_requires_an_interactive_terminal() {
+    let output = Command::new(env!("CARGO_BIN_EXE_mdmind"))
+        .arg("--check-keys")
+        .output()
+        .expect("mdmind command should run");
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("Key diagnostics need an interactive terminal."));
+}
+
+#[test]
+fn mdm_key_diagnostics_requires_an_interactive_terminal() {
+    let output = run_mdm(&["check-keys"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("Key diagnostics need an interactive terminal."));
+}
+
+#[test]
 fn version_command_prints_the_cli_version() {
     let output = run_mdm(&["version"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));

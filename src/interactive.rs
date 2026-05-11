@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
-use std::io::{self, IsTerminal, Stdout};
+use std::io::{self, IsTerminal, Stdout, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -2177,6 +2177,7 @@ impl TuiApp {
             },
         };
 
+        let table_columns = table_columns_from_storage_keys(&saved_views.table_columns);
         let mut app = Self {
             map_path,
             editor: Editor::new(document, focus_path),
@@ -2194,7 +2195,7 @@ impl TuiApp {
             checkpoints: CheckpointsState::default(),
             relation_picker: None,
             table: None,
-            table_columns: None,
+            table_columns,
             mindmap: None,
             spatial_canvas: None,
             help: None,
@@ -2630,21 +2631,17 @@ impl TuiApp {
                 table.selected = table.selected.saturating_sub(1);
                 self.trigger_motion(MotionTarget::TableSelection);
             }
-            KeyCode::Down | KeyCode::Char('j') => {
-                if !rows.is_empty() {
-                    table.selected = (table.selected + 1).min(rows.len() - 1);
-                    self.trigger_motion(MotionTarget::TableSelection);
-                }
+            KeyCode::Down | KeyCode::Char('j') if !rows.is_empty() => {
+                table.selected = (table.selected + 1).min(rows.len() - 1);
+                self.trigger_motion(MotionTarget::TableSelection);
             }
             KeyCode::PageUp => {
                 table.selected = table.selected.saturating_sub(8);
                 self.trigger_motion(MotionTarget::TableSelection);
             }
-            KeyCode::PageDown => {
-                if !rows.is_empty() {
-                    table.selected = (table.selected + 8).min(rows.len() - 1);
-                    self.trigger_motion(MotionTarget::TableSelection);
-                }
+            KeyCode::PageDown if !rows.is_empty() => {
+                table.selected = (table.selected + 8).min(rows.len() - 1);
+                self.trigger_motion(MotionTarget::TableSelection);
             }
             KeyCode::Home => {
                 table.selected = 0;
@@ -2809,6 +2806,8 @@ impl TuiApp {
                 if let Some(column) = options.get(picker.selected) {
                     toggle_table_column(&mut table.columns, column);
                     self.table_columns = Some(table.columns.clone());
+                    self.saved_views.table_columns = table_columns_to_storage_keys(&table.columns);
+                    self.persist_saved_views()?;
                     self.set_status(
                         StatusTone::Info,
                         format!("Table columns: {}.", table_column_summary(&table.columns)),
@@ -6456,6 +6455,96 @@ pub fn run_interactive(target: &str, autosave: bool) -> Result<(), AppError> {
     result
 }
 
+pub fn run_key_diagnostics() -> Result<(), AppError> {
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Err(AppError::new(
+            "Key diagnostics need an interactive terminal.",
+        ));
+    }
+
+    enable_raw_mode()
+        .map_err(|error| AppError::new(format!("Could not enable raw mode: {error}")))?;
+    let _raw_mode = RawModeGuard;
+    let mut stdout = io::stdout();
+    writeln!(
+        stdout,
+        "mdmind key diagnostics\r\n\r\nPress Alt+Up, Alt+Down, Alt+Left, and Alt+Right.\r\nExpected: code=<arrow> modifiers=ALT.\r\n\r\nIf a key reports Char('a'), Char('e'), Char('b'), Char('f'), or CONTROL instead,\r\nremove custom terminal bindings such as Send Hex 0x01/0x05 or Esc+b/Esc+f for Option+Arrow.\r\nIn iTerm2, also enable treating Option as Alt for special keys like arrows.\r\n\r\nPress Esc or q to quit.\r"
+    )
+    .map_err(|error| AppError::new(format!("Could not write diagnostics: {error}")))?;
+    stdout
+        .flush()
+        .map_err(|error| AppError::new(format!("Could not flush diagnostics: {error}")))?;
+
+    loop {
+        if !event::poll(Duration::from_secs(60))
+            .map_err(|error| AppError::new(format!("Could not poll terminal events: {error}")))?
+        {
+            writeln!(stdout, "No key event received for 60 seconds.\r")
+                .map_err(|error| AppError::new(format!("Could not write diagnostics: {error}")))?;
+            stdout
+                .flush()
+                .map_err(|error| AppError::new(format!("Could not flush diagnostics: {error}")))?;
+            continue;
+        }
+
+        if let Event::Key(key) = event::read()
+            .map_err(|error| AppError::new(format!("Could not read input: {error}")))?
+        {
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
+
+            let verdict = key_diagnostic_verdict(key);
+            writeln!(
+                stdout,
+                "key: code={:?} modifiers={:?} kind={:?} state={:?} -> {}\r",
+                key.code, key.modifiers, key.kind, key.state, verdict
+            )
+            .map_err(|error| AppError::new(format!("Could not write diagnostics: {error}")))?;
+            stdout
+                .flush()
+                .map_err(|error| AppError::new(format!("Could not flush diagnostics: {error}")))?;
+
+            if matches!(key.code, KeyCode::Esc)
+                || matches!(key.code, KeyCode::Char('q') if key.modifiers.is_empty())
+            {
+                break;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+struct RawModeGuard;
+
+impl Drop for RawModeGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+    }
+}
+
+fn key_diagnostic_verdict(key: KeyEvent) -> &'static str {
+    match key.code {
+        KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right
+            if key.modifiers.contains(KeyModifiers::ALT) =>
+        {
+            "compatible with mdmind Alt+arrow bindings"
+        }
+        KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => {
+            "arrow received without ALT; check terminal Option/Alt settings and custom Option+Arrow bindings"
+        }
+        KeyCode::Esc => "quit",
+        KeyCode::Char('a' | 'e' | 'b' | 'f') => {
+            "looks like a custom Option+Arrow binding; remove Send Hex/Esc word-motion mappings for this chord"
+        }
+        _ if key.modifiers.contains(KeyModifiers::ALT) => {
+            "ALT was received, but this is not one of the Alt+arrow bindings"
+        }
+        _ => "not an Alt+arrow key",
+    }
+}
+
 fn run_event_loop(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     app: &mut TuiApp,
@@ -8891,15 +8980,16 @@ fn render_table_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, table: &Tab
     );
 
     let columns = table_visible_columns(&table.columns, sections[1].width as usize);
+    let column_widths = table_column_widths(&columns, sections[2].width as usize, &rows);
     frame.render_widget(
-        Paragraph::new(table_header_line(&columns, sections[1].width as usize)),
+        Paragraph::new(table_header_line(&columns, &column_widths)),
         sections[1],
     );
 
     let items = rows
         .iter()
         .map(|row| {
-            let mut line = table_row_line(row, &columns, sections[2].width as usize);
+            let mut line = table_row_line(row, &columns, &column_widths);
             if row.matched {
                 line.spans
                     .push(Span::styled("  match", Style::default().fg(palette.warn)));
@@ -9095,7 +9185,7 @@ fn table_visible_columns(selected: &[TableColumn], width: usize) -> Vec<TableCol
             visible.push(column.clone());
         }
     }
-    if !visible.iter().any(|column| *column == TableColumn::Node) {
+    if !visible.contains(&TableColumn::Node) {
         visible.insert(0, TableColumn::Node);
     }
     visible
@@ -9223,10 +9313,7 @@ fn table_column_options_with_selected(
 fn normalize_table_columns(mut columns: Vec<TableColumn>) -> Vec<TableColumn> {
     columns.sort_by_key(table_column_order);
     columns.dedup();
-    if !columns
-        .iter()
-        .any(|selected| *selected == TableColumn::Node)
-    {
+    if !columns.contains(&TableColumn::Node) {
         columns.insert(0, TableColumn::Node);
     }
     columns
@@ -9242,6 +9329,42 @@ fn toggle_table_column(columns: &mut Vec<TableColumn>, column: &TableColumn) {
         columns.push(column.clone());
     }
     *columns = normalize_table_columns(std::mem::take(columns));
+}
+
+fn table_columns_to_storage_keys(columns: &[TableColumn]) -> Vec<String> {
+    normalize_table_columns(columns.to_vec())
+        .into_iter()
+        .map(|column| match column {
+            TableColumn::Task => "task".to_string(),
+            TableColumn::Node => "node".to_string(),
+            TableColumn::Metadata(key) => key,
+        })
+        .collect()
+}
+
+fn table_columns_from_storage_keys(keys: &[String]) -> Option<Vec<TableColumn>> {
+    if keys.is_empty() {
+        return None;
+    }
+    let columns = keys
+        .iter()
+        .filter_map(|key| {
+            let trimmed = key.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            Some(match trimmed {
+                "task" => TableColumn::Task,
+                "node" => TableColumn::Node,
+                key => TableColumn::Metadata(key.trim_start_matches('@').to_lowercase()),
+            })
+        })
+        .collect::<Vec<_>>();
+    if columns.is_empty() {
+        None
+    } else {
+        Some(normalize_table_columns(columns))
+    }
 }
 
 fn table_column_order(column: &TableColumn) -> (usize, String) {
@@ -9260,18 +9383,32 @@ fn metadata_default_order(key: &str) -> (usize, String) {
         "area" => 5,
         "due" => 6,
         "provider" => 7,
-        "model" => 8,
-        "mode" => 9,
+        "context" => 8,
+        "aa_rank" => 9,
         "aa_index" => 10,
-        "gpqa" => 11,
-        "hle" => 12,
-        "simplebench" => 13,
-        "swe_verified" => 14,
-        "gdpval" => 15,
-        "best_for" => 16,
-        "caveat" => 17,
-        "source" => 18,
-        _ => 20,
+        "aa_price_usd_1m" => 11,
+        "aa_tok_s" => 12,
+        "llms_rank" => 13,
+        "llms_score" => 14,
+        "llms_reason" => 15,
+        "llms_coding" => 16,
+        "lma_text_rank" => 17,
+        "lma_text_score" => 18,
+        "lma_code_rank" => 19,
+        "lma_code_score" => 20,
+        "match" => 21,
+        "coverage" => 22,
+        "model" => 30,
+        "mode" => 31,
+        "gpqa" => 32,
+        "hle" => 33,
+        "simplebench" => 34,
+        "swe_verified" => 35,
+        "gdpval" => 36,
+        "best_for" => 37,
+        "caveat" => 38,
+        "source" => 39,
+        _ => 50,
     };
     (rank, key.to_string())
 }
@@ -9284,10 +9421,10 @@ fn table_column_summary(columns: &[TableColumn]) -> String {
         .join(", ")
 }
 
-fn table_header_line(columns: &[TableColumn], width: usize) -> Line<'static> {
+fn table_header_line(columns: &[TableColumn], widths: &[usize]) -> Line<'static> {
     let palette = active_palette();
     Line::from(
-        table_cells_for_columns(columns, width, |column| column.header())
+        table_cells_for_columns(columns, widths, |column| column.header())
             .into_iter()
             .map(|cell| {
                 Span::styled(
@@ -9301,47 +9438,107 @@ fn table_header_line(columns: &[TableColumn], width: usize) -> Line<'static> {
     )
 }
 
-fn table_row_line(row: &TableRow, columns: &[TableColumn], width: usize) -> Line<'static> {
+fn table_row_line(row: &TableRow, columns: &[TableColumn], widths: &[usize]) -> Line<'static> {
     Line::from(
-        table_cells_for_columns(columns, width, |column| column.value(row))
+        table_cells_for_columns(columns, widths, |column| column.value(row))
             .into_iter()
             .map(Span::raw)
             .collect::<Vec<_>>(),
     )
 }
 
-fn table_cells_for_columns<F>(columns: &[TableColumn], width: usize, mut value: F) -> Vec<String>
+fn table_cells_for_columns<F>(
+    columns: &[TableColumn],
+    widths: &[usize],
+    mut value: F,
+) -> Vec<String>
 where
     F: FnMut(&TableColumn) -> String,
 {
-    let widths = table_column_widths(columns, width);
     columns
         .iter()
-        .zip(widths)
+        .zip(widths.iter().copied())
         .map(|(column, width)| padded_table_cell(&value(column), width))
         .collect()
 }
 
-fn table_column_widths(columns: &[TableColumn], width: usize) -> Vec<usize> {
-    let fixed_total: usize = columns
+fn table_column_widths(columns: &[TableColumn], width: usize, rows: &[TableRow]) -> Vec<usize> {
+    let mut widths = columns
         .iter()
-        .filter(|column| !matches!(column, &&TableColumn::Node))
-        .map(|column| column.preferred_width())
-        .sum();
-    let node_width = width
-        .saturating_sub(fixed_total)
-        .max(TableColumn::Node.preferred_width());
+        .map(TableColumn::preferred_width)
+        .collect::<Vec<_>>();
+    let base_total: usize = widths.iter().sum();
+    let mut remaining = width.saturating_sub(base_total);
+    if remaining == 0 {
+        return widths;
+    }
 
-    columns
+    if let Some(node_index) = columns
         .iter()
-        .map(|column| {
+        .position(|column| *column == TableColumn::Node)
+    {
+        let desired = table_column_desired_width(&columns[node_index], rows)
+            .min(table_node_priority_width(width));
+        remaining = grow_table_column(&mut widths, node_index, desired, remaining);
+    }
+
+    let mut expandable = columns
+        .iter()
+        .enumerate()
+        .filter_map(|(index, column)| {
             if *column == TableColumn::Node {
-                node_width
+                None
             } else {
-                column.preferred_width()
+                Some((index, table_column_desired_width(column, rows)))
             }
         })
-        .collect()
+        .collect::<Vec<_>>();
+    expandable.sort_by_key(|(index, _)| table_column_order(&columns[*index]));
+    for (index, desired) in expandable {
+        remaining = grow_table_column(&mut widths, index, desired, remaining);
+        if remaining == 0 {
+            break;
+        }
+    }
+
+    if remaining > 0 {
+        if let Some(node_index) = columns
+            .iter()
+            .position(|column| *column == TableColumn::Node)
+        {
+            let desired = table_column_desired_width(&columns[node_index], rows);
+            let _ = grow_table_column(&mut widths, node_index, desired, remaining);
+        }
+    }
+
+    widths
+}
+
+fn table_column_desired_width(column: &TableColumn, rows: &[TableRow]) -> usize {
+    let header_width = column.header().chars().count() + 1;
+    let value_width = rows
+        .iter()
+        .map(|row| column.value(row).chars().count() + 1)
+        .max()
+        .unwrap_or(0);
+    header_width.max(value_width).max(column.preferred_width())
+}
+
+fn table_node_priority_width(total_width: usize) -> usize {
+    let half = total_width / 2;
+    half.clamp(TableColumn::Node.preferred_width(), 72)
+}
+
+fn grow_table_column(
+    widths: &mut [usize],
+    index: usize,
+    desired: usize,
+    remaining: usize,
+) -> usize {
+    let needed = desired.saturating_sub(widths[index]);
+    let growth = needed.min(remaining);
+    widths[index] += growth;
+    remaining - growth
 }
 
 fn padded_table_cell(value: &str, width: usize) -> String {
@@ -13361,6 +13558,67 @@ mod tests {
     }
 
     #[test]
+    fn table_column_widths_grow_metadata_after_node_is_readable() {
+        let rows = vec![
+            TableRow {
+                path: vec![0],
+                depth: 0,
+                task: "-".to_string(),
+                node: "AI Model Cross-Leaderboard Comparison".to_string(),
+                metadata: BTreeMap::new(),
+                progress: "-".to_string(),
+                child_count: 2,
+                detail_lines: 0,
+                expanded: true,
+                matched: false,
+                dimmed: false,
+            },
+            TableRow {
+                path: vec![0, 0],
+                depth: 1,
+                task: "-".to_string(),
+                node: "GPT-5.5".to_string(),
+                metadata: BTreeMap::from([
+                    ("source".to_string(), "aa-llmstats-lmarena".to_string()),
+                    ("aa_tok_s".to_string(), "57".to_string()),
+                    ("context".to_string(), "922k".to_string()),
+                ]),
+                progress: "-".to_string(),
+                child_count: 0,
+                detail_lines: 0,
+                expanded: false,
+                matched: false,
+                dimmed: false,
+            },
+        ];
+        let columns = vec![
+            TableColumn::Node,
+            TableColumn::Metadata("source".to_string()),
+            TableColumn::Metadata("aa_tok_s".to_string()),
+            TableColumn::Metadata("context".to_string()),
+        ];
+
+        let widths = table_column_widths(&columns, 120, &rows);
+
+        assert!(widths[0] >= 40, "node should get enough readable width");
+        assert!(
+            widths[0] <= 72,
+            "node should stop growing before it starves data columns"
+        );
+        assert!(
+            widths[1] > "aa-llmstats-lmarena".chars().count(),
+            "source should expand when table space is available"
+        );
+        let row = table_row_line(&rows[1], &columns, &widths);
+        let rendered = row
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect::<String>();
+        assert!(rendered.contains("aa-llmstats-lmarena"));
+    }
+
+    #[test]
     fn default_table_columns_include_task_when_tasks_exist() {
         let rows = vec![TableRow {
             path: vec![0],
@@ -13401,10 +13659,12 @@ mod tests {
         let columns = &app.table.as_ref().expect("table should open").columns;
 
         assert!(columns.contains(&TableColumn::Metadata("provider".to_string())));
-        assert!(columns.contains(&TableColumn::Metadata("mode".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("context".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("aa_rank".to_string())));
         assert!(columns.contains(&TableColumn::Metadata("aa_index".to_string())));
-        assert!(columns.contains(&TableColumn::Metadata("gpqa".to_string())));
-        assert!(columns.contains(&TableColumn::Metadata("swe_verified".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("aa_price_usd_1m".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("llms_rank".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("llms_score".to_string())));
         assert!(!columns.contains(&TableColumn::Metadata("status".to_string())));
         assert!(!columns.contains(&TableColumn::Metadata("surface".to_string())));
         assert!(!columns.contains(&TableColumn::Metadata("domain".to_string())));
@@ -13459,6 +13719,18 @@ mod tests {
                 .contains(&TableColumn::Task),
             "task column can be toggled off"
         );
+        let persisted_views =
+            crate::views::load_views_for(&map_path).expect("column choice should persist");
+        assert_eq!(
+            persisted_views.table_columns,
+            vec![
+                "node".to_string(),
+                "owner".to_string(),
+                "status".to_string(),
+                "priority".to_string(),
+                "area".to_string()
+            ]
+        );
         app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
             .expect("enter should close the column picker");
         assert!(
@@ -13481,6 +13753,31 @@ mod tests {
                 .columns
                 .contains(&TableColumn::Task),
             "column choices should persist while the app is running"
+        );
+
+        let reloaded_document = parse_document(
+            "- Project [id:project]\n  - [ ] Build table #todo @status:active @owner:jason @priority:high @area:tui [id:project/table]\n  - Decision @status:active [id:project/decision]\n",
+        )
+        .document;
+        let reloaded_views =
+            crate::views::load_views_for(&map_path).expect("saved columns should reload");
+        let mut reloaded_app = TuiApp::new(
+            map_path.clone(),
+            reloaded_document,
+            vec![0],
+            None,
+            false,
+            reloaded_views,
+        );
+        reloaded_app.open_table_overlay();
+        assert!(
+            !reloaded_app
+                .table
+                .as_ref()
+                .expect("reloaded table should open")
+                .columns
+                .contains(&TableColumn::Task),
+            "column choices should persist through the views sidecar"
         );
 
         app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
@@ -13727,6 +14024,7 @@ mod tests {
             None,
             false,
             SavedViewsState {
+                table_columns: Vec::new(),
                 views: vec![SavedView {
                     name: "todo focus".to_string(),
                     query: "#todo".to_string(),

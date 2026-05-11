@@ -13,6 +13,9 @@ pub struct SavedView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct SavedViewsState {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub table_columns: Vec<String>,
+    #[serde(default)]
     pub views: Vec<SavedView>,
 }
 

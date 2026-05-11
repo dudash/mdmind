@@ -27,6 +27,11 @@ fn saved_views_round_trip_through_disk() {
     std::fs::write(&map_path, "- Root\n").expect("fixture map should be writable");
 
     let state = SavedViewsState {
+        table_columns: vec![
+            "node".to_string(),
+            "provider".to_string(),
+            "aa_index".to_string(),
+        ],
         views: vec![SavedView {
             name: "blocked".to_string(),
             query: "@status:blocked".to_string(),
@@ -38,6 +43,66 @@ fn saved_views_round_trip_through_disk() {
     assert_eq!(loaded, state);
 
     let views_path = views_path_for(&map_path).expect("views path should be derivable");
+    if views_path.exists() {
+        std::fs::remove_file(views_path).ok();
+    }
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
+fn saved_views_load_older_sidecars_without_table_columns() {
+    let map_path = temp_map_path("legacy-product.md");
+    std::fs::write(&map_path, "- Root\n").expect("fixture map should be writable");
+    let views_path = views_path_for(&map_path).expect("views path should be derivable");
+    std::fs::write(
+        &views_path,
+        r#"{
+  "views": [
+    {
+      "name": "active",
+      "query": "@status:active"
+    }
+  ]
+}"#,
+    )
+    .expect("legacy views sidecar should be writable");
+
+    let loaded = load_views_for(&map_path).expect("legacy saved views should load");
+
+    assert!(loaded.table_columns.is_empty());
+    assert_eq!(loaded.views.len(), 1);
+
+    if views_path.exists() {
+        std::fs::remove_file(views_path).ok();
+    }
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
+fn saved_views_load_column_only_sidecars_without_named_views() {
+    let map_path = temp_map_path("column-only-product.md");
+    std::fs::write(&map_path, "- Root\n").expect("fixture map should be writable");
+    let views_path = views_path_for(&map_path).expect("views path should be derivable");
+    std::fs::write(
+        &views_path,
+        r#"{
+  "table_columns": ["node", "owner", "status"]
+}"#,
+    )
+    .expect("column-only views sidecar should be writable");
+
+    let loaded = load_views_for(&map_path).expect("column-only saved views should load");
+
+    assert_eq!(
+        loaded.table_columns,
+        vec![
+            "node".to_string(),
+            "owner".to_string(),
+            "status".to_string()
+        ]
+    );
+    assert!(loaded.views.is_empty());
+
     if views_path.exists() {
         std::fs::remove_file(views_path).ok();
     }

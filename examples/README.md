@@ -74,13 +74,14 @@ mdm links examples/product-status.md --plain
 
 ### `model-benchmark-comparison.md`
 
-A model comparison and benchmark snapshot built to be opened as a metadata table rather than read as a deep hierarchy.
+A model comparison and leaderboard cross-reference built to be opened as a metadata table rather than read as a deep hierarchy.
 
 What it demonstrates:
 
-- a real column-first workflow for comparing AI models across multiple public benchmarks
-- rows as models with columns like `@provider`, `@mode`, `@aa_index`, `@gpqa`, `@hle`, `@simplebench`, `@swe_verified`, and `@best_for`
-- detail lines as source notes and caveats, especially when benchmark variants do not line up cleanly
+- a real column-first workflow for comparing AI models across multiple public leaderboards
+- rows as models with columns like `@provider`, `@context`, `@aa_rank`, `@aa_index`, `@llms_rank`, `@llms_score`, `@lma_text_rank`, and `@lma_code_rank`
+- explicit `@match` and `@coverage` fields for model-name ambiguity across sources
+- detail lines as source and variant notes, with all comparable data kept on the model rows
 - a shallow map that keeps non-row context out of the table body
 
 Good first jump:
@@ -89,13 +90,14 @@ Good first jump:
 mdmind examples/model-benchmark-comparison.md
 ```
 
-Then press `C`, press `c`, and select columns such as `@provider`, `@mode`, `@aa_index`, `@gpqa`, `@hle`, `@simplebench`, `@swe_verified`, `@source`, and `@best_for`.
+Then press `C`, press `c`, and select columns such as `@provider`, `@context`, `@aa_rank`, `@aa_index`, `@aa_price_usd_1m`, `@llms_rank`, `@llms_score`, `@lma_text_rank`, `@lma_code_rank`, `@match`, and `@coverage`.
 
 Good CLI probes:
 
 ```bash
-mdm kv examples/model-benchmark-comparison.md --keys provider,mode,aa_index,gpqa,hle,simplebench,swe_verified,gdpval,source,best_for,caveat --plain
-mdm find examples/model-benchmark-comparison.md "#model @best_for:coding-agents" --plain
+mdm kv examples/model-benchmark-comparison.md --keys provider,context,aa_rank,aa_index,aa_price_usd_1m,llms_rank,llms_score,lma_text_rank,lma_code_rank,match,coverage --plain
+mdm find examples/model-benchmark-comparison.md "#model @provider:openai" --plain
+mdm find examples/model-benchmark-comparison.md "#model @coverage:4" --plain
 mdm view examples/model-benchmark-comparison.md#model-benchmark
 ```
 

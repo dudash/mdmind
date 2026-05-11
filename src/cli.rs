@@ -15,7 +15,7 @@ use crate::examples::{
     readme_contents as examples_readme_contents,
 };
 use crate::export::export_document;
-use crate::interactive::run_interactive;
+use crate::interactive::{run_interactive, run_key_diagnostics};
 use crate::query::{
     filter_document, find_matches, link_entries, metadata_rows, relation_entries,
     relation_entries_for_path, tag_counts,
@@ -139,6 +139,8 @@ enum Commands {
         #[arg(long)]
         max_depth: Option<usize>,
     },
+    #[command(about = "Check how this terminal reports Alt+arrow keys.")]
+    CheckKeys,
     #[command(about = "Print the mdm version.")]
     Version,
 }
@@ -171,6 +173,11 @@ struct TuiPreviewCli {
     preview: bool,
     #[arg(long)]
     autosave: bool,
+    #[arg(
+        long,
+        help = "Show how this terminal reports keys to mdmind, including Alt+arrow compatibility."
+    )]
+    check_keys: bool,
     #[arg(long)]
     max_depth: Option<usize>,
 }
@@ -393,6 +400,7 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
                 run_interactive(&target, autosave).map_err(CliError::from_app)
             }
         }
+        Commands::CheckKeys => run_key_diagnostics().map_err(CliError::from_app),
         Commands::Version => {
             println!("mdm {APP_VERSION}");
             Ok(())
@@ -486,6 +494,10 @@ fn write_asset_file(path: &std::path::Path, contents: &str, force: bool) -> Resu
 }
 
 fn dispatch_tui_preview(cli: TuiPreviewCli) -> Result<(), CliError> {
+    if cli.check_keys {
+        return run_key_diagnostics().map_err(CliError::from_app);
+    }
+
     let target = match cli.target {
         Some(target) => target,
         None => {

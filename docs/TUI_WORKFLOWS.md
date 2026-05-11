@@ -72,6 +72,14 @@ Use:
 - `Alt+↑ / Alt+↓` to reorder among siblings
 - `Alt+← / Alt+→` to move out or indent into the previous sibling
 
+If a terminal does not move nodes with `Alt` plus arrows, run `mdm check-keys`
+or `mdmind --check-keys`.
+For each `Alt` arrow, mdmind should report `code=<arrow>` and `modifiers=ALT`.
+If the arrow arrives without `ALT`, configure the terminal to send `Esc+`/Meta for the
+Option key or remove custom key bindings for those chords.
+If `Option+Up` opens add-child or `Option+Down` opens edit-node, the terminal is
+sending mdmind's plain `a` or `e` editing keys instead of an `Alt` arrow event.
+
 The important part is that edits happen relative to the current focus. You are shaping a branch, not switching into a different editing application.
 
 Single-line prompt boxes support small editor-style shortcuts:
