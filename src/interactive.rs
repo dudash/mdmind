@@ -2117,6 +2117,7 @@ struct TuiApp {
     checkpoints: CheckpointsState,
     relation_picker: Option<RelationPickerState>,
     table: Option<TableOverlayState>,
+    table_columns: Option<Vec<TableColumn>>,
     mindmap: Option<MindmapOverlayState>,
     spatial_canvas: Option<SpatialCanvasState>,
     help: Option<HelpOverlayState>,
@@ -2194,6 +2195,7 @@ impl TuiApp {
             checkpoints: CheckpointsState::default(),
             relation_picker: None,
             table: None,
+            table_columns: None,
             mindmap: None,
             spatial_canvas: None,
             help: None,
@@ -2572,7 +2574,11 @@ impl TuiApp {
         self.spatial_canvas = None;
         self.search = None;
         let rows = self.table_rows();
-        let columns = default_table_columns(&rows);
+        let columns = self
+            .table_columns
+            .clone()
+            .map(normalize_table_columns)
+            .unwrap_or_else(|| default_table_columns(&rows));
         let selected = rows
             .iter()
             .position(|row| row.path == self.editor.focus_path())
@@ -2597,7 +2603,7 @@ impl TuiApp {
         };
 
         let rows = self.table_rows();
-        let options = table_column_options(&rows);
+        let options = table_column_options_with_selected(&rows, &table.columns);
         if table.column_picker.is_some() {
             return self.handle_table_column_key(key, table, options);
         }
@@ -2707,6 +2713,7 @@ impl TuiApp {
             KeyCode::Char(' ') => {
                 if let Some(column) = options.get(picker.selected) {
                     toggle_table_column(&mut table.columns, column);
+                    self.table_columns = Some(table.columns.clone());
                     self.set_status(
                         StatusTone::Info,
                         format!("Table columns: {}.", table_column_summary(&table.columns)),
@@ -8895,7 +8902,7 @@ fn render_table_column_picker(
         sections[0],
     );
 
-    let options = table_column_options(rows);
+    let options = table_column_options_with_selected(rows, &table.columns);
     let selected = picker.selected.min(options.len().saturating_sub(1));
     let items = options
         .iter()
@@ -9018,6 +9025,32 @@ fn table_column_options(rows: &[TableRow]) -> Vec<TableColumn> {
     options
 }
 
+fn table_column_options_with_selected(
+    rows: &[TableRow],
+    selected: &[TableColumn],
+) -> Vec<TableColumn> {
+    let mut options = table_column_options(rows);
+    for column in selected {
+        if !options.contains(column) {
+            options.push(column.clone());
+        }
+    }
+    options.sort_by_key(table_column_order);
+    options
+}
+
+fn normalize_table_columns(mut columns: Vec<TableColumn>) -> Vec<TableColumn> {
+    columns.sort_by_key(table_column_order);
+    columns.dedup();
+    if !columns
+        .iter()
+        .any(|selected| *selected == TableColumn::Node)
+    {
+        columns.insert(0, TableColumn::Node);
+    }
+    columns
+}
+
 fn toggle_table_column(columns: &mut Vec<TableColumn>, column: &TableColumn) {
     if *column == TableColumn::Node {
         return;
@@ -9027,13 +9060,7 @@ fn toggle_table_column(columns: &mut Vec<TableColumn>, column: &TableColumn) {
     } else {
         columns.push(column.clone());
     }
-    if !columns
-        .iter()
-        .any(|selected| *selected == TableColumn::Node)
-    {
-        columns.insert(0, TableColumn::Node);
-    }
-    columns.sort_by_key(table_column_order);
+    *columns = normalize_table_columns(std::mem::take(columns));
 }
 
 fn table_column_order(column: &TableColumn) -> (usize, String) {
@@ -13094,6 +13121,19 @@ mod tests {
                 .column_picker
                 .is_none(),
             "table should return to row navigation"
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::NONE))
+            .expect("C should close table view");
+        assert!(app.table.is_none(), "table should close");
+        app.handle_key(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::NONE))
+            .expect("C should reopen table view");
+        assert!(
+            !app.table
+                .as_ref()
+                .expect("table should reopen")
+                .columns
+                .contains(&TableColumn::Task),
+            "column choices should persist while the app is running"
         );
 
         app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))

@@ -169,7 +169,7 @@ For task-heavy maps:
 
 If the map has stable task markers, `@owner`, or `@status` values, the palette can also surface contextual recipes so you do not need to remember every exact filter string.
 
-Press `C` or run `Open Table View` from the palette when you want to scan the current visible scope as columns. The table is read-only: use it for comparing owner, status, priority, area, task state, progress, and lightweight orientation fields. Press `c` inside the table to choose columns, then press `Enter` on a row to focus it back in the outline for edits.
+Press `C` or run `Open Table View` from the palette when you want to scan the current visible scope as columns. The table is read-only: use it for comparing owner, status, priority, area, task state, progress, and lightweight orientation fields. Press `c` inside the table to choose columns; that choice sticks while the app is running. Press `Enter` on a row to focus it back in the outline for edits.
 
 ## Relations In Daily Use
 

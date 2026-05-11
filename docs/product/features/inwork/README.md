@@ -7,7 +7,7 @@ Current slice:
 - open a read-only table with `C` or the command palette
 - show the current visible scope, including active filters and focused views
 - scan task state, node label, selected metadata fields, and derived progress or orientation fields
-- choose visible columns with `c` inside the table
+- choose visible columns with `c` inside the table and keep that choice for the current app session
 - press `Enter` to focus the selected row back in the outline
 
 Still moving:
