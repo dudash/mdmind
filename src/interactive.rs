@@ -1,5 +1,5 @@
 use std::cell::Cell;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::io::{self, IsTerminal, Stdout};
 use std::path::PathBuf;
@@ -1047,7 +1047,7 @@ impl HelpTopic {
             Self::Views => &[
                 "Use Focus Branch when you still need orientation. Use Subtree Only when you want the rest of the map to disappear.",
                 "If a branch feels slippery, remember that Subtree Only keeps a stable root until you leave the mode.",
-                "Use table view when metadata matters more than hierarchy for a moment: owner, status, priority, area, task state, and progress.",
+                "Use table view when metadata matters more than hierarchy for a moment: task state, selected metadata columns, progress, child count, and detail line count. Press c inside the table to choose columns.",
             ],
             Self::Palette => &[
                 "If you already know the target, use the palette instead of scrolling there manually.",
@@ -1625,17 +1625,23 @@ struct RelationPickerState {
 #[derive(Debug, Clone)]
 struct TableOverlayState {
     selected: usize,
+    columns: Vec<TableColumn>,
+    column_picker: Option<ColumnPickerState>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone)]
+struct ColumnPickerState {
+    selected: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum TableColumn {
     Task,
     Node,
-    Owner,
-    Status,
-    Priority,
-    Area,
+    Metadata(String),
     Progress,
+    Children,
+    Details,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1644,11 +1650,10 @@ struct TableRow {
     depth: usize,
     task: String,
     node: String,
-    owner: String,
-    status: String,
-    priority: String,
-    area: String,
+    metadata: BTreeMap<String, String>,
     progress: String,
+    child_count: usize,
+    detail_lines: usize,
     matched: bool,
     dimmed: bool,
 }
@@ -2567,15 +2572,20 @@ impl TuiApp {
         self.spatial_canvas = None;
         self.search = None;
         let rows = self.table_rows();
+        let columns = default_table_columns(&rows);
         let selected = rows
             .iter()
             .position(|row| row.path == self.editor.focus_path())
             .unwrap_or(0);
-        self.table = Some(TableOverlayState { selected });
+        self.table = Some(TableOverlayState {
+            selected,
+            columns,
+            column_picker: None,
+        });
         self.set_status(
             StatusTone::Info,
             format!(
-                "Table view open over {} visible row(s). ↑↓ moves, Enter focuses, Esc closes.",
+                "Table view open over {} visible row(s). ↑↓ moves, c edits columns, Enter focuses.",
                 rows.len()
             ),
         );
@@ -2587,10 +2597,27 @@ impl TuiApp {
         };
 
         let rows = self.table_rows();
+        let options = table_column_options(&rows);
+        if table.column_picker.is_some() {
+            return self.handle_table_column_key(key, table, options);
+        }
+
         match key.code {
             KeyCode::Esc | KeyCode::Char('C') => {
                 self.set_status(StatusTone::Info, "Closed table view.");
                 return Ok(true);
+            }
+            KeyCode::Char('c') => {
+                let selected = table
+                    .columns
+                    .iter()
+                    .find_map(|column| options.iter().position(|option| option == column))
+                    .unwrap_or(0);
+                table.column_picker = Some(ColumnPickerState { selected });
+                self.set_status(
+                    StatusTone::Info,
+                    "Choose table columns. Space toggles, Enter returns, Esc cancels picker.",
+                );
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 table.selected = table.selected.saturating_sub(1);
@@ -2632,6 +2659,68 @@ impl TuiApp {
             table.selected = 0;
         } else {
             table.selected = table.selected.min(rows.len() - 1);
+        }
+        self.table = Some(table);
+        Ok(true)
+    }
+
+    fn handle_table_column_key(
+        &mut self,
+        key: KeyEvent,
+        mut table: TableOverlayState,
+        options: Vec<TableColumn>,
+    ) -> Result<bool, AppError> {
+        let Some(mut picker) = table.column_picker.take() else {
+            self.table = Some(table);
+            return Ok(true);
+        };
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Enter => {
+                table.column_picker = None;
+                self.set_status(
+                    StatusTone::Info,
+                    format!(
+                        "Table columns updated: {}.",
+                        table_column_summary(&table.columns)
+                    ),
+                );
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                picker.selected = picker.selected.saturating_sub(1);
+                table.column_picker = Some(picker);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if !options.is_empty() {
+                    picker.selected = (picker.selected + 1).min(options.len() - 1);
+                }
+                table.column_picker = Some(picker);
+            }
+            KeyCode::Home => {
+                picker.selected = 0;
+                table.column_picker = Some(picker);
+            }
+            KeyCode::End => {
+                picker.selected = options.len().saturating_sub(1);
+                table.column_picker = Some(picker);
+            }
+            KeyCode::Char(' ') => {
+                if let Some(column) = options.get(picker.selected) {
+                    toggle_table_column(&mut table.columns, column);
+                    self.set_status(
+                        StatusTone::Info,
+                        format!("Table columns: {}.", table_column_summary(&table.columns)),
+                    );
+                }
+                table.column_picker = Some(picker);
+            }
+            _ => {
+                table.column_picker = Some(picker);
+            }
+        }
+
+        if let Some(picker) = &mut table.column_picker {
+            picker.selected = picker.selected.min(options.len().saturating_sub(1));
         }
         self.table = Some(table);
         Ok(true)
@@ -4613,8 +4702,8 @@ impl TuiApp {
             ),
             (
                 "Open Table View",
-                "Scan visible nodes as metadata and task columns",
-                "table columns metadata fields owner status priority area task progress",
+                "Scan visible nodes as selectable task and metadata columns",
+                "table columns metadata fields owner status priority area source due task progress children details",
                 PaletteAction::OpenTable,
             ),
             (
@@ -8699,7 +8788,7 @@ fn render_table_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, table: &Tab
         sections[0],
     );
 
-    let columns = table_visible_columns(sections[1].width as usize);
+    let columns = table_visible_columns(&table.columns, sections[1].width as usize);
     frame.render_widget(
         Paragraph::new(table_header_line(&columns, sections[1].width as usize)),
         sections[1],
@@ -8737,6 +8826,8 @@ fn render_table_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, table: &Tab
         Paragraph::new(Line::from(vec![
             key_hint("↑↓", "select"),
             separator_span(),
+            key_hint("c", "columns"),
+            separator_span(),
             key_hint("PgUp/PgDn", "jump"),
             separator_span(),
             key_hint("Enter", "focus"),
@@ -8747,32 +8838,238 @@ fn render_table_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, table: &Tab
         .style(Style::default().fg(palette.muted)),
         sections[3],
     );
+
+    if let Some(picker) = &table.column_picker {
+        render_table_column_picker(
+            frame,
+            centered_rect(52, 62, area),
+            app,
+            table,
+            picker,
+            &rows,
+        );
+    }
 }
 
-fn table_visible_columns(width: usize) -> Vec<TableColumn> {
+fn render_table_column_picker(
+    frame: &mut Frame,
+    area: Rect,
+    app: &TuiApp,
+    table: &TableOverlayState,
+    picker: &ColumnPickerState,
+    rows: &[TableRow],
+) {
+    let palette = app.theme_colors();
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .title(styled_title("Columns", palette.metadata))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(palette.metadata))
+        .style(Style::default().bg(palette.surface))
+        .padding(Padding::uniform(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Min(6),
+            Constraint::Length(2),
+        ])
+        .split(inner);
+
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(Span::styled(
+                "Select Metadata And Derived Fields",
+                Style::default()
+                    .fg(palette.text)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                "Node stays visible; use the outline for edits.",
+                Style::default().fg(palette.muted),
+            )),
+        ]),
+        sections[0],
+    );
+
+    let options = table_column_options(rows);
+    let selected = picker.selected.min(options.len().saturating_sub(1));
+    let items = options
+        .iter()
+        .enumerate()
+        .map(|(index, column)| {
+            let checked = if table.columns.contains(column) {
+                "[x]"
+            } else {
+                "[ ]"
+            };
+            let lock = if *column == TableColumn::Node {
+                "  required"
+            } else {
+                ""
+            };
+            let line = Line::from(vec![
+                Span::raw(format!("{checked} ")),
+                Span::styled(column.header(), Style::default().fg(palette.text)),
+                Span::styled(lock, Style::default().fg(palette.muted)),
+            ]);
+            let style = if index == selected {
+                Style::default()
+                    .fg(palette.selection_text)
+                    .bg(palette.selection)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(palette.text)
+            };
+            ListItem::new(line).style(style)
+        })
+        .collect::<Vec<_>>();
+    let mut state = ListState::default();
+    if !options.is_empty() {
+        state.select(Some(selected));
+    }
+    frame.render_stateful_widget(List::new(items), sections[1], &mut state);
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            key_hint("↑↓", "select"),
+            separator_span(),
+            key_hint("Space", "toggle"),
+            separator_span(),
+            key_hint("Enter/Esc", "done"),
+        ]))
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(palette.muted)),
+        sections[2],
+    );
+}
+
+fn table_visible_columns(selected: &[TableColumn], width: usize) -> Vec<TableColumn> {
+    let mut visible = Vec::new();
+    let mut used = 0usize;
+    for column in selected {
+        let column_width = column.preferred_width();
+        if matches!(column, TableColumn::Node) || used + column_width <= width || visible.len() < 2
+        {
+            used += column_width;
+            visible.push(column.clone());
+        }
+    }
+    if !visible.iter().any(|column| *column == TableColumn::Node) {
+        visible.insert(0, TableColumn::Node);
+    }
+    visible
+}
+
+fn default_table_columns(rows: &[TableRow]) -> Vec<TableColumn> {
+    let options = table_column_options(rows);
     let mut columns = vec![TableColumn::Task, TableColumn::Node];
-    if width >= 46 {
-        columns.push(TableColumn::Owner);
+    let preferred = ["owner", "status", "priority", "area"];
+    for key in preferred {
+        let column = TableColumn::Metadata(key.to_string());
+        if options.contains(&column) {
+            columns.push(column);
+        }
     }
-    if width >= 58 {
-        columns.push(TableColumn::Status);
+    if columns.len() == 2 {
+        for column in options.iter().filter_map(|column| match column {
+            TableColumn::Metadata(_) => Some(column.clone()),
+            _ => None,
+        }) {
+            columns.push(column);
+            if columns.len() >= 6 {
+                break;
+            }
+        }
     }
-    if width >= 72 {
-        columns.push(TableColumn::Priority);
-    }
-    if width >= 88 {
-        columns.push(TableColumn::Area);
-    }
-    if width >= 104 {
+    if options.contains(&TableColumn::Progress) {
         columns.push(TableColumn::Progress);
     }
     columns
 }
 
+fn table_column_options(rows: &[TableRow]) -> Vec<TableColumn> {
+    let mut options = vec![TableColumn::Task, TableColumn::Node];
+    let mut keys = rows
+        .iter()
+        .flat_map(|row| row.metadata.keys().cloned())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let preferred = ["owner", "status", "priority", "area", "due", "source"];
+    keys.sort_by(|left, right| {
+        let left_rank = preferred
+            .iter()
+            .position(|key| key == left)
+            .unwrap_or(preferred.len());
+        let right_rank = preferred
+            .iter()
+            .position(|key| key == right)
+            .unwrap_or(preferred.len());
+        left_rank.cmp(&right_rank).then_with(|| left.cmp(right))
+    });
+    options.extend(keys.into_iter().map(TableColumn::Metadata));
+    options.push(TableColumn::Progress);
+    options.push(TableColumn::Children);
+    options.push(TableColumn::Details);
+    options
+}
+
+fn toggle_table_column(columns: &mut Vec<TableColumn>, column: &TableColumn) {
+    if *column == TableColumn::Node {
+        return;
+    }
+    if let Some(index) = columns.iter().position(|selected| selected == column) {
+        columns.remove(index);
+    } else {
+        columns.push(column.clone());
+    }
+    if !columns
+        .iter()
+        .any(|selected| *selected == TableColumn::Node)
+    {
+        columns.insert(0, TableColumn::Node);
+    }
+    columns.sort_by_key(table_column_order);
+}
+
+fn table_column_order(column: &TableColumn) -> (usize, String) {
+    match column {
+        TableColumn::Task => (0, String::new()),
+        TableColumn::Node => (1, String::new()),
+        TableColumn::Metadata(key) => {
+            let rank = match key.as_str() {
+                "owner" => 2,
+                "status" => 3,
+                "priority" => 4,
+                "area" => 5,
+                "due" => 6,
+                "source" => 7,
+                _ => 8,
+            };
+            (rank, key.clone())
+        }
+        TableColumn::Progress => (9, String::new()),
+        TableColumn::Children => (10, String::new()),
+        TableColumn::Details => (11, String::new()),
+    }
+}
+
+fn table_column_summary(columns: &[TableColumn]) -> String {
+    columns
+        .iter()
+        .map(TableColumn::header)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn table_header_line(columns: &[TableColumn], width: usize) -> Line<'static> {
     let palette = active_palette();
     Line::from(
-        table_cells_for_columns(columns, width, |column| column.header().to_string())
+        table_cells_for_columns(columns, width, |column| column.header())
             .into_iter()
             .map(|cell| {
                 Span::styled(
@@ -8797,12 +9094,11 @@ fn table_row_line(row: &TableRow, columns: &[TableColumn], width: usize) -> Line
 
 fn table_cells_for_columns<F>(columns: &[TableColumn], width: usize, mut value: F) -> Vec<String>
 where
-    F: FnMut(TableColumn) -> String,
+    F: FnMut(&TableColumn) -> String,
 {
     let widths = table_column_widths(columns, width);
     columns
         .iter()
-        .copied()
         .zip(widths)
         .map(|(column, width)| padded_table_cell(&value(column), width))
         .collect()
@@ -8811,7 +9107,7 @@ where
 fn table_column_widths(columns: &[TableColumn], width: usize) -> Vec<usize> {
     let fixed_total: usize = columns
         .iter()
-        .filter(|column| **column != TableColumn::Node)
+        .filter(|column| !matches!(column, &&TableColumn::Node))
         .map(|column| column.preferred_width())
         .sum();
     let node_width = width
@@ -8856,39 +9152,40 @@ fn truncate_trailing(value: &str, max_width: usize) -> String {
 }
 
 impl TableColumn {
-    fn header(self) -> &'static str {
+    fn header(&self) -> String {
         match self {
-            Self::Task => "Task",
-            Self::Node => "Node",
-            Self::Owner => "Owner",
-            Self::Status => "Status",
-            Self::Priority => "Pri",
-            Self::Area => "Area",
-            Self::Progress => "Progress",
+            Self::Task => "Task".to_string(),
+            Self::Node => "Node".to_string(),
+            Self::Metadata(key) => format!("@{key}"),
+            Self::Progress => "Progress".to_string(),
+            Self::Children => "Kids".to_string(),
+            Self::Details => "Details".to_string(),
         }
     }
 
-    fn preferred_width(self) -> usize {
+    fn preferred_width(&self) -> usize {
         match self {
             Self::Task => 8,
             Self::Node => 24,
-            Self::Owner => 12,
-            Self::Status => 12,
-            Self::Priority => 8,
-            Self::Area => 12,
+            Self::Metadata(key) => (key.chars().count() + 4).clamp(8, 14),
             Self::Progress => 16,
+            Self::Children => 8,
+            Self::Details => 8,
         }
     }
 
-    fn value(self, row: &TableRow) -> String {
+    fn value(&self, row: &TableRow) -> String {
         match self {
             Self::Task => row.task.clone(),
             Self::Node => format!("{}{}", "  ".repeat(row.depth), row.node),
-            Self::Owner => row.owner.clone(),
-            Self::Status => row.status.clone(),
-            Self::Priority => row.priority.clone(),
-            Self::Area => row.area.clone(),
+            Self::Metadata(key) => row
+                .metadata
+                .get(key)
+                .cloned()
+                .unwrap_or_else(|| "-".to_string()),
             Self::Progress => row.progress.clone(),
+            Self::Children => row.child_count.to_string(),
+            Self::Details => row.detail_lines.to_string(),
         }
     }
 }
@@ -11335,11 +11632,10 @@ fn visible_rows_to_table_rows(document: &Document, rows: &[VisibleRow]) -> Vec<T
                 } else {
                     node.text.clone()
                 },
-                owner: table_metadata_value(node, "owner"),
-                status: table_metadata_value(node, "status"),
-                priority: table_metadata_value(node, "priority"),
-                area: table_metadata_value(node, "area"),
+                metadata: table_metadata_values(node),
                 progress: table_progress_value(node),
+                child_count: node.children.len(),
+                detail_lines: node.detail.len(),
                 matched: row.matched,
                 dimmed: row.dimmed,
             })
@@ -11361,8 +11657,11 @@ fn table_task_value(node: &Node) -> String {
     }
 }
 
-fn table_metadata_value(node: &Node, key: &str) -> String {
-    node.metadata_value(key).unwrap_or("-").to_string()
+fn table_metadata_values(node: &Node) -> BTreeMap<String, String> {
+    node.metadata
+        .iter()
+        .map(|entry| (entry.key.to_lowercase(), entry.value.clone()))
+        .collect()
 }
 
 fn table_progress_value(node: &Node) -> String {
@@ -12672,17 +12971,78 @@ mod tests {
             .find(|row| row.node == "Build table")
             .expect("task row should exist");
         assert_eq!(task.task, "[ ]");
-        assert_eq!(task.owner, "jason");
-        assert_eq!(task.status, "active");
-        assert_eq!(task.priority, "high");
-        assert_eq!(task.area, "tui");
+        assert_eq!(
+            task.metadata.get("owner").map(String::as_str),
+            Some("jason")
+        );
+        assert_eq!(
+            task.metadata.get("status").map(String::as_str),
+            Some("active")
+        );
+        assert_eq!(
+            task.metadata.get("priority").map(String::as_str),
+            Some("high")
+        );
+        assert_eq!(task.metadata.get("area").map(String::as_str), Some("tui"));
         assert_eq!(task.progress, "(1/1 done)");
+        assert_eq!(task.child_count, 1);
+        assert_eq!(task.detail_lines, 0);
 
         let decision = table_rows
             .iter()
             .find(|row| row.node == "Decision")
             .expect("decision row should exist");
         assert_eq!(decision.task, "-");
+    }
+
+    #[test]
+    fn table_column_picker_toggles_visible_metadata_columns() {
+        let rows = vec![
+            TableRow {
+                path: vec![0],
+                depth: 0,
+                task: "-".to_string(),
+                node: "Project".to_string(),
+                metadata: BTreeMap::from([
+                    ("owner".to_string(), "mira".to_string()),
+                    ("source".to_string(), "notes".to_string()),
+                ]),
+                progress: "-".to_string(),
+                child_count: 1,
+                detail_lines: 2,
+                matched: false,
+                dimmed: false,
+            },
+            TableRow {
+                path: vec![0, 0],
+                depth: 1,
+                task: "-".to_string(),
+                node: "Research".to_string(),
+                metadata: BTreeMap::from([("status".to_string(), "active".to_string())]),
+                progress: "-".to_string(),
+                child_count: 0,
+                detail_lines: 0,
+                matched: false,
+                dimmed: false,
+            },
+        ];
+
+        let options = table_column_options(&rows);
+        assert!(options.contains(&TableColumn::Metadata("owner".to_string())));
+        assert!(options.contains(&TableColumn::Metadata("source".to_string())));
+        assert!(options.contains(&TableColumn::Children));
+        assert!(options.contains(&TableColumn::Details));
+
+        let mut columns = default_table_columns(&rows);
+        assert!(columns.contains(&TableColumn::Metadata("owner".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("status".to_string())));
+
+        toggle_table_column(&mut columns, &TableColumn::Metadata("source".to_string()));
+        assert!(columns.contains(&TableColumn::Metadata("source".to_string())));
+        toggle_table_column(&mut columns, &TableColumn::Metadata("owner".to_string()));
+        assert!(!columns.contains(&TableColumn::Metadata("owner".to_string())));
+        toggle_table_column(&mut columns, &TableColumn::Node);
+        assert!(columns.contains(&TableColumn::Node));
     }
 
     #[test]
@@ -12705,6 +13065,36 @@ mod tests {
             .expect("C should open table view");
         assert!(app.table.is_some(), "table overlay should be open");
         assert_eq!(app.table_rows().len(), 3);
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE))
+            .expect("c should open table column picker");
+        assert!(
+            app.table
+                .as_ref()
+                .expect("table should stay open")
+                .column_picker
+                .is_some(),
+            "column picker should open inside table"
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE))
+            .expect("space should toggle the selected column");
+        assert!(
+            !app.table
+                .as_ref()
+                .expect("table should stay open")
+                .columns
+                .contains(&TableColumn::Task),
+            "task column can be toggled off"
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should close the column picker");
+        assert!(
+            app.table
+                .as_ref()
+                .expect("table should stay open")
+                .column_picker
+                .is_none(),
+            "table should return to row navigation"
+        );
 
         app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
             .expect("down should move table selection");

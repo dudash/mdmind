@@ -34,12 +34,12 @@ Complete enough to present as current product:
 Real, but still a moving target:
 
 - spatial canvas phase 1: full-screen visual navigation, focus-centered layout, camera pan/zoom, outline-like navigation, and legacy visual map fallback
-- read-only metadata/task table view over the current visible TUI scope
+- read-only metadata/task table view over the current visible TUI scope, including selectable columns and lightweight derived fields
 
 Not complete yet:
 
 - import from existing outline and mind-map formats
-- user-selected table columns and direct metadata editing
+- saved table presets and direct metadata editing
 - attachments and image references
 - polished presentation-grade visual/outline export
 - terminal-native completions and man pages

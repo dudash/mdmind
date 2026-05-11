@@ -6,15 +6,15 @@ Current slice:
 
 - open a read-only table with `C` or the command palette
 - show the current visible scope, including active filters and focused views
-- scan task state, node label, owner, status, priority, area, and derived progress
+- scan task state, node label, selected metadata fields, and derived progress or orientation fields
+- choose visible columns with `c` inside the table
 - press `Enter` to focus the selected row back in the outline
 
 Still moving:
 
-- user-selected columns
 - saved table presets
 - direct metadata editing
-- additional derived orientation fields
+- broader derived orientation fields if real maps need them
 
 Read the shelves like this:
 
