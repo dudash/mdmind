@@ -170,6 +170,7 @@ struct StatusModel {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MotionTarget {
     Focus,
+    TableSelection,
     FilterResult,
     Scope,
     PaletteInput,
@@ -2588,6 +2589,7 @@ impl TuiApp {
             columns,
             column_picker: None,
         });
+        self.trigger_motion(MotionTarget::TableSelection);
         self.set_status(
             StatusTone::Info,
             format!(
@@ -2620,6 +2622,7 @@ impl TuiApp {
                     .find_map(|column| options.iter().position(|option| option == column))
                     .unwrap_or(0);
                 table.column_picker = Some(ColumnPickerState { selected });
+                self.trigger_motion(MotionTarget::TableSelection);
                 self.set_status(
                     StatusTone::Info,
                     "Choose table columns. Space toggles, Enter returns, Esc cancels picker.",
@@ -2627,25 +2630,31 @@ impl TuiApp {
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 table.selected = table.selected.saturating_sub(1);
+                self.trigger_motion(MotionTarget::TableSelection);
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 if !rows.is_empty() {
                     table.selected = (table.selected + 1).min(rows.len() - 1);
+                    self.trigger_motion(MotionTarget::TableSelection);
                 }
             }
             KeyCode::PageUp => {
                 table.selected = table.selected.saturating_sub(8);
+                self.trigger_motion(MotionTarget::TableSelection);
             }
             KeyCode::PageDown => {
                 if !rows.is_empty() {
                     table.selected = (table.selected + 8).min(rows.len() - 1);
+                    self.trigger_motion(MotionTarget::TableSelection);
                 }
             }
             KeyCode::Home => {
                 table.selected = 0;
+                self.trigger_motion(MotionTarget::TableSelection);
             }
             KeyCode::End => {
                 table.selected = rows.len().saturating_sub(1);
+                self.trigger_motion(MotionTarget::TableSelection);
             }
             KeyCode::Enter => {
                 if let Some(row) = rows.get(table.selected) {
@@ -2694,20 +2703,24 @@ impl TuiApp {
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 picker.selected = picker.selected.saturating_sub(1);
+                self.trigger_motion(MotionTarget::TableSelection);
                 table.column_picker = Some(picker);
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 if !options.is_empty() {
                     picker.selected = (picker.selected + 1).min(options.len() - 1);
+                    self.trigger_motion(MotionTarget::TableSelection);
                 }
                 table.column_picker = Some(picker);
             }
             KeyCode::Home => {
                 picker.selected = 0;
+                self.trigger_motion(MotionTarget::TableSelection);
                 table.column_picker = Some(picker);
             }
             KeyCode::End => {
                 picker.selected = options.len().saturating_sub(1);
+                self.trigger_motion(MotionTarget::TableSelection);
                 table.column_picker = Some(picker);
             }
             KeyCode::Char(' ') => {
@@ -8803,19 +8816,13 @@ fn render_table_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, table: &Tab
 
     let items = rows
         .iter()
-        .enumerate()
-        .map(|(index, row)| {
+        .map(|row| {
             let mut line = table_row_line(row, &columns, sections[2].width as usize);
             if row.matched {
                 line.spans
                     .push(Span::styled("  match", Style::default().fg(palette.warn)));
             }
-            let style = if index == selected {
-                Style::default()
-                    .fg(palette.selection_text)
-                    .bg(palette.selection)
-                    .add_modifier(Modifier::BOLD)
-            } else if row.dimmed {
+            let style = if row.dimmed {
                 Style::default().fg(palette.muted)
             } else {
                 Style::default().fg(palette.text)
@@ -8827,7 +8834,14 @@ fn render_table_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, table: &Tab
     if !rows.is_empty() {
         state.select(Some(selected));
     }
-    frame.render_stateful_widget(List::new(items), sections[2], &mut state);
+    frame.render_stateful_widget(
+        List::new(items).highlight_style(selection_highlight_style(
+            palette,
+            MotionTarget::TableSelection,
+        )),
+        sections[2],
+        &mut state,
+    );
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![
@@ -8908,6 +8922,17 @@ fn render_table_column_picker(
         .iter()
         .enumerate()
         .map(|(index, column)| {
+            let is_selected = index == selected;
+            let text_color = if is_selected {
+                selection_text_color(palette, MotionTarget::TableSelection)
+            } else {
+                palette.text
+            };
+            let muted_color = if is_selected {
+                selection_text_color(palette, MotionTarget::TableSelection)
+            } else {
+                palette.muted
+            };
             let checked = if table.columns.contains(column) {
                 "[x]"
             } else {
@@ -8920,25 +8945,24 @@ fn render_table_column_picker(
             };
             let line = Line::from(vec![
                 Span::raw(format!("{checked} ")),
-                Span::styled(column.header(), Style::default().fg(palette.text)),
-                Span::styled(lock, Style::default().fg(palette.muted)),
+                Span::styled(column.header(), Style::default().fg(text_color)),
+                Span::styled(lock, Style::default().fg(muted_color)),
             ]);
-            let style = if index == selected {
-                Style::default()
-                    .fg(palette.selection_text)
-                    .bg(palette.selection)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(palette.text)
-            };
-            ListItem::new(line).style(style)
+            ListItem::new(line).style(Style::default().fg(palette.text))
         })
         .collect::<Vec<_>>();
     let mut state = ListState::default();
     if !options.is_empty() {
         state.select(Some(selected));
     }
-    frame.render_stateful_widget(List::new(items), sections[1], &mut state);
+    frame.render_stateful_widget(
+        List::new(items).highlight_style(selection_highlight_style(
+            palette,
+            MotionTarget::TableSelection,
+        )),
+        sections[1],
+        &mut state,
+    );
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![
@@ -8952,6 +8976,26 @@ fn render_table_column_picker(
         .style(Style::default().fg(palette.muted)),
         sections[2],
     );
+}
+
+fn selection_highlight_style(palette: Palette, target: MotionTarget) -> Style {
+    match motion_level(target) {
+        level if level >= 2 => Style::default()
+            .bg(palette.accent)
+            .fg(palette.background)
+            .add_modifier(Modifier::BOLD),
+        _ => Style::default()
+            .bg(palette.selection)
+            .fg(palette.selection_text)
+            .add_modifier(Modifier::BOLD),
+    }
+}
+
+fn selection_text_color(palette: Palette, target: MotionTarget) -> Color {
+    match motion_level(target) {
+        level if level >= 2 => palette.background,
+        _ => palette.selection_text,
+    }
 }
 
 fn table_visible_columns(selected: &[TableColumn], width: usize) -> Vec<TableColumn> {
@@ -13091,9 +13135,17 @@ mod tests {
         app.handle_key(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::NONE))
             .expect("C should open table view");
         assert!(app.table.is_some(), "table overlay should be open");
+        assert_eq!(
+            app.motion_cue.map(|cue| cue.target),
+            Some(MotionTarget::TableSelection)
+        );
         assert_eq!(app.table_rows().len(), 3);
         app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE))
             .expect("c should open table column picker");
+        assert_eq!(
+            app.motion_cue.map(|cue| cue.target),
+            Some(MotionTarget::TableSelection)
+        );
         assert!(
             app.table
                 .as_ref()
@@ -13138,6 +13190,10 @@ mod tests {
 
         app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
             .expect("down should move table selection");
+        assert_eq!(
+            app.motion_cue.map(|cue| cue.target),
+            Some(MotionTarget::TableSelection)
+        );
         app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
             .expect("enter should focus the selected row");
 
