@@ -8,6 +8,7 @@ Current slice:
 - show the current visible scope, including active filters and focused views
 - scan task state, node label, selected metadata fields, and derived progress or orientation fields
 - choose visible columns with `c` inside the table and keep that choice for the current app session
+- collapse or expand selected table branches and cycle view modes without leaving the table
 - press `Enter` to focus the selected row back in the outline
 
 Still moving:

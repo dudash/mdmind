@@ -1048,7 +1048,7 @@ impl HelpTopic {
             Self::Views => &[
                 "Use Focus Branch when you still need orientation. Use Subtree Only when you want the rest of the map to disappear.",
                 "If a branch feels slippery, remember that Subtree Only keeps a stable root until you leave the mode.",
-                "Use table view when metadata matters more than hierarchy for a moment: task state, selected metadata columns, progress, child count, and detail line count. Press c inside the table to choose columns.",
+                "Use table view when metadata matters more than hierarchy for a moment: task state, selected metadata columns, progress, child count, and detail line count. Press c inside the table to choose columns, arrows to fold branches, and v/V to change view modes.",
             ],
             Self::Palette => &[
                 "If you already know the target, use the palette instead of scrolling there manually.",
@@ -1655,6 +1655,7 @@ struct TableRow {
     progress: String,
     child_count: usize,
     detail_lines: usize,
+    expanded: bool,
     matched: bool,
     dimmed: bool,
 }
@@ -2656,6 +2657,22 @@ impl TuiApp {
                 table.selected = rows.len().saturating_sub(1);
                 self.trigger_motion(MotionTarget::TableSelection);
             }
+            KeyCode::Left | KeyCode::Char('h') => {
+                self.table_collapse_or_parent(&mut table, &rows);
+            }
+            KeyCode::Right | KeyCode::Char('l') => {
+                self.table_expand_or_child(&mut table, &rows);
+            }
+            KeyCode::Char('v') => {
+                let selected_path = rows.get(table.selected).map(|row| row.path.clone());
+                self.cycle_view_mode(true);
+                self.restore_table_selection(&mut table, selected_path);
+            }
+            KeyCode::Char('V') => {
+                let selected_path = rows.get(table.selected).map(|row| row.path.clone());
+                self.cycle_view_mode(false);
+                self.restore_table_selection(&mut table, selected_path);
+            }
             KeyCode::Enter => {
                 if let Some(row) = rows.get(table.selected) {
                     self.editor.set_focus_path(row.path.clone())?;
@@ -2677,6 +2694,74 @@ impl TuiApp {
         }
         self.table = Some(table);
         Ok(true)
+    }
+
+    fn table_collapse_or_parent(&mut self, table: &mut TableOverlayState, rows: &[TableRow]) {
+        let Some(row) = rows.get(table.selected) else {
+            return;
+        };
+        let path = row.path.clone();
+        if row.child_count > 0 && self.expanded.remove(&path) {
+            self.restore_table_selection(table, Some(path));
+            self.set_status(StatusTone::Info, "Collapsed the selected table branch.");
+            return;
+        }
+
+        let Some(parent_path) = parent_path(&path) else {
+            self.set_status(StatusTone::Info, "Already at the top table row.");
+            return;
+        };
+        self.restore_table_selection(table, Some(parent_path));
+        self.set_status(StatusTone::Info, "Moved to the parent table row.");
+    }
+
+    fn table_expand_or_child(&mut self, table: &mut TableOverlayState, rows: &[TableRow]) {
+        let Some(row) = rows.get(table.selected) else {
+            return;
+        };
+        let path = row.path.clone();
+        if row.child_count == 0 {
+            self.set_status(StatusTone::Info, "No child rows to expand.");
+            return;
+        }
+
+        if !self.expanded.contains(&path) {
+            self.expanded.insert(path.clone());
+            self.restore_table_selection(table, Some(path));
+            self.set_status(StatusTone::Info, "Expanded the selected table branch.");
+            return;
+        }
+
+        let refreshed = self.table_rows();
+        if let Some(child_index) = refreshed
+            .iter()
+            .position(|candidate| is_direct_child_path(&path, &candidate.path))
+        {
+            table.selected = child_index;
+            self.trigger_motion(MotionTarget::TableSelection);
+            self.set_status(StatusTone::Info, "Moved to the first child table row.");
+        }
+    }
+
+    fn restore_table_selection(
+        &mut self,
+        table: &mut TableOverlayState,
+        preferred_path: Option<Vec<usize>>,
+    ) {
+        let refreshed = self.table_rows();
+        if let Some(path) = preferred_path
+            && let Some(index) = refreshed.iter().position(|row| row.path == path)
+        {
+            table.selected = index;
+            self.trigger_motion(MotionTarget::TableSelection);
+            return;
+        }
+        if refreshed.is_empty() {
+            table.selected = 0;
+        } else {
+            table.selected = table.selected.min(refreshed.len() - 1);
+        }
+        self.trigger_motion(MotionTarget::TableSelection);
     }
 
     fn handle_table_column_key(
@@ -8847,7 +8932,11 @@ fn render_table_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, table: &Tab
         Paragraph::new(Line::from(vec![
             key_hint("↑↓", "select"),
             separator_span(),
+            key_hint("←→", "fold"),
+            separator_span(),
             key_hint("c", "columns"),
+            separator_span(),
+            key_hint("v/V", "view"),
             separator_span(),
             key_hint("PgUp/PgDn", "jump"),
             separator_span(),
@@ -9248,7 +9337,14 @@ impl TableColumn {
     fn value(&self, row: &TableRow) -> String {
         match self {
             Self::Task => row.task.clone(),
-            Self::Node => format!("{}{}", "  ".repeat(row.depth), row.node),
+            Self::Node => {
+                let icon = if row.child_count > 0 {
+                    if row.expanded { "▾ " } else { "▸ " }
+                } else {
+                    "• "
+                };
+                format!("{}{}{}", "  ".repeat(row.depth), icon, row.node)
+            }
             Self::Metadata(key) => row
                 .metadata
                 .get(key)
@@ -11517,6 +11613,17 @@ fn is_path_prefix(prefix: &[usize], path: &[usize]) -> bool {
     prefix.len() <= path.len() && prefix == &path[..prefix.len()]
 }
 
+fn parent_path(path: &[usize]) -> Option<Vec<usize>> {
+    if path.is_empty() {
+        return None;
+    }
+    Some(path[..path.len() - 1].to_vec())
+}
+
+fn is_direct_child_path(parent: &[usize], path: &[usize]) -> bool {
+    path.len() == parent.len() + 1 && is_path_prefix(parent, path)
+}
+
 fn is_sibling_of(path: &[usize], target: &[usize]) -> bool {
     path.len() == target.len()
         && !path.is_empty()
@@ -11707,6 +11814,7 @@ fn visible_rows_to_table_rows(document: &Document, rows: &[VisibleRow]) -> Vec<T
                 progress: table_progress_value(node),
                 child_count: node.children.len(),
                 detail_lines: node.detail.len(),
+                expanded: row.expanded,
                 matched: row.matched,
                 dimmed: row.dimmed,
             })
@@ -13058,6 +13166,7 @@ mod tests {
         assert_eq!(task.progress, "(1/1 done)");
         assert_eq!(task.child_count, 1);
         assert_eq!(task.detail_lines, 0);
+        assert!(task.expanded);
 
         let decision = table_rows
             .iter()
@@ -13081,6 +13190,7 @@ mod tests {
                 progress: "-".to_string(),
                 child_count: 1,
                 detail_lines: 2,
+                expanded: false,
                 matched: false,
                 dimmed: false,
             },
@@ -13093,6 +13203,7 @@ mod tests {
                 progress: "-".to_string(),
                 child_count: 0,
                 detail_lines: 0,
+                expanded: false,
                 matched: false,
                 dimmed: false,
             },
@@ -13203,6 +13314,52 @@ mod tests {
         );
         assert_eq!(app.editor.focus_path(), &[0, 0]);
         assert_eq!(app.status.text, "Focused 'Build table' from table view.");
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn table_overlay_can_fold_branches_and_cycle_view_modes() {
+        let map_path = temp_map_path("table-fold-view.md");
+        let document = parse_document(
+            "- Project [id:project]\n  - [ ] Build table #todo @status:active [id:project/table]\n    - Model rows [id:project/table/model]\n  - Decision @status:active [id:project/decision]\n",
+        )
+        .document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::NONE))
+            .expect("C should open table view");
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("down should select the task row");
+        assert_eq!(
+            app.table.as_ref().and_then(|table| app
+                .table_rows()
+                .get(table.selected)
+                .map(|row| row.path.clone())),
+            Some(vec![0, 0])
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .expect("right should expand the selected table row");
+        assert!(app.expanded.contains(&vec![0, 0]));
+        assert!(app.table_rows().iter().any(|row| row.node == "Model rows"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE))
+            .expect("left should collapse the selected table row");
+        assert!(!app.expanded.contains(&vec![0, 0]));
+        assert!(!app.table_rows().iter().any(|row| row.node == "Model rows"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE))
+            .expect("v should cycle view mode from inside the table");
+        assert_eq!(app.view_mode, ViewMode::FocusBranch);
+        assert!(app.table.is_some(), "table should remain open");
 
         cleanup_sidecars(&map_path);
     }

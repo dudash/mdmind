@@ -117,6 +117,7 @@
       - press C when metadata matters more than hierarchy for a moment
       - scan task state, metadata columns, progress, child count, and detail line count
       - press c inside the table to choose columns for the current app session
+      - use ← / → to fold the selected branch and v / V to change view modes
       - press Enter on a table row to return focus to that outline node
     - Safety is part of the product #guide [id:guide/model/safety]
       - undo and redo restore structural edits
