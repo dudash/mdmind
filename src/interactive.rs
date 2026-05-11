@@ -9107,13 +9107,21 @@ fn table_visible_columns(selected: &[TableColumn], width: usize) -> Vec<TableCol
 fn default_table_columns(rows: &[TableRow]) -> Vec<TableColumn> {
     let options = table_column_options(rows);
     let mut columns = vec![TableColumn::Task, TableColumn::Node];
-    let preferred = ["owner", "status", "priority", "area"];
-    for key in preferred {
-        let column = TableColumn::Metadata(key.to_string());
-        if options.contains(&column) {
-            columns.push(column);
+
+    let metadata_counts = table_metadata_counts(rows);
+    let high_frequency_columns = default_high_frequency_metadata_columns(&metadata_counts);
+    if high_frequency_columns.is_empty() {
+        let preferred = ["owner", "status", "priority", "area"];
+        for key in preferred {
+            let column = TableColumn::Metadata(key.to_string());
+            if options.contains(&column) {
+                columns.push(column);
+            }
         }
+    } else {
+        columns.extend(high_frequency_columns);
     }
+
     if columns.len() == 2 {
         for column in options.iter().filter_map(|column| match column {
             TableColumn::Metadata(_) => Some(column.clone()),
@@ -9125,10 +9133,48 @@ fn default_table_columns(rows: &[TableRow]) -> Vec<TableColumn> {
             }
         }
     }
-    if options.contains(&TableColumn::Progress) {
+    if rows.iter().any(|row| row.progress != "-") {
         columns.push(TableColumn::Progress);
     }
     columns
+}
+
+fn table_metadata_counts(rows: &[TableRow]) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for row in rows {
+        for key in row.metadata.keys() {
+            *counts.entry(key.clone()).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+fn default_high_frequency_metadata_columns(
+    metadata_counts: &BTreeMap<String, usize>,
+) -> Vec<TableColumn> {
+    const MIN_REPEATED_ROWS: usize = 3;
+    const DEFAULT_METADATA_LIMIT: usize = 8;
+
+    let Some(max_count) = metadata_counts.values().copied().max() else {
+        return Vec::new();
+    };
+    if max_count < MIN_REPEATED_ROWS {
+        return Vec::new();
+    }
+
+    let mut keys = metadata_counts
+        .iter()
+        .filter_map(|(key, count)| {
+            if *count == max_count {
+                Some(key.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    keys.sort_by_key(|key| metadata_default_order(key));
+    keys.truncate(DEFAULT_METADATA_LIMIT);
+    keys.into_iter().map(TableColumn::Metadata).collect()
 }
 
 fn table_column_options(rows: &[TableRow]) -> Vec<TableColumn> {
@@ -9200,22 +9246,35 @@ fn table_column_order(column: &TableColumn) -> (usize, String) {
     match column {
         TableColumn::Task => (0, String::new()),
         TableColumn::Node => (1, String::new()),
-        TableColumn::Metadata(key) => {
-            let rank = match key.as_str() {
-                "owner" => 2,
-                "status" => 3,
-                "priority" => 4,
-                "area" => 5,
-                "due" => 6,
-                "source" => 7,
-                _ => 8,
-            };
-            (rank, key.clone())
-        }
-        TableColumn::Progress => (9, String::new()),
-        TableColumn::Children => (10, String::new()),
-        TableColumn::Details => (11, String::new()),
+        TableColumn::Metadata(key) => metadata_default_order(key),
+        TableColumn::Progress => (30, String::new()),
+        TableColumn::Children => (31, String::new()),
+        TableColumn::Details => (32, String::new()),
     }
+}
+
+fn metadata_default_order(key: &str) -> (usize, String) {
+    let rank = match key {
+        "owner" => 2,
+        "status" => 3,
+        "priority" => 4,
+        "area" => 5,
+        "due" => 6,
+        "provider" => 7,
+        "model" => 8,
+        "mode" => 9,
+        "aa_index" => 10,
+        "gpqa" => 11,
+        "hle" => 12,
+        "simplebench" => 13,
+        "swe_verified" => 14,
+        "gdpval" => 15,
+        "best_for" => 16,
+        "caveat" => 17,
+        "source" => 18,
+        _ => 20,
+    };
+    (rank, key.to_string())
 }
 
 fn table_column_summary(columns: &[TableColumn]) -> String {
@@ -13225,6 +13284,55 @@ mod tests {
         assert!(!columns.contains(&TableColumn::Metadata("owner".to_string())));
         toggle_table_column(&mut columns, &TableColumn::Node);
         assert!(columns.contains(&TableColumn::Node));
+    }
+
+    #[test]
+    fn default_table_columns_prefer_repeated_data_fields() {
+        let mut rows = vec![TableRow {
+            path: vec![0],
+            depth: 0,
+            task: "-".to_string(),
+            node: "Benchmark".to_string(),
+            metadata: BTreeMap::from([("status".to_string(), "active".to_string())]),
+            progress: "-".to_string(),
+            child_count: 6,
+            detail_lines: 0,
+            expanded: true,
+            matched: false,
+            dimmed: false,
+        }];
+        for index in 0..6 {
+            rows.push(TableRow {
+                path: vec![0, index],
+                depth: 1,
+                task: "-".to_string(),
+                node: format!("Model {index}"),
+                metadata: BTreeMap::from([
+                    ("provider".to_string(), "openai".to_string()),
+                    ("mode".to_string(), "xhigh".to_string()),
+                    ("aa_index".to_string(), "57".to_string()),
+                    ("gpqa".to_string(), "92.0".to_string()),
+                    ("swe_verified".to_string(), "80.0".to_string()),
+                    ("best_for".to_string(), "coding-agents".to_string()),
+                ]),
+                progress: "-".to_string(),
+                child_count: 0,
+                detail_lines: 2,
+                expanded: false,
+                matched: false,
+                dimmed: false,
+            });
+        }
+
+        let columns = default_table_columns(&rows);
+
+        assert!(columns.contains(&TableColumn::Metadata("provider".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("mode".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("aa_index".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("gpqa".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("swe_verified".to_string())));
+        assert!(!columns.contains(&TableColumn::Metadata("status".to_string())));
+        assert!(!columns.contains(&TableColumn::Progress));
     }
 
     #[test]
