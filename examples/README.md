@@ -5,6 +5,7 @@ These example maps are meant to be opened, searched, filtered, and deep-linked, 
 Each one demonstrates a different style of thinking in `mdmind`:
 
 - product and roadmap planning
+- model comparison and benchmark review
 - meeting notes and action follow-up
 - prompt iteration and evaluation
 - decision logging
@@ -25,7 +26,7 @@ mdm view examples/lantern-studio-map.md#lantern/execution/now
 
 - Want the smallest starter example: [demo.md](./demo.md)
 - Want realistic product planning: [product-status.md](./product-status.md)
-- Want a column-first AI eval example: [ai-eval-triage-table.md](./ai-eval-triage-table.md)
+- Want a column-first model benchmark example: [model-benchmark-comparison.md](./model-benchmark-comparison.md)
 - Want meeting notes that still feel like an outliner: [meeting-notes-action-map.md](./meeting-notes-action-map.md)
 - Want an agent-generated handoff shape: [agent-research-handoff.md](./agent-research-handoff.md)
 - Want a Codex-friendly TODO workflow: [agent-todo-workflow.md](./agent-todo-workflow.md)
@@ -71,31 +72,31 @@ mdm kv examples/product-status.md --keys status,owner,priority --plain
 mdm links examples/product-status.md --plain
 ```
 
-### `ai-eval-triage-table.md`
+### `model-benchmark-comparison.md`
 
-A shallow AI eval triage map built to be opened as a metadata table rather than read as a deep hierarchy.
+A model comparison and benchmark snapshot built to be opened as a metadata table rather than read as a deep hierarchy.
 
 What it demonstrates:
 
-- a real column-first workflow for reviewing eval regressions, fixes, and watch items
-- rows as eval cases with columns like `@suite`, `@case`, `@model`, `@baseline`, `@severity`, `@failure`, `@owner`, and `@next`
-- detail lines as compact trace notes that stay out of the comparison columns
-- hierarchy used only for useful grouping and saved review lenses
+- a real column-first workflow for comparing AI models across multiple public benchmarks
+- rows as models with columns like `@provider`, `@mode`, `@aa_index`, `@gpqa`, `@hle`, `@simplebench`, `@swe_verified`, and `@best_for`
+- detail lines as source notes and caveats, especially when benchmark variants do not line up cleanly
+- hierarchy used only for decision lenses and source tracking
 
 Good first jump:
 
 ```bash
-mdmind examples/ai-eval-triage-table.md
+mdmind examples/model-benchmark-comparison.md
 ```
 
-Then press `C`, press `c`, and select columns such as `@suite`, `@case`, `@model`, `@status`, `@severity`, `@failure`, `@owner`, and `@next`.
+Then press `C`, press `c`, and select columns such as `@provider`, `@mode`, `@aa_index`, `@gpqa`, `@hle`, `@simplebench`, `@swe_verified`, `@source`, and `@best_for`.
 
 Good CLI probes:
 
 ```bash
-mdm kv examples/ai-eval-triage-table.md --keys suite,case,model,baseline,status,severity,failure,owner,next --plain
-mdm find examples/ai-eval-triage-table.md "#eval @status:regressed @severity:high" --plain
-mdm view examples/ai-eval-triage-table.md#ai-eval-triage/current
+mdm kv examples/model-benchmark-comparison.md --keys provider,mode,aa_index,gpqa,hle,simplebench,swe_verified,gdpval,source,best_for,caveat --plain
+mdm find examples/model-benchmark-comparison.md "#model @best_for:coding-agents" --plain
+mdm view examples/model-benchmark-comparison.md#model-benchmark/current
 ```
 
 ### `meeting-notes-action-map.md`

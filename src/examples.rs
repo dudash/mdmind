@@ -24,10 +24,10 @@ const ASSETS: &[ExampleAsset] = &[
         contents: include_str!("../examples/product-status.md"),
     },
     ExampleAsset {
-        name: "ai-eval-triage-table",
-        file_name: "ai-eval-triage-table.md",
-        description: "A column-first AI eval triage map for Table View.",
-        contents: include_str!("../examples/ai-eval-triage-table.md"),
+        name: "model-benchmark-comparison",
+        file_name: "model-benchmark-comparison.md",
+        description: "A column-first model benchmark comparison map for Table View.",
+        contents: include_str!("../examples/model-benchmark-comparison.md"),
     },
     ExampleAsset {
         name: "meeting-notes-action-map",
