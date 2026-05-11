@@ -24,6 +24,12 @@ const ASSETS: &[ExampleAsset] = &[
         contents: include_str!("../examples/product-status.md"),
     },
     ExampleAsset {
+        name: "vendor-review-table",
+        file_name: "vendor-review-table.md",
+        description: "A shallow column-first review map for Table View.",
+        contents: include_str!("../examples/vendor-review-table.md"),
+    },
+    ExampleAsset {
         name: "meeting-notes-action-map",
         file_name: "meeting-notes-action-map.md",
         description: "Meeting notes, decisions, and action follow-up in an outliner-style map.",

@@ -371,6 +371,7 @@ fn examples_copy_all_writes_gallery_and_maps() {
     assert!(destination.join("README.md").is_file());
     assert!(destination.join("demo.md").is_file());
     assert!(destination.join("product-status.md").is_file());
+    assert!(destination.join("vendor-review-table.md").is_file());
     assert!(destination.join("meeting-notes-action-map.md").is_file());
     assert!(destination.join("agent-research-handoff.md").is_file());
     assert!(destination.join("agent-todo-workflow.md").is_file());
@@ -379,6 +380,7 @@ fn examples_copy_all_writes_gallery_and_maps() {
     for file_name in [
         "demo.md",
         "product-status.md",
+        "vendor-review-table.md",
         "meeting-notes-action-map.md",
         "agent-research-handoff.md",
         "agent-todo-workflow.md",

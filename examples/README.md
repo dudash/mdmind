@@ -25,6 +25,7 @@ mdm view examples/lantern-studio-map.md#lantern/execution/now
 
 - Want the smallest starter example: [demo.md](./demo.md)
 - Want realistic product planning: [product-status.md](./product-status.md)
+- Want a column-first Table View example: [vendor-review-table.md](./vendor-review-table.md)
 - Want meeting notes that still feel like an outliner: [meeting-notes-action-map.md](./meeting-notes-action-map.md)
 - Want an agent-generated handoff shape: [agent-research-handoff.md](./agent-research-handoff.md)
 - Want a Codex-friendly TODO workflow: [agent-todo-workflow.md](./agent-todo-workflow.md)
@@ -68,6 +69,33 @@ Good CLI probes:
 mdm find examples/product-status.md "#todo @status:active" --plain
 mdm kv examples/product-status.md --keys status,owner,priority --plain
 mdm links examples/product-status.md --plain
+```
+
+### `vendor-review-table.md`
+
+A shallow vendor-review map built to be opened as a metadata table rather than read as a deep hierarchy.
+
+What it demonstrates:
+
+- a column-first use case where row labels are records and metadata fields carry the comparison
+- arbitrary table columns like `@fit`, `@cost`, `@risk`, `@next`, and `@due`
+- detail lines as row notes that stay out of the comparison columns
+- a practical Table View flow without pretending mdmind is a spreadsheet
+
+Good first jump:
+
+```bash
+mdmind examples/vendor-review-table.md
+```
+
+Then press `C`, press `c`, and select columns such as `@owner`, `@status`, `@priority`, `@fit`, `@cost`, `@risk`, `@next`, and `@due`.
+
+Good CLI probes:
+
+```bash
+mdm kv examples/vendor-review-table.md --keys status,owner,priority,fit,cost,risk,next,due --plain
+mdm find examples/vendor-review-table.md "@risk:high" --plain
+mdm view examples/vendor-review-table.md#vendor-review/shortlist
 ```
 
 ### `meeting-notes-action-map.md`
