@@ -81,7 +81,7 @@ What it demonstrates:
 - a real column-first workflow for comparing AI models across multiple public benchmarks
 - rows as models with columns like `@provider`, `@mode`, `@aa_index`, `@gpqa`, `@hle`, `@simplebench`, `@swe_verified`, and `@best_for`
 - detail lines as source notes and caveats, especially when benchmark variants do not line up cleanly
-- hierarchy used only for decision lenses and source tracking
+- a shallow map that keeps non-row context out of the table body
 
 Good first jump:
 
@@ -96,7 +96,7 @@ Good CLI probes:
 ```bash
 mdm kv examples/model-benchmark-comparison.md --keys provider,mode,aa_index,gpqa,hle,simplebench,swe_verified,gdpval,source,best_for,caveat --plain
 mdm find examples/model-benchmark-comparison.md "#model @best_for:coding-agents" --plain
-mdm view examples/model-benchmark-comparison.md#model-benchmark/current
+mdm view examples/model-benchmark-comparison.md#model-benchmark
 ```
 
 ### `meeting-notes-action-map.md`

@@ -9133,9 +9133,6 @@ fn default_table_columns(rows: &[TableRow]) -> Vec<TableColumn> {
             }
         }
     }
-    if rows.iter().any(|row| row.progress != "-") {
-        columns.push(TableColumn::Progress);
-    }
     columns
 }
 
@@ -13332,6 +13329,57 @@ mod tests {
         assert!(columns.contains(&TableColumn::Metadata("gpqa".to_string())));
         assert!(columns.contains(&TableColumn::Metadata("swe_verified".to_string())));
         assert!(!columns.contains(&TableColumn::Metadata("status".to_string())));
+        assert!(!columns.contains(&TableColumn::Progress));
+    }
+
+    #[test]
+    fn default_table_columns_keep_progress_opt_in() {
+        let rows = vec![TableRow {
+            path: vec![0],
+            depth: 0,
+            task: "-".to_string(),
+            node: "Tasks".to_string(),
+            metadata: BTreeMap::from([("owner".to_string(), "mira".to_string())]),
+            progress: "(1/2 done)".to_string(),
+            child_count: 2,
+            detail_lines: 0,
+            expanded: true,
+            matched: false,
+            dimmed: false,
+        }];
+
+        let options = table_column_options(&rows);
+        let columns = default_table_columns(&rows);
+
+        assert!(options.contains(&TableColumn::Progress));
+        assert!(!columns.contains(&TableColumn::Progress));
+    }
+
+    #[test]
+    fn model_benchmark_example_opens_with_benchmark_columns() {
+        let map_path = temp_map_path("model-benchmark-comparison.md");
+        let document =
+            parse_document(include_str!("../examples/model-benchmark-comparison.md")).document;
+        let mut app = TuiApp::new(
+            map_path,
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.open_table_overlay();
+        let columns = &app.table.as_ref().expect("table should open").columns;
+
+        assert!(columns.contains(&TableColumn::Metadata("provider".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("mode".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("aa_index".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("gpqa".to_string())));
+        assert!(columns.contains(&TableColumn::Metadata("swe_verified".to_string())));
+        assert!(!columns.contains(&TableColumn::Metadata("status".to_string())));
+        assert!(!columns.contains(&TableColumn::Metadata("surface".to_string())));
+        assert!(!columns.contains(&TableColumn::Metadata("domain".to_string())));
         assert!(!columns.contains(&TableColumn::Progress));
     }
 
