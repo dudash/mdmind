@@ -1048,7 +1048,7 @@ impl HelpTopic {
             Self::Views => &[
                 "Use Focus Branch when you still need orientation. Use Subtree Only when you want the rest of the map to disappear.",
                 "If a branch feels slippery, remember that Subtree Only keeps a stable root until you leave the mode.",
-                "Use table view when metadata matters more than hierarchy for a moment: task state, selected metadata columns, progress, child count, and detail line count. Press c inside the table to choose columns, arrows to fold branches, and v/V to change view modes.",
+                "Use table view when metadata matters more than hierarchy for a moment: node labels, task state when present, and selected metadata columns. Press c inside the table to choose columns, arrows to fold branches, and v/V to change view modes.",
             ],
             Self::Palette => &[
                 "If you already know the target, use the palette instead of scrolling there manually.",
@@ -1640,9 +1640,6 @@ enum TableColumn {
     Task,
     Node,
     Metadata(String),
-    Progress,
-    Children,
-    Details,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -4808,7 +4805,7 @@ impl TuiApp {
             (
                 "Open Table View",
                 "Scan visible nodes as selectable task and metadata columns",
-                "table columns metadata fields owner status priority area source due task progress children details",
+                "table columns metadata fields owner status priority area source due task",
                 PaletteAction::OpenTable,
             ),
             (
@@ -9106,7 +9103,10 @@ fn table_visible_columns(selected: &[TableColumn], width: usize) -> Vec<TableCol
 
 fn default_table_columns(rows: &[TableRow]) -> Vec<TableColumn> {
     let options = table_column_options(rows);
-    let mut columns = vec![TableColumn::Task, TableColumn::Node];
+    let mut columns = vec![TableColumn::Node];
+    if options.contains(&TableColumn::Task) {
+        columns.insert(0, TableColumn::Task);
+    }
 
     let metadata_counts = table_metadata_counts(rows);
     let high_frequency_columns = default_high_frequency_metadata_columns(&metadata_counts);
@@ -9122,7 +9122,11 @@ fn default_table_columns(rows: &[TableRow]) -> Vec<TableColumn> {
         columns.extend(high_frequency_columns);
     }
 
-    if columns.len() == 2 {
+    let metadata_column_count = columns
+        .iter()
+        .filter(|column| matches!(column, TableColumn::Metadata(_)))
+        .count();
+    if metadata_column_count == 0 {
         for column in options.iter().filter_map(|column| match column {
             TableColumn::Metadata(_) => Some(column.clone()),
             _ => None,
@@ -9175,7 +9179,11 @@ fn default_high_frequency_metadata_columns(
 }
 
 fn table_column_options(rows: &[TableRow]) -> Vec<TableColumn> {
-    let mut options = vec![TableColumn::Task, TableColumn::Node];
+    let mut options = Vec::new();
+    if rows.iter().any(|row| row.task != "-") {
+        options.push(TableColumn::Task);
+    }
+    options.push(TableColumn::Node);
     let mut keys = rows
         .iter()
         .flat_map(|row| row.metadata.keys().cloned())
@@ -9195,9 +9203,6 @@ fn table_column_options(rows: &[TableRow]) -> Vec<TableColumn> {
         left_rank.cmp(&right_rank).then_with(|| left.cmp(right))
     });
     options.extend(keys.into_iter().map(TableColumn::Metadata));
-    options.push(TableColumn::Progress);
-    options.push(TableColumn::Children);
-    options.push(TableColumn::Details);
     options
 }
 
@@ -9244,9 +9249,6 @@ fn table_column_order(column: &TableColumn) -> (usize, String) {
         TableColumn::Task => (0, String::new()),
         TableColumn::Node => (1, String::new()),
         TableColumn::Metadata(key) => metadata_default_order(key),
-        TableColumn::Progress => (30, String::new()),
-        TableColumn::Children => (31, String::new()),
-        TableColumn::Details => (32, String::new()),
     }
 }
 
@@ -9373,9 +9375,6 @@ impl TableColumn {
             Self::Task => "Task".to_string(),
             Self::Node => "Node".to_string(),
             Self::Metadata(key) => format!("@{key}"),
-            Self::Progress => "Progress".to_string(),
-            Self::Children => "Kids".to_string(),
-            Self::Details => "Details".to_string(),
         }
     }
 
@@ -9384,9 +9383,6 @@ impl TableColumn {
             Self::Task => 8,
             Self::Node => 24,
             Self::Metadata(key) => (key.chars().count() + 4).clamp(8, 14),
-            Self::Progress => 16,
-            Self::Children => 8,
-            Self::Details => 8,
         }
     }
 
@@ -9406,9 +9402,6 @@ impl TableColumn {
                 .get(key)
                 .cloned()
                 .unwrap_or_else(|| "-".to_string()),
-            Self::Progress => row.progress.clone(),
-            Self::Children => row.child_count.to_string(),
-            Self::Details => row.detail_lines.to_string(),
         }
     }
 }
@@ -13266,12 +13259,12 @@ mod tests {
         ];
 
         let options = table_column_options(&rows);
+        assert!(!options.contains(&TableColumn::Task));
         assert!(options.contains(&TableColumn::Metadata("owner".to_string())));
         assert!(options.contains(&TableColumn::Metadata("source".to_string())));
-        assert!(options.contains(&TableColumn::Children));
-        assert!(options.contains(&TableColumn::Details));
 
         let mut columns = default_table_columns(&rows);
+        assert!(!columns.contains(&TableColumn::Task));
         assert!(columns.contains(&TableColumn::Metadata("owner".to_string())));
         assert!(columns.contains(&TableColumn::Metadata("status".to_string())));
 
@@ -13328,12 +13321,12 @@ mod tests {
         assert!(columns.contains(&TableColumn::Metadata("aa_index".to_string())));
         assert!(columns.contains(&TableColumn::Metadata("gpqa".to_string())));
         assert!(columns.contains(&TableColumn::Metadata("swe_verified".to_string())));
+        assert!(!columns.contains(&TableColumn::Task));
         assert!(!columns.contains(&TableColumn::Metadata("status".to_string())));
-        assert!(!columns.contains(&TableColumn::Progress));
     }
 
     #[test]
-    fn default_table_columns_keep_progress_opt_in() {
+    fn table_column_options_keep_derived_progress_out_of_data_columns() {
         let rows = vec![TableRow {
             path: vec![0],
             depth: 0,
@@ -13351,8 +13344,43 @@ mod tests {
         let options = table_column_options(&rows);
         let columns = default_table_columns(&rows);
 
-        assert!(options.contains(&TableColumn::Progress));
-        assert!(!columns.contains(&TableColumn::Progress));
+        assert_eq!(
+            options,
+            vec![
+                TableColumn::Node,
+                TableColumn::Metadata("owner".to_string())
+            ]
+        );
+        assert_eq!(
+            columns,
+            vec![
+                TableColumn::Node,
+                TableColumn::Metadata("owner".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn default_table_columns_include_task_when_tasks_exist() {
+        let rows = vec![TableRow {
+            path: vec![0],
+            depth: 0,
+            task: "[ ]".to_string(),
+            node: "Ship docs".to_string(),
+            metadata: BTreeMap::from([("owner".to_string(), "mira".to_string())]),
+            progress: "-".to_string(),
+            child_count: 0,
+            detail_lines: 0,
+            expanded: false,
+            matched: false,
+            dimmed: false,
+        }];
+
+        let options = table_column_options(&rows);
+        let columns = default_table_columns(&rows);
+
+        assert!(options.contains(&TableColumn::Task));
+        assert!(columns.contains(&TableColumn::Task));
     }
 
     #[test]
@@ -13380,7 +13408,7 @@ mod tests {
         assert!(!columns.contains(&TableColumn::Metadata("status".to_string())));
         assert!(!columns.contains(&TableColumn::Metadata("surface".to_string())));
         assert!(!columns.contains(&TableColumn::Metadata("domain".to_string())));
-        assert!(!columns.contains(&TableColumn::Progress));
+        assert!(!columns.contains(&TableColumn::Task));
     }
 
     #[test]
