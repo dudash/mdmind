@@ -25,7 +25,7 @@ mdm view examples/lantern-studio-map.md#lantern/execution/now
 
 - Want the smallest starter example: [demo.md](./demo.md)
 - Want realistic product planning: [product-status.md](./product-status.md)
-- Want a column-first Table View example: [vendor-review-table.md](./vendor-review-table.md)
+- Want a column-first AI eval example: [ai-eval-triage-table.md](./ai-eval-triage-table.md)
 - Want meeting notes that still feel like an outliner: [meeting-notes-action-map.md](./meeting-notes-action-map.md)
 - Want an agent-generated handoff shape: [agent-research-handoff.md](./agent-research-handoff.md)
 - Want a Codex-friendly TODO workflow: [agent-todo-workflow.md](./agent-todo-workflow.md)
@@ -71,31 +71,31 @@ mdm kv examples/product-status.md --keys status,owner,priority --plain
 mdm links examples/product-status.md --plain
 ```
 
-### `vendor-review-table.md`
+### `ai-eval-triage-table.md`
 
-A shallow vendor-review map built to be opened as a metadata table rather than read as a deep hierarchy.
+A shallow AI eval triage map built to be opened as a metadata table rather than read as a deep hierarchy.
 
 What it demonstrates:
 
-- a column-first use case where row labels are records and metadata fields carry the comparison
-- arbitrary table columns like `@fit`, `@cost`, `@risk`, `@next`, and `@due`
-- detail lines as row notes that stay out of the comparison columns
-- a practical Table View flow without pretending mdmind is a spreadsheet
+- a real column-first workflow for reviewing eval regressions, fixes, and watch items
+- rows as eval cases with columns like `@suite`, `@case`, `@model`, `@baseline`, `@severity`, `@failure`, `@owner`, and `@next`
+- detail lines as compact trace notes that stay out of the comparison columns
+- hierarchy used only for useful grouping and saved review lenses
 
 Good first jump:
 
 ```bash
-mdmind examples/vendor-review-table.md
+mdmind examples/ai-eval-triage-table.md
 ```
 
-Then press `C`, press `c`, and select columns such as `@owner`, `@status`, `@priority`, `@fit`, `@cost`, `@risk`, `@next`, and `@due`.
+Then press `C`, press `c`, and select columns such as `@suite`, `@case`, `@model`, `@status`, `@severity`, `@failure`, `@owner`, and `@next`.
 
 Good CLI probes:
 
 ```bash
-mdm kv examples/vendor-review-table.md --keys status,owner,priority,fit,cost,risk,next,due --plain
-mdm find examples/vendor-review-table.md "@risk:high" --plain
-mdm view examples/vendor-review-table.md#vendor-review/shortlist
+mdm kv examples/ai-eval-triage-table.md --keys suite,case,model,baseline,status,severity,failure,owner,next --plain
+mdm find examples/ai-eval-triage-table.md "#eval @status:regressed @severity:high" --plain
+mdm view examples/ai-eval-triage-table.md#ai-eval-triage/current
 ```
 
 ### `meeting-notes-action-map.md`
