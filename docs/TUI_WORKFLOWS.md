@@ -68,6 +68,8 @@ Use:
 - `Shift+R` to add a root branch
 - `e` to edit the current node
 - `d` to edit longer details for the current node
+- `f` to browse local folders up to the filesystem root and attach a file as a map-relative reference, with git-root indicators and a paste-path fallback
+- `p` or palette `Show References` to review attached files with previews for `.txt`, `.md`, web links, and PNG metadata, then `Enter` to open externally
 - `x` to delete after confirmation
 - `Alt+↑ / Alt+↓` to reorder among siblings
 - `Alt+← / Alt+→` to move out or indent into the previous sibling
@@ -177,7 +179,7 @@ For task-heavy maps:
 
 If the map has stable task markers, `@owner`, or `@status` values, the palette can also surface contextual recipes so you do not need to remember every exact filter string.
 
-Press `C` or run `Open Table View` from the palette when you want to scan the current visible scope as columns. The table is read-only: use it for comparing owner, status, priority, area, task state, progress, and lightweight orientation fields. Press `c` inside the table to choose columns; that choice sticks while the app is running. Use `←` / `→` to collapse or expand the selected branch, and `v` / `V` to cycle view modes without leaving the table. Press `Enter` on a row to focus it back in the outline for edits.
+Press `C` or run `Open Table View` from the palette when you want to scan the current visible scope as columns. The table is read-only: use it for comparing owner, status, priority, area, task state, and other repeated metadata fields without making the map column-centric. Press `c` inside the table to choose columns; that choice persists per map in the local `.mdmind-views.json` sidecar. Use `←` / `→` to collapse or expand the selected branch, and `v` / `V` to cycle view modes without leaving the table. Press `Enter` on a row to focus it back in the outline for edits.
 
 ## Relations In Daily Use
 

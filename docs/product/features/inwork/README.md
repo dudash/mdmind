@@ -1,17 +1,8 @@
 # In-Work Features
 
-The active in-work feature is the metadata/task table view.
+There is no active in-work slice for the metadata/task table view right now. The first read-only table view is current product behavior: open it with `C` or the command palette, choose per-map columns with `c`, scan the current visible scope, fold rows, cycle view modes, and press `Enter` to return focus to the outline.
 
-Current slice:
-
-- open a read-only table with `C` or the command palette
-- show the current visible scope, including active filters and focused views
-- scan task state, node label, selected metadata fields, and derived progress or orientation fields
-- choose visible columns with `c` inside the table and keep that choice for the current app session
-- collapse or expand selected table branches and cycle view modes without leaving the table
-- press `Enter` to focus the selected row back in the outline
-
-Still moving:
+Follow-on table work belongs in future issues:
 
 - saved table presets
 - direct metadata editing

@@ -17,13 +17,14 @@ use crate::examples::{
 use crate::export::export_document;
 use crate::interactive::{run_interactive, run_key_diagnostics};
 use crate::query::{
-    filter_document, find_matches, link_entries, metadata_rows, relation_entries,
-    relation_entries_for_path, tag_counts,
+    filter_document, find_matches, link_entries, metadata_rows, reference_entries,
+    relation_entries, relation_entries_for_path, tag_counts,
 };
 use crate::render::{
     render_find, render_find_plain, render_links, render_links_plain, render_metadata,
-    render_metadata_plain, render_relations, render_relations_plain, render_tags,
-    render_tags_plain, render_tree, render_validate, render_validate_plain,
+    render_metadata_plain, render_references, render_references_plain, render_relations,
+    render_relations_plain, render_tags, render_tags_plain, render_tree, render_validate,
+    render_validate_plain,
 };
 use crate::startup::choose_startup_target;
 use crate::templates::TemplateKind;
@@ -34,7 +35,7 @@ use crate::templates::TemplateKind;
     version,
     about = "Inspect and validate local markdown-like thought maps.",
     long_about = "mdm is the CLI for local-first structured maps. It reads plain-text tree files, renders them for humans, and exports machine-friendly output when you ask for --json or --plain.",
-    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm init TODO.md --template todo\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
+    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm init TODO.md --template todo\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm refs ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -80,6 +81,14 @@ enum Commands {
     },
     #[command(about = "List every id and its deep-linkable path.")]
     Links {
+        target: String,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+    },
+    #[command(about = "List external file, URL, and image references.")]
+    Refs {
         target: String,
         #[arg(long)]
         json: bool,
@@ -299,6 +308,22 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
                 &links,
                 || render_links(&links),
                 || render_links_plain(&links),
+            )
+        }
+        Commands::Refs {
+            target,
+            json,
+            plain,
+        } => {
+            let loaded = load_document(&target).map_err(CliError::from_app)?;
+            ensure_parseable(&loaded).map_err(CliError::from_app)?;
+            let refs = reference_entries(&select_document(&loaded).map_err(CliError::from_app)?);
+            print_output(
+                json,
+                plain,
+                &refs,
+                || render_references(&refs),
+                || render_references_plain(&refs),
             )
         }
         Commands::Relations {

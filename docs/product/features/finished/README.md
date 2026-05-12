@@ -20,6 +20,7 @@ Navigation and structure:
 - [branch-index.md](branch-index.md)
 - [search-and-browse.md](search-and-browse.md)
 - [focused-views.md](focused-views.md)
+- [metadata-table-view.md](metadata-table-view.md)
 - [ids-and-deep-links.md](ids-and-deep-links.md)
 - [relations-and-backlinks.md](relations-and-backlinks.md)
 - [cli-inspection-and-export.md](cli-inspection-and-export.md)

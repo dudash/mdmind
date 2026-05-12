@@ -79,6 +79,11 @@ fn mermaid_label(node: &ExportNode) -> String {
     if let Some(id) = &node.id {
         parts.push(format!("[id:{id}]"));
     }
+    parts.extend(
+        node.references
+            .iter()
+            .map(|reference| reference.display_token()),
+    );
     if let Some(progress) = &node.task_progress {
         if progress.blocked == 0 {
             parts.push(format!("({}/{} done)", progress.done, progress.total));
@@ -164,6 +169,15 @@ fn opml_attributes(node: &ExportNode) -> String {
             r#" mdm_detail="{}""#,
             escape_xml_attr(&node.detail.join("\n"))
         ));
+    }
+    if !node.references.is_empty() {
+        let references = node
+            .references
+            .iter()
+            .map(|reference| reference.display_token())
+            .collect::<Vec<_>>()
+            .join(" ");
+        attributes.push(format!(r#" mdm_refs="{}""#, escape_xml_attr(&references)));
     }
     for (key, value) in &node.kv {
         attributes.push(format!(

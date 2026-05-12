@@ -84,6 +84,7 @@ Node content is split into whitespace-delimited tokens. A token is interpreted b
 - `#` starts a tag token
 - `@` starts a metadata token
 - `[id:` starts an id token
+- `[` or `![` plus `](` starts an external reference token
 - `[[` starts a relation token
 - any other token is visible label text
 
@@ -127,10 +128,10 @@ The visible label is built from the tokens that are not parsed as annotations.
 Rules:
 
 - every node must have visible text after annotations are removed
-- annotation tokens must be separated by whitespace
-- annotation token values must not contain spaces
+- annotation tokens must be separated by whitespace, except Markdown reference labels and targets may contain spaces inside `[label](target)` or `![label](target)`
+- annotation token values must not contain spaces except for Markdown reference labels and targets
 - annotation tokens may appear anywhere in the node content
-- the preferred order is label, tags, metadata, id, relations
+- the preferred order is label, tags, metadata, id, references, relations
 
 Preferred:
 
@@ -290,6 +291,39 @@ This is invalid because the detail appears after a child:
 
 Use details for rationale, meeting notes, quotes, research context, or explanation that belongs to one branch.
 
+## External References
+
+External references attach supporting local files, URLs, and images to a node while staying readable as ordinary Markdown links.
+
+File or URL reference:
+
+```text
+[label](path-or-url)
+```
+
+Image reference:
+
+```text
+![label](path-or-url)
+```
+
+Example:
+
+```text
+- Research Packet [brief note](docs/project brief.md) ![flow diagram](assets/flow chart.png)
+```
+
+Rules:
+
+- labels and targets must not be empty
+- labels and targets may contain spaces
+- local targets are resolved relative to the map file for validation
+- missing local targets are validation warnings
+- URLs are preserved as references but are not fetched during validation
+- references are not embedded; binary content stays outside the map
+- first-class local picking may browse up to the filesystem root, should mark detected git roots as landmarks, and should store generated paths as portable references relative to the map file's directory
+- first-class reference review should preview local `.txt` and `.md` content inline, provide lightweight web-link and PNG previews, show "No preview available" for unsupported types, and keep external open available for every reference
+
 ## Relations
 
 Relations connect nodes across the tree without changing parent-child structure.
@@ -354,7 +388,7 @@ Tools that rewrite mdmind files should prefer stable, boring output.
 Recommended order for a node line:
 
 ```text
-label #tags @metadata [id:...] [[relations]]
+label #tags @metadata [id:...] [reference](path) [[relations]]
 ```
 
 Recommended detail placement:

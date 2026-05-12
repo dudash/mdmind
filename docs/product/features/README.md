@@ -29,18 +29,19 @@ Complete enough to present as current product:
 - CLI inspection for viewing, finding, tags, metadata, links, relations, validation, examples, and export
 - export to JSON, Mermaid, and OPML, including query-filtered and deep-linked scopes
 - visual mindmap overlay with relation edges when endpoints are visible and PNG export
+- read-only metadata/task table view over the current visible TUI scope, including selectable per-map columns
 - templates, examples, release installers, and Homebrew install support
 
 Real, but still a moving target:
 
 - spatial canvas phase 1: full-screen visual navigation, focus-centered layout, camera pan/zoom, outline-like navigation, and legacy visual map fallback
-- read-only metadata/task table view over the current visible TUI scope, including selectable columns and lightweight derived fields
+- external references phase 1: Markdown link/image references on nodes, TUI filesystem file picker with git-root indicators and paste fallback, attached-reference review with text/Markdown/web/PNG previews, CLI inspection, export, and missing-local-file validation
 
 Not complete yet:
 
 - import from existing outline and mind-map formats
-- saved table presets and direct metadata editing
-- attachments and image references
+- saved table presets, direct metadata editing, and broader derived table fields if real maps need them
+- richer binary attachment previews and open-in-external-app polish
 - polished presentation-grade visual/outline export
 - terminal-native completions and man pages
 - public docs/adoption material beyond the current static site

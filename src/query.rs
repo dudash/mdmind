@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::editor::get_node;
 use crate::model::{
     Document, LinkEntry, MetadataEntry, MetadataKeyCount, MetadataRow, MetadataValueCount, Node,
-    RelationDirection, RelationRow, SearchMatch, TagCount, TaskQuery,
+    ReferenceRow, RelationDirection, RelationRow, SearchMatch, TagCount, TaskQuery,
 };
 
 pub fn find_matches(document: &Document, query: &str) -> Vec<SearchMatch> {
@@ -214,6 +214,25 @@ pub fn relation_entries(document: &Document) -> Vec<RelationRow> {
     rows
 }
 
+pub fn reference_entries(document: &Document) -> Vec<ReferenceRow> {
+    let mut rows = Vec::new();
+    walk_nodes(&document.nodes, &mut Vec::new(), &mut |node, breadcrumb| {
+        let breadcrumb_text = breadcrumb.join(" / ");
+        for reference in &node.references {
+            rows.push(ReferenceRow {
+                line: node.line,
+                breadcrumb: breadcrumb_text.clone(),
+                text: node.text.clone(),
+                id: node.id.clone(),
+                label: reference.label.clone(),
+                target: reference.target.clone(),
+                kind: reference.kind,
+            });
+        }
+    });
+    rows
+}
+
 pub fn relation_entries_for_anchor(document: &Document, anchor_id: &str) -> Vec<RelationRow> {
     let mut rows = Vec::new();
 
@@ -408,6 +427,11 @@ fn term_matches(term: &QueryTerm, node: &Node) -> bool {
                     .metadata
                     .iter()
                     .any(|entry| metadata_matches(entry, lowered))
+                || node.references.iter().any(|reference| {
+                    reference.label.to_lowercase().contains(lowered)
+                        || reference.target.to_lowercase().contains(lowered)
+                        || reference.display_token().to_lowercase().contains(lowered)
+                })
                 || node.relations.iter().any(|relation| {
                     relation.target.to_lowercase().contains(lowered)
                         || relation

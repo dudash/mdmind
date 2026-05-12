@@ -26,6 +26,7 @@
       - #tags for grouping and workflow markers #reference
       - @key:value metadata for structured attributes #reference
       - an id token for stable deep links #reference
+      - Markdown links for local files, URLs, and images #reference
       - double-bracket cross-links for lateral references across branches #reference
     - Good first habit #tip [id:guide/start/first-habit]
       - keep node labels short and readable
@@ -115,8 +116,9 @@
       - filters help you work inside a smaller visible surface without losing the original map
     - Table view compares fields #guide [id:guide/model/table]
       - press C when metadata matters more than hierarchy for a moment
-      - scan task state, metadata columns, progress, child count, and detail line count
-      - press c inside the table to choose columns for the current app session
+      - scan task state and repeated metadata columns without changing the source map
+      - press c inside the table to choose columns for the current map
+      - table column choices persist next to the map in the local .mdmind-views.json sidecar
       - use ← / → to fold the selected branch and v / V to change view modes
       - press Enter on a table row to return focus to that outline node
     - Safety is part of the product #guide [id:guide/model/safety]
@@ -173,6 +175,8 @@
       - Shift+R adds a root branch
       - e edits the current node
       - d edits longer attached details for the current node
+      - f opens a folder-browsing local file picker for attaching files as map-relative references
+      - p or Show References in the palette reviews attached refs with previews for text, Markdown, web links, and PNGs; Enter opens externally
       - x deletes after confirmation
     - Node details #guide [id:guide/editing/details]
       - use details for longer notes, quotes, rationale, or research context
@@ -233,6 +237,7 @@
       - mdm kv examples/game-world-moonwake.md --keys owner,region --plain
       - mdm tags examples/novel-research-writing-map.md --plain
       - mdm links examples/lantern-studio-map.md --plain
+      - mdm refs examples/lantern-studio-map.md --plain
     - How to think about the output #guide [id:guide/cli/output]
       - use find when you want matching work items or branches in context
       - use kv when you want to audit structured fields like owner, status, region, or priority
@@ -283,6 +288,7 @@
     - Example node lines #example [id:guide/syntax/examples]
       - API Design #backend @status:todo
       - Sprint Review #meeting @owner:jason @status:planned
+      - Research Packet [details](NODE_DETAILS.md) ![screenshot](assets/novel-focus-branch.png)
     - Syntax tips #tip [id:guide/syntax/tips]
       - keep labels human-readable first, then add structure
       - reuse the same metadata keys across the map

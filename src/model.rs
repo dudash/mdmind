@@ -18,6 +18,8 @@ pub struct Node {
     pub metadata: Vec<MetadataEntry>,
     pub id: Option<String>,
     #[serde(default)]
+    pub references: Vec<ExternalRef>,
+    #[serde(default)]
     pub relations: Vec<Relation>,
     pub children: Vec<Node>,
     pub line: usize,
@@ -47,6 +49,20 @@ pub struct TaskProgress {
 pub struct Relation {
     pub kind: Option<String>,
     pub target: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalRef {
+    pub label: String,
+    pub target: String,
+    pub kind: ExternalRefKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ExternalRefKind {
+    Link,
+    Image,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -130,6 +146,17 @@ pub struct RelationRow {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ReferenceRow {
+    pub line: usize,
+    pub breadcrumb: String,
+    pub text: String,
+    pub id: Option<String>,
+    pub label: String,
+    pub target: String,
+    pub kind: ExternalRefKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ExportDocument {
     pub nodes: Vec<ExportNode>,
 }
@@ -145,6 +172,7 @@ pub struct ExportNode {
     pub tags: Vec<String>,
     pub kv: BTreeMap<String, String>,
     pub id: Option<String>,
+    pub references: Vec<ExternalRef>,
     pub relations: Vec<ExportRelation>,
     pub children: Vec<ExportNode>,
 }
@@ -189,6 +217,7 @@ impl Node {
             tags: self.tags.clone(),
             kv,
             id: self.id.clone(),
+            references: self.references.clone(),
             relations: self
                 .relations
                 .iter()
@@ -218,6 +247,7 @@ impl Node {
         if let Some(id) = &self.id {
             parts.push(format!("[id:{id}]"));
         }
+        parts.extend(self.references.iter().map(ExternalRef::display_token));
         parts.extend(self.relations.iter().map(Relation::display_token));
 
         if parts.is_empty() {
@@ -392,6 +422,24 @@ impl From<TaskProgress> for TaskProgressSummary {
             total: progress.total,
             blocked: progress.blocked,
         }
+    }
+}
+
+impl ExternalRef {
+    pub fn display_token(&self) -> String {
+        let prefix = match self.kind {
+            ExternalRefKind::Link => "",
+            ExternalRefKind::Image => "!",
+        };
+        format!("{prefix}[{}]({})", self.label, self.target)
+    }
+
+    pub fn is_url(&self) -> bool {
+        let lower = self.target.to_lowercase();
+        lower.starts_with("http://")
+            || lower.starts_with("https://")
+            || lower.starts_with("mailto:")
+            || lower.starts_with("file://")
     }
 }
 

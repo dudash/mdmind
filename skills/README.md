@@ -27,15 +27,17 @@ This skill teaches agents how to:
 - use `#tags` and `@key:value` metadata deliberately
 - add `[id:...]` only on durable branches
 - use `[[...]]` relations sparingly and meaningfully
+- attach external files, URLs, and images with normal Markdown refs
 
 ### `mdm-cli-inspection`
 
-Use when the main job is inspecting, validating, querying, deep-linking, or exporting an existing map with `mdm`.
+Use when the main job is inspecting, validating, querying, deep-linking, listing external refs, or exporting an existing map with `mdm`.
 
 Good fits:
 
 - validating generated maps
 - finding tags, metadata, ids, or relations
+- listing attached local files, web links, or image refs
 - auditing `@owner`, `@status`, or similar fields
 - exporting JSON, Mermaid, or OPML
 - answering questions about one branch via deep links

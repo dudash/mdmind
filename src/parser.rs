@@ -1,4 +1,7 @@
-use crate::model::{Diagnostic, Document, MetadataEntry, Node, Relation, Severity, TaskState};
+use crate::model::{
+    Diagnostic, Document, ExternalRef, ExternalRefKind, MetadataEntry, Node, Relation, Severity,
+    TaskState,
+};
 
 #[derive(Debug, Clone)]
 pub struct ParseOutput {
@@ -159,6 +162,7 @@ fn build_nodes(flat_nodes: &[FlatNode], start: usize, level: usize) -> (Vec<Node
 
 fn parse_node_content(content: &str, line: usize, diagnostics: &mut Vec<Diagnostic>) -> Node {
     let (task, content) = parse_task_marker(content);
+    let (content, references) = extract_reference_tokens(content, line, diagnostics);
     let mut text_parts = Vec::new();
     let mut tags = Vec::new();
     let mut metadata = Vec::new();
@@ -261,6 +265,7 @@ fn parse_node_content(content: &str, line: usize, diagnostics: &mut Vec<Diagnost
         tags,
         metadata,
         id,
+        references,
         relations,
         children: Vec::new(),
         line,
@@ -317,4 +322,94 @@ fn parse_relation_token(token: &str) -> Result<Relation, String> {
         kind: None,
         target: inner.to_string(),
     })
+}
+
+fn extract_reference_tokens(
+    content: &str,
+    line: usize,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> (String, Vec<ExternalRef>) {
+    let mut remaining = String::new();
+    let mut references = Vec::new();
+    let mut index = 0;
+
+    while index < content.len() {
+        match parse_reference_at(content, index) {
+            Some(Ok((reference, end))) => {
+                references.push(reference);
+                remaining.push(' ');
+                index = end;
+            }
+            Some(Err(message)) => {
+                diagnostics.push(Diagnostic {
+                    severity: Severity::Error,
+                    line,
+                    message,
+                });
+                let character = content[index..]
+                    .chars()
+                    .next()
+                    .expect("index should point at a character");
+                remaining.push(character);
+                index += character.len_utf8();
+            }
+            None => {
+                let character = content[index..]
+                    .chars()
+                    .next()
+                    .expect("index should point at a character");
+                remaining.push(character);
+                index += character.len_utf8();
+            }
+        }
+    }
+
+    (remaining, references)
+}
+
+fn parse_reference_at(content: &str, start: usize) -> Option<Result<(ExternalRef, usize), String>> {
+    let (kind, body_start) = if content[start..].starts_with("![") {
+        (ExternalRefKind::Image, start + 2)
+    } else if content[start..].starts_with('[') {
+        if content[start..].starts_with("[[") || content[start..].starts_with("[id:") {
+            return None;
+        }
+        (ExternalRefKind::Link, start + 1)
+    } else {
+        return None;
+    };
+
+    let label_end = match content[body_start..].find("](") {
+        Some(offset) => body_start + offset,
+        None => return None,
+    };
+    let target_start = label_end + 2;
+    let target_end = match content[target_start..].find(')') {
+        Some(offset) => target_start + offset,
+        None => {
+            return Some(Err(format!(
+                "Invalid reference token '{}'.",
+                &content[start..]
+            )));
+        }
+    };
+    let end = target_end + 1;
+    let label = &content[body_start..label_end];
+    let target = &content[target_start..target_end];
+
+    if label.is_empty() || target.is_empty() {
+        return Some(Err(format!(
+            "Invalid reference token '{}'.",
+            &content[start..end]
+        )));
+    }
+
+    Some(Ok((
+        ExternalRef {
+            label: label.to_string(),
+            target: target.to_string(),
+            kind,
+        },
+        end,
+    )))
 }

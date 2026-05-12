@@ -5,7 +5,7 @@ use crate::editor::get_node;
 use crate::model::{Diagnostic, Document, Node, Severity, has_errors};
 use crate::parser::parse_document;
 use crate::templates::TemplateKind;
-use crate::validate::validate_document;
+use crate::validate::validate_document_with_base_path;
 
 #[derive(Debug, Clone)]
 pub struct TargetRef {
@@ -68,7 +68,12 @@ pub fn load_document(target: &str) -> Result<LoadedDocument, AppError> {
     })?;
 
     let parsed = parse_document(&source);
-    let validation_diagnostics = validate_document(&parsed.document);
+    let validation_base_path = target
+        .path
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty());
+    let validation_diagnostics =
+        validate_document_with_base_path(&parsed.document, validation_base_path);
 
     Ok(LoadedDocument {
         target,

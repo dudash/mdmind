@@ -1,5 +1,5 @@
 use crate::app::AppError;
-use crate::model::{Diagnostic, Document, Node, TaskState, has_errors};
+use crate::model::{Diagnostic, Document, ExternalRef, Node, TaskState, has_errors};
 use crate::parser::{parse_document, parse_node_fragment};
 use crate::serializer::serialize_document;
 use crate::session::SessionState;
@@ -215,8 +215,23 @@ impl Editor {
             node.tags = replacement.tags;
             node.metadata = replacement.metadata;
             node.id = replacement.id;
+            node.references = replacement.references;
             node.relations = replacement.relations;
             node.children = current.children;
+            focus_path
+        })
+    }
+
+    pub fn add_reference_to_current(&mut self, reference: ExternalRef) -> Result<(), AppError> {
+        if self.current().is_none() {
+            return Err(AppError::new("The document has no focused node."));
+        }
+
+        let focus_path = self.focus_path.clone();
+        self.apply_change(move |document| {
+            let node = get_node_mut(&mut document.nodes, &focus_path)
+                .expect("focus path should be valid before mutation");
+            node.references.push(reference);
             focus_path
         })
     }

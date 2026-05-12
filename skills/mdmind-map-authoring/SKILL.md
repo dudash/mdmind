@@ -1,6 +1,6 @@
 ---
 name: mdmind-map-authoring
-description: Create or revise native mdmind maps: plain-text Markdown outlines, mind maps, knowledge maps, and structured notes that stay useful as durable .md files. Use for turning meeting notes, research, product plans, writing outlines, decision maps, project breakdowns, or agent memory into hierarchy with optional tags, metadata, ids, details, and relations. Do not use for short prose-only answers, raw transcript cleanup without durable structure, visual-diagram requests, or mdm CLI-first inspection/export tasks.
+description: Create or revise native mdmind maps: plain-text Markdown outlines, mind maps, knowledge maps, and structured notes that stay useful as durable .md files. Use for turning meeting notes, research, product plans, writing outlines, decision maps, project breakdowns, or agent memory into hierarchy with optional tags, metadata, ids, details, relations, and external Markdown references. Do not use for short prose-only answers, raw transcript cleanup without durable structure, visual-diagram requests, or mdm CLI-first inspection/export tasks.
 license: Apache-2.0
 metadata:
   author: mdmind
@@ -18,6 +18,7 @@ Create native `mdmind` map output that stays useful for a human, not just syntac
 - Convert notes, plans, research, writing, or strategy material into a durable map without losing the user's intended framing.
 - Create decomposable TODO maps for local execution, agent handoff, and persistent project memory.
 - Improve an existing map’s structure, labels, ids, metadata, details, or relations.
+- Attach supporting local files, URLs, or image artifacts to relevant nodes with normal Markdown references.
 
 ## Do Not Use For
 
@@ -35,6 +36,7 @@ Create native `mdmind` map output that stays useful for a human, not just syntac
 - Add ids only on durable branches.
 - Keep relations sparse.
 - Use detail lines only when a branch needs real prose, rationale, quotes, or context.
+- Use normal Markdown links or images for external source artifacts; keep the artifact external instead of pasting bulky content into the map.
 - Preserve the user's framing; improve the structure, not the underlying taxonomy, unless the user asks for a new framework.
 
 Read only what you need:
@@ -49,6 +51,7 @@ Read only what you need:
 - Use the tree for ownership and hierarchy.
 - Use detail lines for attached prose.
 - Use tags and metadata to help grouping and retrieval, not to replace readable labels.
+- Use Markdown references for supporting files or URLs that should stay attached to a node.
 
 Good node labels usually work as:
 
@@ -99,6 +102,7 @@ Choose the lightest structure that preserves meaning:
 - Use `@key:value` metadata when repeated structured fields help filtering or clarity.
 - Use `[id:...]` for durable anchors that a human or tool is likely to revisit, deep-link, export, or reference later.
 - Use `[[target/id]]` or `[[rel:kind->target/id]]` only when lateral meaning matters across distant branches.
+- Use `[label](path-or-url)` or `![label](path-or-url)` when a node should point to an external file, URL, or image.
 
 Prefer this escalation order:
 
@@ -107,6 +111,7 @@ Prefer this escalation order:
 3. label + repeated metadata
 4. durable id
 5. relation
+6. external reference
 
 Do not jump to ids and relations before the tree shape is already good.
 
@@ -157,6 +162,14 @@ Do not jump to ids and relations before the tree shape is already good.
 - Use typed cross-links when the relationship itself matters.
 - Prefer tree structure first and relations second.
 
+### External Markdown References
+
+- Use `[label](path-or-url)` for supporting files, web pages, and source artifacts.
+- Use `![label](path-or-url)` for image references that belong with the node.
+- Prefer paths relative to the map file when the artifact lives in the same project tree.
+- Labels and targets may contain spaces; keep them as normal Markdown link text and destinations.
+- Do not use external refs as a replacement for ids or relations: refs point outside the map, while ids and relations structure the map itself.
+
 ## Workflow
 
 1. Decide whether `mdmind` is the right target.
@@ -173,7 +186,9 @@ Do not jump to ids and relations before the tree shape is already good.
    Use `| detail` lines for rationale, quotes, research excerpts, scene notes, or meeting context that belongs to one node.
 7. Add relations only when the connection should survive outside tree placement.
    Prefer plain `[[target/id]]`. Use typed relations like `[[rel:blocked-by->target/id]]` only when the relation meaning matters.
-8. Tighten the map.
+8. Add external refs only where the source artifact should stay reachable from the node.
+   Prefer map-relative Markdown links for local files, normal URLs for web sources, and image refs for visual artifacts.
+9. Tighten the map.
    Remove over-structuring, inconsistent metadata, duplicate ids, unnecessary relations, and verbose labels.
 
 ## Output Shape
@@ -202,7 +217,7 @@ Prefer this structure:
 - detail lines for acceptance criteria, blockers, or handoff context
 - ids on durable branches and major tasks, not every checklist item
 
-Use familiar checkbox markers like `[ ]` and `[x]` for togglable task rows. In `mdmind`, `Space` toggles a focused checkbox task and `t` / `T` starts a new TODO child or sibling prompt with `[ ] `. Keep `#todo`, `#done`, and `@status` metadata present enough for `task:open`, `task:blocked`, `task:done`, `mdm find`, and `mdm kv` workflows.
+Use familiar checkbox markers like `[ ]` and `[x]` when task state should round-trip as plain Markdown. Keep `#todo`, `#done`, and `@status` metadata present enough for `task:open`, `task:blocked`, `task:done`, `mdm find`, and `mdm kv` workflows.
 
 Good TODO map commands to include when useful:
 
@@ -232,8 +247,10 @@ Before handing back a map or file:
 3. Check that metadata keys are consistent.
 4. Check that ids are sparse, stable, and non-duplicated.
 5. Check that relations point to real ids and are worth keeping.
-6. If `mdm` is available, run `mdm validate <file>`.
-7. If the result is large or deeply linked, use `mdm links <file>` or `mdm relations <file> --plain` as a sanity check.
+6. Check that external refs use normal Markdown link syntax and local refs are intended relative to the map file.
+7. If `mdm` is available, run `mdm validate <file>`.
+8. If the result is large or deeply linked, use `mdm links <file>` or `mdm relations <file> --plain` as a sanity check.
+9. If external refs matter, use `mdm refs <file> --plain` as a sanity check.
 
 If `mdm` is not available, still do the manual checks and say that CLI validation was not run.
 
@@ -269,8 +286,9 @@ The first version keeps the outline scannable, preserves the key state in the la
 - Agents also over-impose frameworks. If unsure, preserve the user's framing instead of introducing your own taxonomy.
 - Not every node needs an id. Overusing ids hurts readability.
 - Relations are for lateral meaning, not for replacing basic hierarchy.
+- External refs are for local files, URLs, and images; do not invent custom metadata for attachments when Markdown links will do.
 - Detail lines should hold actual prose or attached context, not restate the label.
-- A map should still be understandable in plain Markdown without the TUI.
+- A map should still be understandable as plain Markdown without relying on interactive rendering.
 
 ## Return Format
 

@@ -52,6 +52,7 @@ Current implementation:
 - one JSON sidecar per map
 - file name pattern: `.<map-file-name>.mdmind-views.json`
 - stored next to the source map
+- stores saved filter views and the current Table View column selection
 
 ## Delivery
 

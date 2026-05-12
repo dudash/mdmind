@@ -69,6 +69,17 @@ mdm links map.md --plain
 
 Use `links` when the user needs stable ids for later `view`, `open`, `relations`, or `export` commands.
 
+## Inspect External Refs
+
+Use:
+
+```bash
+mdm refs map.md --plain
+mdm refs map.md --json
+```
+
+Use `refs` when the user needs attached Markdown links, local files, URLs, or image refs on map nodes. Local refs are interpreted relative to the map file by validation, and labels or paths may contain spaces when written as normal Markdown links.
+
 ## Inspect Relations
 
 Whole-file outgoing relations:

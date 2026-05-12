@@ -1,8 +1,16 @@
 use std::collections::HashMap;
+use std::path::Path;
 
 use crate::model::{Diagnostic, Document, Node, Severity, TaskState};
 
 pub fn validate_document(document: &Document) -> Vec<Diagnostic> {
+    validate_document_with_base_path(document, None)
+}
+
+pub fn validate_document_with_base_path(
+    document: &Document,
+    base_path: Option<&Path>,
+) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     let mut seen_ids = HashMap::<String, usize>::new();
 
@@ -29,6 +37,7 @@ pub fn validate_document(document: &Document) -> Vec<Diagnostic> {
         }
 
         validate_task_state(node, &mut diagnostics);
+        validate_references(node, base_path, &mut diagnostics);
 
         if let Some(id) = &node.id {
             if let Some(first_seen_line) = seen_ids.insert(id.clone(), node.line) {
@@ -61,6 +70,46 @@ pub fn validate_document(document: &Document) -> Vec<Diagnostic> {
     });
 
     diagnostics
+}
+
+fn validate_references(node: &Node, base_path: Option<&Path>, diagnostics: &mut Vec<Diagnostic>) {
+    let Some(base_path) = base_path else {
+        return;
+    };
+
+    for reference in &node.references {
+        if reference.is_url() || reference.target.starts_with('#') {
+            continue;
+        }
+
+        let target_without_fragment = reference
+            .target
+            .split_once('#')
+            .map(|(path, _)| path)
+            .unwrap_or(reference.target.as_str());
+        if target_without_fragment.is_empty() {
+            continue;
+        }
+
+        let candidate = Path::new(target_without_fragment);
+        let resolved = if candidate.is_absolute() {
+            candidate.to_path_buf()
+        } else {
+            base_path.join(candidate)
+        };
+
+        if !resolved.exists() {
+            diagnostics.push(Diagnostic {
+                severity: Severity::Warning,
+                line: node.line,
+                message: format!(
+                    "Reference target '{}' does not exist relative to '{}'.",
+                    reference.target,
+                    base_path.display()
+                ),
+            });
+        }
+    }
 }
 
 fn validate_task_state(node: &Node, diagnostics: &mut Vec<Diagnostic>) {

@@ -1,6 +1,6 @@
 use crate::model::{
-    Diagnostic, Document, LinkEntry, MetadataRow, RelationDirection, RelationRow, SearchMatch,
-    TagCount,
+    Diagnostic, Document, LinkEntry, MetadataRow, ReferenceRow, RelationDirection, RelationRow,
+    SearchMatch, TagCount,
 };
 
 pub fn render_tree(document: &Document, max_depth: Option<usize>) -> String {
@@ -136,6 +136,40 @@ pub fn render_links_plain(rows: &[LinkEntry]) -> String {
             entry.id.clone(),
             entry.breadcrumb.clone(),
             entry.text.clone(),
+        ]
+    }))
+}
+
+pub fn render_references(rows: &[ReferenceRow]) -> String {
+    if rows.is_empty() {
+        return "No references found.".to_string();
+    }
+
+    render_table(
+        &["line", "path", "kind", "label", "target"],
+        &rows
+            .iter()
+            .map(|entry| {
+                vec![
+                    entry.line.to_string(),
+                    entry.breadcrumb.clone(),
+                    format!("{:?}", entry.kind).to_lowercase(),
+                    entry.label.clone(),
+                    entry.target.clone(),
+                ]
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
+pub fn render_references_plain(rows: &[ReferenceRow]) -> String {
+    render_plain_rows(rows.iter().map(|entry| {
+        vec![
+            entry.line.to_string(),
+            entry.breadcrumb.clone(),
+            format!("{:?}", entry.kind).to_lowercase(),
+            entry.label.clone(),
+            entry.target.clone(),
         ]
     }))
 }

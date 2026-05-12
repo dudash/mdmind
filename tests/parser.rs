@@ -1,10 +1,10 @@
-use mdmind::model::TaskState;
+use mdmind::model::{ExternalRefKind, TaskState};
 use mdmind::parser::parse_document;
 use mdmind::query::{
-    find_matches, link_entries, metadata_rows, relation_entries, relation_entries_for_anchor,
-    tag_counts,
+    find_matches, link_entries, metadata_rows, reference_entries, relation_entries,
+    relation_entries_for_anchor, tag_counts,
 };
-use mdmind::validate::validate_document;
+use mdmind::validate::{validate_document, validate_document_with_base_path};
 
 fn fixture(name: &str) -> String {
     std::fs::read_to_string(format!("tests/fixtures/{name}")).expect("fixture should be readable")
@@ -173,6 +173,74 @@ fn parser_extracts_inline_relations_and_backlinks_are_queryable() {
 }
 
 #[test]
+fn parser_extracts_markdown_file_and_image_references() {
+    let parsed = parse_document(
+        "- Research [brief](docs/brief.md) ![diagram](assets/diagram.png) [id:research]\n",
+    );
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "parser diagnostics: {:?}",
+        parsed.diagnostics
+    );
+
+    let node = &parsed.document.nodes[0];
+    assert_eq!(node.text, "Research");
+    assert_eq!(node.references.len(), 2);
+    assert_eq!(node.references[0].label, "brief");
+    assert_eq!(node.references[0].target, "docs/brief.md");
+    assert_eq!(node.references[0].kind, ExternalRefKind::Link);
+    assert_eq!(node.references[1].label, "diagram");
+    assert_eq!(node.references[1].target, "assets/diagram.png");
+    assert_eq!(node.references[1].kind, ExternalRefKind::Image);
+    assert_eq!(
+        node.display_line(),
+        "Research [id:research] [brief](docs/brief.md) ![diagram](assets/diagram.png)"
+    );
+
+    let rows = reference_entries(&parsed.document);
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].breadcrumb, "Research");
+
+    let matches = find_matches(&parsed.document, "diagram.png");
+    assert_eq!(matches.len(), 1);
+}
+
+#[test]
+fn parser_extracts_markdown_references_with_spaces() {
+    let parsed = parse_document(
+        "- Research [brief note](docs/project brief.md) ![flow diagram](assets/flow chart.png) #tag [id:research]\n",
+    );
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "parser diagnostics: {:?}",
+        parsed.diagnostics
+    );
+
+    let node = &parsed.document.nodes[0];
+    assert_eq!(node.text, "Research");
+    assert_eq!(node.tags, vec!["#tag"]);
+    assert_eq!(node.references.len(), 2);
+    assert_eq!(node.references[0].label, "brief note");
+    assert_eq!(node.references[0].target, "docs/project brief.md");
+    assert_eq!(node.references[0].kind, ExternalRefKind::Link);
+    assert_eq!(node.references[1].label, "flow diagram");
+    assert_eq!(node.references[1].target, "assets/flow chart.png");
+    assert_eq!(node.references[1].kind, ExternalRefKind::Image);
+    assert_eq!(
+        node.display_line(),
+        "Research #tag [id:research] [brief note](docs/project brief.md) ![flow diagram](assets/flow chart.png)"
+    );
+
+    let rows = reference_entries(&parsed.document);
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].label, "brief note");
+    assert_eq!(rows[0].target, "docs/project brief.md");
+
+    let matches = find_matches(&parsed.document, "project brief");
+    assert_eq!(matches.len(), 1);
+}
+
+#[test]
 fn validate_reports_unresolved_relation_targets() {
     let parsed = parse_document("- Root [id:root] [[missing/target]]\n");
     let diagnostics = validate_document(&parsed.document);
@@ -181,6 +249,20 @@ fn validate_reports_unresolved_relation_targets() {
             .message
             .contains("Relation target 'missing/target'")),
         "expected unresolved relation diagnostic, got: {:?}",
+        diagnostics
+    );
+}
+
+#[test]
+fn validate_reports_missing_local_reference_targets_when_base_path_is_known() {
+    let parsed = parse_document("- Research [brief](missing.md)\n");
+    let diagnostics =
+        validate_document_with_base_path(&parsed.document, Some(std::path::Path::new(".")));
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("Reference target 'missing.md'")),
+        "expected missing reference diagnostic, got: {:?}",
         diagnostics
     );
 }

@@ -15,6 +15,7 @@
     - [id:path/to/node] only on durable branches
     - use | detail lines for real prose
     - use cross links only when lateral structure matters
+    - use normal Markdown link or image syntax for external files, URLs, and images
     - Example relation #reference [id:skill/mdmind/conventions/syntax/example-relation]
       - Relation example [[skill/mdmind/conventions/ids/examples]]
       - Typed relation example [[rel:related-to->skill/mdmind/conventions/good-output]]
@@ -50,6 +51,12 @@
       - one branch depends on another branch outside its local tree position
     - prefer plain cross links first
     - use typed relations when preserving the relation meaning is valuable
+  - When to use external refs #guide [id:skill/mdmind/conventions/external-refs]
+    - use a Markdown link when a node should keep a supporting file, source URL, or web page reachable
+    - use a Markdown image ref for image artifacts attached to a node
+    - prefer map-relative paths for files in the same project tree
+    - labels and paths may contain spaces when written as normal Markdown links
+    - use ids and relations for map structure; use external refs for artifacts outside the map
   - What good map output looks like #guide [id:skill/mdmind/conventions/good-output]
     - root and major branches are obvious
     - labels scan cleanly in plain text
@@ -63,4 +70,5 @@
     - no duplicate ids
     - metadata keys are consistent
     - relation targets exist
-    - labels are readable without the TUI
+    - local Markdown refs resolve relative to the map file when possible
+    - labels are readable as plain Markdown without relying on interactive rendering

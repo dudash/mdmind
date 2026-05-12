@@ -7,6 +7,7 @@ The shared query language works on:
 - plain text
 - `#tags`
 - `@key:value` metadata
+- external ref labels and targets
 - combinations of the above
 
 Examples:
@@ -30,6 +31,7 @@ Use `--json` when:
 
 - another tool needs structured output
 - the user wants machine-readable results
+- downstream code needs node refs from `mdm refs` or JSON export output
 
 Do not combine `--plain` and `--json` on commands that support both.
 

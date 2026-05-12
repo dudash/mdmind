@@ -1,6 +1,6 @@
 ---
 name: mdm-cli-inspection
-description: Inspect, validate, query, audit, deep-link, or export mdmind Markdown outline and mind map files with the mdm CLI. Use for existing maps, structured notes, knowledge maps, tags, metadata, ids, relations, subtree inspection, filtered search, plain/json output, or exports to JSON, Mermaid, and OPML. Do not use for drafting new map content from source material when the main task is authoring structure.
+description: Inspect, validate, query, audit, deep-link, list external refs, or export mdmind Markdown outline and mind map files with the mdm CLI. Use for existing maps, structured notes, knowledge maps, tags, metadata, ids, relations, external Markdown refs, subtree inspection, filtered search, plain/json output, or exports to JSON, Mermaid, and OPML. Do not use for drafting new map content from source material when the main task is authoring structure.
 license: Apache-2.0
 metadata:
   author: mdmind
@@ -14,11 +14,12 @@ Use `mdm` as the read, query, validate, and export surface for existing map file
 ## Use For
 
 - Validate a map file before handoff.
-- Inspect a map without opening the full TUI.
+- Inspect a map from the CLI without launching an interactive UI.
 - Answer questions about tags, metadata, ids, relations, or branches in a map.
 - Find items with text, `#tags`, or `@key:value` filters.
 - Audit structured fields like owner, status, region, priority, or source.
 - List deep-link ids.
+- List external Markdown refs to local files, URLs, and images.
 - Check incoming and outgoing relations.
 - Export a full tree, a subtree, or a filtered working set.
 - Inspect TODO maps for active, blocked, done, owner, priority, or area-based work.
@@ -37,6 +38,7 @@ If the task is mainly about creating or reshaping map content, use `mdmind-map-a
 - Prefer `--plain` for grep-friendly inspection and quick human scanning.
 - Prefer deep links like `map.md#product/tasks` when the user cares about one branch.
 - Prefer `--query` on export when the user wants a filtered machine-readable subset.
+- Use `mdm refs <file>` when the question is about attached external files, URLs, or image refs.
 - Check that `mdm` is available before relying on CLI output.
 
 Read only what you need:
@@ -64,6 +66,7 @@ If `mdm` is missing, do not invent command results. Tell the user to install `md
 - Use `mdm kv <file> --keys key1,key2` to audit metadata fields.
 - Use `mdm tags <file>` to summarize vocabulary.
 - Use `mdm links <file>` to list deep-linkable ids.
+- Use `mdm refs <file>` to list external Markdown refs attached to nodes.
 - Use `mdm relations <file>` or `mdm relations <file>#id` to inspect graph edges.
 - Use `mdm export <file> --format json|mermaid|opml` for downstream tools.
 
@@ -83,11 +86,11 @@ mdm validate TODO.md
 
 Use `find` for the working set, `kv` for ownership/status audits, and `view` with a deep link when the user needs one branch in context. After agent edits, run `validate` before summarizing the handoff.
 
-In the TUI, `Space` toggles a focused `[ ]` / `[x]` task item and `t` / `T` starts a new TODO child or sibling prompt. When inspecting files, expect explicit checkbox markers to round-trip in the raw map, task-aware filters like `task:open` to find checkbox/tag/status task conventions, and derived parent rollups to appear in rendered views.
+When inspecting task files, expect explicit checkbox markers to round-trip in the raw map, task-aware filters like `task:open` to find checkbox/tag/status task conventions, and derived parent rollups to appear in rendered views.
 
 ## Workflow
 
-1. Clarify whether the user wants validation, inspection, query results, deep links, relations, or export.
+1. Clarify whether the user wants validation, inspection, query results, deep links, external refs, relations, or export.
 2. Choose the narrowest `mdm` command that answers that need.
 3. If one branch matters, use a deep link target instead of the whole file.
 4. If the user is exploring, prefer plain output and small, focused queries.
@@ -109,18 +112,21 @@ Before handing back a result:
 1. Check that the command chosen matches the user’s actual question.
 2. Check that query syntax is valid and not empty.
 3. Check that deep links point to real ids or known label paths.
-4. Check that export format matches the downstream use case.
-5. If using `relations`, be explicit whether the result is whole-map outgoing relations or node-focused incoming plus outgoing relations.
+4. If using `refs`, distinguish external Markdown refs from internal ids or `[[...]]` relations.
+5. Check that export format matches the downstream use case.
+6. If using `relations`, be explicit whether the result is whole-map outgoing relations or node-focused incoming plus outgoing relations.
 
 ## Example User Prompts
 
 - “Validate this mdmind file and tell me if the ids and relations are clean.”
 - “Find all blocked launch items owned by jason in this map.”
+- “List the local files and web links attached to this map.”
 - “Export only the active todo branches from this map as JSON.”
 
 ## Gotchas
 
 - `find` is for matching content; `links` is for discovering stable ids.
+- `refs` is for Markdown links/images that point outside the map; `links` is for map node ids.
 - `relations file.md` and `relations file.md#id` answer different questions.
 - `export --query` can return an empty tree if the filter matches nothing.
 - `--plain` and `--json` are mutually exclusive on commands that support both.

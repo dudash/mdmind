@@ -1,8 +1,10 @@
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashSet};
+use std::ffi::OsString;
 use std::fs;
 use std::io::{self, IsTerminal, Stdout, Write};
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
+use std::process::Command;
 use std::time::Duration;
 
 use crossterm::cursor::{Hide, Show};
@@ -34,7 +36,9 @@ use crate::mindmap::{
     BoundaryEdge, Camera as MindmapCamera, MindmapWidget, Scene as MindmapScene,
     Theme as MindmapTheme, default_export_path, export_png,
 };
-use crate::model::{Document, LinkEntry, Node, TaskProgress, TaskState};
+use crate::model::{
+    Diagnostic, Document, ExternalRef, ExternalRefKind, LinkEntry, Node, TaskProgress, TaskState,
+};
 use crate::parser::parse_node_fragment;
 use crate::query::{
     FilterQuery, backlinks_to, find_matches, link_entries, metadata_key_counts_for_filter,
@@ -51,6 +55,9 @@ const CHECKPOINT_LIMIT: usize = 12;
 const RECENT_LOCATION_LIMIT: usize = 16;
 const FREQUENT_LOCATION_LIMIT: usize = 16;
 const FREQUENT_LOCATION_MIN_VISITS: usize = 3;
+const REFERENCE_PREVIEW_MAX_BYTES: u64 = 128 * 1024;
+const REFERENCE_PREVIEW_MAX_LINES: usize = 80;
+const WEB_REFERENCE_PREVIEW_MAX_BYTES: usize = 64 * 1024;
 
 type Palette = MindmapTheme;
 
@@ -226,6 +233,7 @@ enum PromptMode {
     AddRoot,
     Edit,
     EditDetail,
+    AttachFile,
     SaveView,
     SaveCheckpoint,
     OpenId,
@@ -239,6 +247,7 @@ impl PromptMode {
             Self::AddRoot => "Add Root",
             Self::Edit => "Edit Node",
             Self::EditDetail => "Edit Details",
+            Self::AttachFile => "Attach File",
             Self::SaveView => "Save Filter View",
             Self::SaveCheckpoint => "Save Checkpoint",
             Self::OpenId => "Jump To Id",
@@ -250,6 +259,7 @@ impl PromptMode {
             Self::SaveView => "Give the current active filter a short name.",
             Self::SaveCheckpoint => "Name a local snapshot of the current map state.",
             Self::OpenId => "Type a node id, then press Enter.",
+            Self::AttachFile => "Type a local path or URL. mdmind stores it as a Markdown link.",
             Self::EditDetail => {
                 "Write longer notes for the selected node. Enter adds lines. Ctrl+S saves."
             }
@@ -473,6 +483,7 @@ enum HelpTopic {
     Safety,
     Themes,
     Mindmap,
+    TableView,
     Syntax,
     Ids,
     Relations,
@@ -494,6 +505,7 @@ impl HelpTopic {
             Self::Safety => "Saving And Safety",
             Self::Themes => "Themes",
             Self::Mindmap => "Visual Mindmap",
+            Self::TableView => "Column Table View",
             Self::Syntax => "Tags And Metadata",
             Self::Ids => "Ids And Deep Links",
             Self::Relations => "Relations And Backlinks",
@@ -523,6 +535,7 @@ impl HelpTopic {
             Self::Safety => "Save modes, undo, redo, checkpoints, and recent restore history.",
             Self::Themes => "Change the visual surface without leaving the map.",
             Self::Mindmap => "Inspect the current working set visually and export it as a PNG.",
+            Self::TableView => "Scan repeated @key:value metadata as columns.",
             Self::Syntax => "Use lightweight inline structure for grouping and structured fields.",
             Self::Ids => {
                 "Give branches stable addresses for jumps, exports, and deep-linked opens."
@@ -558,6 +571,9 @@ impl HelpTopic {
             Self::Safety => "User guide plus save modes, undo, checkpoints, and restore habits.",
             Self::Themes => "User guide plus theme controls and calmer-surface tips.",
             Self::Mindmap => "User guide plus visual-map keys and export tips.",
+            Self::TableView => {
+                "Guide to using repeated @key:value metadata as a temporary column view."
+            }
             Self::Syntax => "User guide plus tags and metadata reference and authoring tips.",
             Self::Ids => "User guide plus id naming, deep-link jumps, and CLI usage.",
             Self::Relations => {
@@ -584,7 +600,7 @@ impl HelpTopic {
                 "navigate movement arrows focus jump root open id palette hotkeys relations backlinks related cross links"
             }
             Self::Editing => {
-                "edit add delete reshape move indent outdent sibling child root write undo redo checkpoint history"
+                "edit add delete reshape move indent outdent sibling child root write undo redo checkpoint history attach file reference preview external"
             }
             Self::Details => {
                 "details notes note detail prose quote rationale description long form longer text multiline d editor"
@@ -594,7 +610,7 @@ impl HelpTopic {
             }
             Self::Views => "views focus branch subtree filtered focus isolate branch presentation",
             Self::Palette => {
-                "palette command palette actions recent frequent saved views checkpoints help recipes jump launcher"
+                "palette command palette actions recent frequent saved views checkpoints help recipes jump launcher attach file show references preview external"
             }
             Self::Safety => {
                 "safety undo redo checkpoint checkpoints autosave save revert restore history recent actions recovery"
@@ -604,6 +620,9 @@ impl HelpTopic {
             }
             Self::Mindmap => {
                 "mindmap visual bubble canvas spatial canvas png export pan recenter map overlay"
+            }
+            Self::TableView => {
+                "table column columns metadata key value key/value kv fields field structured data compare comparison matrix source owner status priority due provider rank score missing values sidecar views"
             }
             Self::Syntax => {
                 "syntax tags metadata key keys value values fields structured attributes inline node format example"
@@ -658,6 +677,9 @@ impl HelpTopic {
             Self::Mindmap => {
                 "The visual mindmap works best as a second lens on the current working set, not as a separate mode with a different truth. It follows your active view and filter so the tree and the map stay aligned."
             }
+            Self::TableView => {
+                "Table View is a temporary column surface over the same outline. It helps when repeated @key:value fields matter more than hierarchy for a moment, while the plain-text map remains the source of truth."
+            }
             Self::Syntax => {
                 "Tags and metadata are the easiest structured layer to adopt. They give you fast grouping and reliable filtering without forcing you to decide every branch's long-term address or relationship model up front."
             }
@@ -707,6 +729,7 @@ impl HelpTopic {
             ],
             Self::Editing => &[
                 "Most edits should feel like shaping a branch rather than opening a separate editor. Add, rename, move, indent, and delete all happen from the current focus, so your attention stays on structure instead of mode switching.",
+                "Use Attach File to add local files, images, and URLs as normal Markdown references on the current node. After a reference is attached, use Show References from the palette to review it in a two-pane picker. Text and Markdown preview inline, web links show a best-effort title and description, PNGs show dimensions and size, and unsupported files say no preview available.",
                 "The safety layer matters here. Undo and checkpoints mean you can move quickly through structural edits without treating every change as dangerous, especially in larger maps where a reparent or delete can have bigger consequences.",
             ],
             Self::Details => &[
@@ -724,6 +747,7 @@ impl HelpTopic {
             ],
             Self::Palette => &[
                 "Use the palette when you already know what you want: a section, a branch, an id, an action, a saved view, a recent location, a checkpoint, a help topic, or a workflow recipe. It is less about browsing and more about intention.",
+                "Palette actions also cover external references. Attach File opens the local picker for the selected node. Show References opens attached refs with a preview pane and Enter opens the selected ref in the system app.",
                 "The palette also makes advanced features feel casual. You do not have to remember a special relation mode, history mode, or settings panel. Typing a few words is often enough to reach the right thing.",
             ],
             Self::Safety => &[
@@ -737,6 +761,13 @@ impl HelpTopic {
             Self::Mindmap => &[
                 "The mindmap is most useful for cluster recognition, branch shape, and presentation. It is less about direct editing and more about seeing the current scope when the outline stops being enough. The spatial canvas is the fuller navigation surface when you want to stay inside that visual layout for a while.",
                 "Because it follows filters and view modes, it works best after you isolate a branch or apply a focused query. Visible cross-links also draw relation edges there, so lateral structure stays visible without taking over the whole document.",
+            ],
+            Self::TableView => &[
+                "Columns come from metadata tokens on node lines. A node like `Vendor Review @owner:mira @status:active @source:notes` can show owner, status, and source as separate table columns.",
+                "Tags such as #todo or #research still work for grouping and filtering, but they are not table columns. Use @key:value when the value itself matters and you expect to compare it across rows.",
+                "Open Table View after choosing a useful scope. It respects the current visible rows, so focused views, filtered focus, and expanded branches shape what appears in the table.",
+                "Press c inside the table to choose columns. The Node column is always present because it is the bridge back to the outline; selected metadata columns persist per map in `.mdmind-views.json`.",
+                "Keep metadata values small and repeated. Table View is for scanning fields like owner, status, due, source, provider, rank, or score, not for turning every node into a spreadsheet row.",
             ],
             Self::Syntax => &[
                 "Use tags for quick grouping and metadata for fields you expect to query repeatedly. A few stable patterns like #todo, @status:active, and @owner:mira are usually more valuable than lots of one-off annotations.",
@@ -838,6 +869,11 @@ impl HelpTopic {
                 ("a / A / Shift+R", "Add a child, sibling, or root branch"),
                 ("t / T", "Add a TODO child or sibling starting with [ ]"),
                 ("e", "Edit the selected node inline"),
+                ("f", "Attach a local file or URL to the current node"),
+                (
+                    "p / Show References",
+                    "Preview attached references on the current node",
+                ),
                 ("x", "Delete after a second confirmation press"),
                 ("u / U", "Undo or redo the last structural change"),
                 ("Alt+↑ / Alt+↓", "Reorder the node among siblings"),
@@ -948,6 +984,16 @@ impl HelpTopic {
                 ("0", "Recenter the camera"),
                 ("p", "Export a PNG from the current visual map"),
                 ("Esc", "Return to the main tree surface"),
+            ],
+            Self::TableView => &[
+                ("C", "Open or close Table View"),
+                ("c", "Choose visible columns"),
+                ("Space", "Toggle a column while choosing columns"),
+                ("↑ / ↓ or j / k", "Move between table rows"),
+                ("← / →", "Collapse or expand the selected branch"),
+                ("v / V", "Cycle view modes without leaving the table"),
+                ("Enter", "Focus the selected row back in the outline"),
+                ("Esc", "Return to the outline"),
             ],
             Self::Syntax => &[
                 ("#tag", "Add a topic or workflow marker"),
@@ -1071,6 +1117,12 @@ impl HelpTopic {
                 "If the canvas feels busy, tighten the working set in the tree first and reopen the map.",
                 "Relation edges only appear when both linked nodes are visible in the current projection, so view mode still controls visual noise.",
             ],
+            Self::TableView => &[
+                "Good table maps usually have a shallow row-like branch with repeated metadata keys.",
+                "If a column looks mostly blank, that is usually a map-shape signal: either the key is not repeated enough, or the current scope is too broad.",
+                "Prefer `@source:interview` or `@provider:openai` for comparable fields. Prefer detail lines when the value is long prose.",
+                "If you want a recurring table lens, save the filter separately and let the per-map column choice remember the visible columns.",
+            ],
             Self::Syntax => &[
                 "Prefer consistent metadata keys like @status or @owner across the whole map instead of inventing near-duplicates.",
                 "A few shared tags and metadata fields are usually enough to unlock search, browse, and saved views.",
@@ -1100,6 +1152,7 @@ impl HelpTopic {
                 Some("Use mdmind-map-authoring. Create a TODO map and fill branch details.")
             }
             Self::Syntax => Some("API Design #backend @status:todo @owner:mira"),
+            Self::TableView => Some("Model Row @provider:openai @aa_rank:01 @source:aa-lmarena"),
             Self::Ids => Some("API Design #backend [id:product/api-design]"),
             Self::Relations => Some("Launch Readiness [[rel:blocked-by->product/api-design]]"),
             _ => None,
@@ -1124,6 +1177,7 @@ impl HelpTopic {
             Self::Relations => 13,
             Self::Themes => 14,
             Self::Mindmap => 15,
+            Self::TableView => 16,
         }
     }
 
@@ -1138,7 +1192,7 @@ impl HelpTopic {
             | Self::Palette => "Workflow",
             Self::Safety => "Safety",
             Self::Syntax | Self::Ids | Self::Relations => "Structure",
-            Self::Themes | Self::Mindmap => "Surfaces",
+            Self::Themes | Self::Mindmap | Self::TableView => "Surfaces",
         }
     }
 
@@ -1174,6 +1228,8 @@ enum PaletteAction {
     AddRoot,
     EditNode,
     EditDetails,
+    AttachFile,
+    ShowReferences,
     JumpToId,
     JumpToRoot,
     OpenSearch,
@@ -1624,6 +1680,44 @@ struct RelationPickerState {
 }
 
 #[derive(Debug, Clone)]
+struct ReferencePickerState {
+    selected: usize,
+    items: Vec<ExternalRef>,
+    previews: Vec<ReferencePreview>,
+}
+
+#[derive(Debug, Clone)]
+struct ReferencePreview {
+    title: String,
+    lines: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct LocalFilePickerItem {
+    label: String,
+    relative: String,
+    path: PathBuf,
+    kind: LocalFilePickerItemKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LocalFilePickerItemKind {
+    Parent,
+    Directory,
+    File(ExternalRefKind),
+}
+
+#[derive(Debug, Clone)]
+struct LocalFilePickerState {
+    selected: usize,
+    base: PathBuf,
+    reference_base: PathBuf,
+    directory: PathBuf,
+    canonical_map: Option<PathBuf>,
+    items: Vec<LocalFilePickerItem>,
+}
+
+#[derive(Debug, Clone)]
 struct TableOverlayState {
     selected: usize,
     columns: Vec<TableColumn>,
@@ -2059,6 +2153,7 @@ struct VisibleRow {
     task_progress: TaskProgress,
     tags: Vec<String>,
     metadata: Vec<String>,
+    references: Vec<String>,
     relations: Vec<String>,
     id: Option<String>,
     line: usize,
@@ -2115,6 +2210,8 @@ struct TuiApp {
     recent_locations: Vec<PathAnchor>,
     checkpoints: CheckpointsState,
     relation_picker: Option<RelationPickerState>,
+    reference_picker: Option<ReferencePickerState>,
+    local_file_picker: Option<LocalFilePickerState>,
     table: Option<TableOverlayState>,
     table_columns: Option<Vec<TableColumn>>,
     mindmap: Option<MindmapOverlayState>,
@@ -2194,6 +2291,8 @@ impl TuiApp {
             recent_locations: Vec::new(),
             checkpoints: CheckpointsState::default(),
             relation_picker: None,
+            reference_picker: None,
+            local_file_picker: None,
             table: None,
             table_columns,
             mindmap: None,
@@ -2239,6 +2338,18 @@ impl TuiApp {
             self.quit_armed = false;
             self.delete_armed = false;
             return self.handle_relation_picker_key(key);
+        }
+
+        if self.reference_picker.is_some() {
+            self.quit_armed = false;
+            self.delete_armed = false;
+            return self.handle_reference_picker_key(key);
+        }
+
+        if self.local_file_picker.is_some() {
+            self.quit_armed = false;
+            self.delete_armed = false;
+            return self.handle_local_file_picker_key(key);
         }
 
         if self.table.is_some() {
@@ -2417,6 +2528,14 @@ impl TuiApp {
                     .map(Node::detail_text)
                     .unwrap_or_default();
                 self.begin_prompt(PromptMode::EditDetail, initial);
+            }
+            KeyCode::Char('f') => {
+                self.delete_armed = false;
+                self.open_local_file_picker();
+            }
+            KeyCode::Char('p') => {
+                self.delete_armed = false;
+                self.open_reference_picker();
             }
             KeyCode::Char('/') => {
                 self.delete_armed = false;
@@ -3222,6 +3341,131 @@ impl TuiApp {
         Ok(true)
     }
 
+    fn handle_reference_picker_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
+        let Some(mut picker) = self.reference_picker.take() else {
+            return Ok(true);
+        };
+
+        match key.code {
+            KeyCode::Esc => {
+                self.set_status(StatusTone::Info, "Closed reference picker.");
+                return Ok(true);
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                picker.selected = picker.selected.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') if !picker.items.is_empty() => {
+                picker.selected = (picker.selected + 1).min(picker.items.len() - 1);
+            }
+            KeyCode::Enter => {
+                if let Some(reference) = picker.items.get(picker.selected).cloned() {
+                    self.open_external_reference(&reference)?;
+                    self.set_status(
+                        StatusTone::Success,
+                        format!("Opened '{}'.", reference.label),
+                    );
+                    return Ok(true);
+                }
+                self.set_status(StatusTone::Warning, "No reference is selected.");
+                return Ok(true);
+            }
+            _ => {}
+        }
+
+        self.reference_picker = Some(picker);
+        Ok(true)
+    }
+
+    fn handle_local_file_picker_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
+        let Some(mut picker) = self.local_file_picker.take() else {
+            return Ok(true);
+        };
+
+        match key.code {
+            KeyCode::Esc => {
+                self.set_status(StatusTone::Info, "Closed file picker.");
+                return Ok(true);
+            }
+            KeyCode::Char('p') => {
+                self.begin_prompt(PromptMode::AttachFile, String::new());
+                return Ok(true);
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                picker.selected = picker.selected.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') if !picker.items.is_empty() => {
+                picker.selected = (picker.selected + 1).min(picker.items.len() - 1);
+            }
+            KeyCode::Backspace | KeyCode::Left | KeyCode::Char('h') => {
+                if let Some(parent) = local_file_picker_parent(&picker) {
+                    match local_file_picker_change_directory(&mut picker, parent) {
+                        Ok(()) => {
+                            self.set_status(StatusTone::Info, "Moved up one folder.");
+                        }
+                        Err(error) => {
+                            self.set_status(StatusTone::Warning, error.message());
+                        }
+                    }
+                } else {
+                    self.set_status(StatusTone::Info, "Already at the filesystem root.");
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(item) = picker.items.get(picker.selected).cloned() {
+                    match item.kind {
+                        LocalFilePickerItemKind::Parent | LocalFilePickerItemKind::Directory => {
+                            match local_file_picker_change_directory(&mut picker, item.path) {
+                                Ok(()) => {
+                                    self.set_status(
+                                        StatusTone::Info,
+                                        format!("Browsing {}.", local_file_picker_title(&picker)),
+                                    );
+                                }
+                                Err(error) => {
+                                    self.set_status(StatusTone::Warning, error.message());
+                                }
+                            }
+                        }
+                        LocalFilePickerItemKind::File(kind) => {
+                            let reference = ExternalRef {
+                                label: item.label,
+                                target: item.relative,
+                                kind,
+                            };
+                            let message = format!("Attached reference '{}'.", reference.label);
+                            self.apply_edit(
+                                |editor| editor.add_reference_to_current(reference),
+                                message,
+                                None,
+                            )?;
+                            return Ok(true);
+                        }
+                    }
+                } else {
+                    self.set_status(StatusTone::Warning, "No file is selected.");
+                    return Ok(true);
+                }
+            }
+            _ => {}
+        }
+
+        self.local_file_picker = Some(picker);
+        Ok(true)
+    }
+
+    fn open_external_reference(&self, reference: &ExternalRef) -> Result<(), AppError> {
+        let target = if reference.is_url() {
+            reference.target.clone()
+        } else {
+            resolve_external_reference_path(&self.map_path, reference)
+                .unwrap_or_else(|| PathBuf::from(&reference.target))
+                .to_string_lossy()
+                .to_string()
+        };
+
+        open_external_target(&target)
+    }
+
     fn handle_help_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
         let Some(mut help) = self.help.take() else {
             return Ok(true);
@@ -3621,6 +3865,15 @@ impl TuiApp {
                 "Updated the selected node.",
                 None,
             ),
+            PromptMode::AttachFile => {
+                let reference = self.reference_from_attach_input(value)?;
+                let message = format!("Attached reference '{}'.", reference.label);
+                self.apply_edit(
+                    |editor| editor.add_reference_to_current(reference),
+                    message,
+                    None,
+                )
+            }
             PromptMode::EditDetail => unreachable!("handled above"),
             PromptMode::SaveView => {
                 self.save_current_search_as(value)?;
@@ -3638,6 +3891,43 @@ impl TuiApp {
                 Ok(())
             }
         }
+    }
+
+    fn reference_from_attach_input(&self, value: &str) -> Result<ExternalRef, AppError> {
+        let value = value.trim();
+        if value.is_empty() {
+            return Err(AppError::new("Reference path or URL must not be empty."));
+        }
+
+        if value.starts_with('[') || value.starts_with("![") {
+            let parsed = parse_node_fragment(&format!("Reference {value}"))
+                .map_err(|diagnostics| prompt_diagnostics_error("reference", diagnostics))?;
+            if let Some(reference) = parsed.references.into_iter().next() {
+                return Ok(reference);
+            }
+            return Err(AppError::new(
+                "Reference input must look like [label](path-or-url).",
+            ));
+        }
+
+        let target = self.normalize_reference_target(value);
+        Ok(ExternalRef {
+            label: reference_label_for_target(&target),
+            kind: reference_kind_for_target(&target),
+            target,
+        })
+    }
+
+    fn normalize_reference_target(&self, value: &str) -> String {
+        let target_path = Path::new(value);
+        if target_path.is_absolute() {
+            let base_dir = map_reference_base_dir(&self.map_path);
+            if let Ok(relative) = target_path.strip_prefix(base_dir) {
+                return path_to_reference_target(relative);
+            }
+        }
+
+        value.to_string()
     }
 
     fn visible_rows(&self) -> Vec<VisibleRow> {
@@ -4158,6 +4448,70 @@ impl TuiApp {
         self.set_status(StatusTone::Info, kind.open_message());
     }
 
+    fn open_reference_picker(&mut self) {
+        let Some(node) = self.editor.current() else {
+            self.set_status(StatusTone::Warning, "No focused node is available.");
+            return;
+        };
+
+        if node.references.is_empty() {
+            self.set_status(
+                StatusTone::Warning,
+                "This node has no references yet. Use Attach File from the palette to add one.",
+            );
+            return;
+        }
+
+        self.quit_armed = false;
+        self.delete_armed = false;
+        self.reference_picker = Some(ReferencePickerState {
+            selected: 0,
+            items: node.references.clone(),
+            previews: node
+                .references
+                .iter()
+                .map(|reference| reference_preview_for(&self.map_path, reference))
+                .collect(),
+        });
+        self.set_status(StatusTone::Info, "Reference picker open.");
+    }
+
+    fn open_local_file_picker(&mut self) {
+        let Some(_) = self.editor.current() else {
+            self.set_status(StatusTone::Warning, "No focused node is available.");
+            return;
+        };
+
+        match new_local_file_picker_state(&self.map_path) {
+            Ok(picker) if picker.items.is_empty() => {
+                self.begin_prompt(PromptMode::AttachFile, String::new());
+                self.set_status(
+                    StatusTone::Warning,
+                    "No local files found below this map. Paste a path or URL instead.",
+                );
+            }
+            Ok(picker) => {
+                self.quit_armed = false;
+                self.delete_armed = false;
+                self.set_status(
+                    StatusTone::Info,
+                    format!("Browsing {}.", local_file_picker_title(&picker)),
+                );
+                self.local_file_picker = Some(picker);
+            }
+            Err(error) => {
+                self.begin_prompt(PromptMode::AttachFile, String::new());
+                self.set_status(
+                    StatusTone::Warning,
+                    format!(
+                        "Could not scan local files: {} Paste a path instead.",
+                        error.message()
+                    ),
+                );
+            }
+        }
+    }
+
     fn follow_outgoing_relation(&mut self) -> Result<(), AppError> {
         let Some(_) = self.editor.current() else {
             self.set_status(StatusTone::Warning, "No focused node is available.");
@@ -4250,6 +4604,12 @@ impl TuiApp {
                         .map(Node::detail_text)
                         .unwrap_or_default();
                     self.begin_prompt(PromptMode::EditDetail, initial);
+                }
+                PaletteAction::AttachFile => {
+                    self.open_local_file_picker();
+                }
+                PaletteAction::ShowReferences => {
+                    self.open_reference_picker();
                 }
                 PaletteAction::JumpToId => self.begin_prompt(PromptMode::OpenId, String::new()),
                 PaletteAction::JumpToRoot => {
@@ -4770,6 +5130,18 @@ impl TuiApp {
                 "Write longer notes for the selected node",
                 "details notes prose description quote rationale edit",
                 PaletteAction::EditDetails,
+            ),
+            (
+                "Attach File",
+                "Add a local file, URL, or image reference to the selected node",
+                "attach file reference link url image markdown external context",
+                PaletteAction::AttachFile,
+            ),
+            (
+                "Show References",
+                "Review file, URL, and image references on the selected node",
+                "show references open reference attached files links urls images preview",
+                PaletteAction::ShowReferences,
             ),
             (
                 "Jump To Id",
@@ -5423,6 +5795,7 @@ impl TuiApp {
             HelpTopic::Safety,
             HelpTopic::Themes,
             HelpTopic::Mindmap,
+            HelpTopic::TableView,
             HelpTopic::Syntax,
             HelpTopic::Ids,
             HelpTopic::Relations,
@@ -6645,6 +7018,14 @@ fn render(frame: &mut Frame, app: &mut TuiApp) {
         render_relation_picker_overlay(frame, centered_rect(66, 52, area), app, picker);
     }
 
+    if let Some(picker) = &app.reference_picker {
+        render_reference_picker_overlay(frame, centered_rect(66, 48, area), app, picker);
+    }
+
+    if let Some(picker) = &app.local_file_picker {
+        render_local_file_picker_overlay(frame, centered_rect(72, 62, area), app, picker);
+    }
+
     if let Some(overlay) = &app.mindmap {
         render_mindmap_overlay(frame, centered_rect(92, 88, area), app, overlay);
     }
@@ -7223,6 +7604,17 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     }),
                 ));
             }
+            if show_detail && !row.references.is_empty() {
+                spans.push(Span::raw(" "));
+                spans.push(Span::styled(
+                    row.references.join(" "),
+                    Style::default().fg(if row.dimmed {
+                        PALETTE.border
+                    } else {
+                        PALETTE.tag
+                    }),
+                ));
+            }
             if show_detail && !row.relations.is_empty() {
                 spans.push(Span::raw(" "));
                 spans.push(Span::styled(
@@ -7366,6 +7758,9 @@ fn focus_card_height(app: &TuiApp) -> u16 {
     if !node.tags.is_empty() || !node.metadata.is_empty() {
         height += 1;
     }
+    if !node.references.is_empty() {
+        height += 1;
+    }
     if !node.relations.is_empty() {
         height += 1;
     }
@@ -7498,6 +7893,15 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                             .collect::<Vec<_>>()
                             .join(" "),
                         Style::default().fg(PALETTE.relation),
+                    ),
+                ]));
+            }
+            if !node.references.is_empty() {
+                lines.push(Line::from(vec![
+                    Span::styled("refs ", Style::default().fg(PALETTE.muted)),
+                    Span::styled(
+                        reference_tokens(&node.references).join(" "),
+                        Style::default().fg(PALETTE.tag),
                     ),
                 ]));
             }
@@ -7939,6 +8343,8 @@ fn keybar_spans(app: &TuiApp) -> Vec<Span<'static>> {
         separator_span(),
         key_hint("d", "details"),
         separator_span(),
+        key_hint("f", "attach"),
+        separator_span(),
         key_hint("x", "delete"),
         separator_span(),
         key_hint("u/U", "undo"),
@@ -7964,6 +8370,15 @@ fn keybar_spans(app: &TuiApp) -> Vec<Span<'static>> {
     if app.editor.current().is_some_and(|node| node.task.is_some()) {
         spans.push(separator_span());
         spans.push(key_hint("Space", "task"));
+    }
+
+    if app
+        .editor
+        .current()
+        .is_some_and(|node| !node.references.is_empty())
+    {
+        spans.push(separator_span());
+        spans.push(key_hint("p", "refs"));
     }
 
     let has_outgoing_relations = app
@@ -8001,6 +8416,621 @@ fn render_keybar(frame: &mut Frame, area: Rect, app: &TuiApp) {
             .alignment(Alignment::Center),
         area,
     );
+}
+
+fn prompt_diagnostics_error(context: &str, diagnostics: Vec<Diagnostic>) -> AppError {
+    let message = diagnostics
+        .first()
+        .map(|diagnostic| diagnostic.message.clone())
+        .unwrap_or_else(|| format!("Could not parse {context}."));
+    AppError::new(message)
+}
+
+fn path_to_reference_target(path: &Path) -> String {
+    path.components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn reference_label_for_target(target: &str) -> String {
+    let trimmed = target.trim_end_matches('/');
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return trimmed
+            .rsplit('/')
+            .find(|segment| !segment.is_empty())
+            .unwrap_or(trimmed)
+            .trim_end_matches(|character| character == '?' || character == '#')
+            .to_string();
+    }
+
+    let without_fragment = trimmed
+        .split_once('#')
+        .map(|(path, _)| path)
+        .unwrap_or(trimmed);
+    Path::new(without_fragment)
+        .file_stem()
+        .or_else(|| Path::new(without_fragment).file_name())
+        .map(|label| label.to_string_lossy().to_string())
+        .filter(|label| !label.is_empty())
+        .unwrap_or_else(|| "reference".to_string())
+}
+
+fn reference_kind_for_target(target: &str) -> ExternalRefKind {
+    let path = target
+        .split_once('#')
+        .map(|(path, _)| path)
+        .unwrap_or(target)
+        .split_once('?')
+        .map(|(path, _)| path)
+        .unwrap_or(target)
+        .to_lowercase();
+    if matches!(
+        Path::new(&path)
+            .extension()
+            .and_then(|extension| extension.to_str()),
+        Some("apng" | "avif" | "gif" | "jpeg" | "jpg" | "png" | "svg" | "webp")
+    ) {
+        ExternalRefKind::Image
+    } else {
+        ExternalRefKind::Link
+    }
+}
+
+fn reference_tokens(references: &[ExternalRef]) -> Vec<String> {
+    references.iter().map(ExternalRef::display_token).collect()
+}
+
+fn resolve_external_reference_path(map_path: &Path, reference: &ExternalRef) -> Option<PathBuf> {
+    if reference.is_url() {
+        return None;
+    }
+
+    let path = Path::new(&reference.target);
+    Some(if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        map_reference_base_dir(map_path).join(path)
+    })
+}
+
+fn reference_preview_for(map_path: &Path, reference: &ExternalRef) -> ReferencePreview {
+    if reference.is_url() {
+        return web_reference_preview(reference);
+    }
+
+    let Some(path) = resolve_external_reference_path(map_path, reference) else {
+        return ReferencePreview {
+            title: "Preview".to_string(),
+            lines: vec!["No preview available.".to_string()],
+        };
+    };
+    let display_path = path.display().to_string();
+
+    if !path.exists() {
+        return ReferencePreview {
+            title: "Missing File".to_string(),
+            lines: vec![
+                display_path,
+                String::new(),
+                "This local reference does not exist on disk.".to_string(),
+            ],
+        };
+    }
+
+    if path.is_dir() {
+        return directory_reference_preview(&path, display_path);
+    }
+
+    let Ok(metadata) = fs::metadata(&path) else {
+        return ReferencePreview {
+            title: "Unreadable File".to_string(),
+            lines: vec![
+                display_path,
+                String::new(),
+                "Could not read file metadata.".to_string(),
+            ],
+        };
+    };
+
+    if is_png_path(&path) {
+        return png_reference_preview(&path, display_path, metadata.len());
+    }
+
+    if !is_text_preview_path(&path) {
+        return no_reference_preview(display_path);
+    }
+
+    if metadata.len() > REFERENCE_PREVIEW_MAX_BYTES {
+        return ReferencePreview {
+            title: "Large File".to_string(),
+            lines: vec![
+                display_path,
+                String::new(),
+                format!("{} bytes", metadata.len()),
+                "Large files are not previewed inline. Press Enter to open externally.".to_string(),
+            ],
+        };
+    }
+
+    match fs::read_to_string(&path) {
+        Ok(contents) => text_reference_preview(display_path, &contents),
+        Err(error) => ReferencePreview {
+            title: "Binary File".to_string(),
+            lines: vec![
+                display_path,
+                String::new(),
+                format!("Could not render as text: {error}"),
+                "Press Enter to open externally.".to_string(),
+            ],
+        },
+    }
+}
+
+fn no_reference_preview(display_path: String) -> ReferencePreview {
+    ReferencePreview {
+        title: "No Preview".to_string(),
+        lines: vec![
+            display_path,
+            String::new(),
+            "No preview available.".to_string(),
+            "Press Enter to open externally.".to_string(),
+        ],
+    }
+}
+
+fn is_text_preview_path(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::to_lowercase)
+            .as_deref(),
+        Some("md" | "markdown" | "mdown" | "mkd" | "txt" | "text")
+    )
+}
+
+fn is_png_path(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::to_lowercase)
+            .as_deref(),
+        Some("png")
+    )
+}
+
+fn text_reference_preview(display_path: String, contents: &str) -> ReferencePreview {
+    let mut lines = vec![display_path, String::new()];
+    lines.extend(
+        contents
+            .lines()
+            .take(REFERENCE_PREVIEW_MAX_LINES)
+            .map(str::to_string),
+    );
+    if contents.lines().count() > REFERENCE_PREVIEW_MAX_LINES {
+        lines.push(String::new());
+        lines.push(format!(
+            "Preview truncated to {REFERENCE_PREVIEW_MAX_LINES} lines."
+        ));
+    }
+    ReferencePreview {
+        title: "Text Preview".to_string(),
+        lines,
+    }
+}
+
+fn directory_reference_preview(path: &Path, display_path: String) -> ReferencePreview {
+    let mut lines = vec![display_path, String::new()];
+    match fs::read_dir(path) {
+        Ok(entries) => {
+            for entry in entries
+                .filter_map(|entry| entry.ok())
+                .take(REFERENCE_PREVIEW_MAX_LINES)
+            {
+                let name = entry.file_name().to_string_lossy().to_string();
+                let suffix = entry
+                    .file_type()
+                    .ok()
+                    .filter(|file_type| file_type.is_dir())
+                    .map(|_| "/")
+                    .unwrap_or("");
+                lines.push(format!("{name}{suffix}"));
+            }
+        }
+        Err(error) => lines.push(format!("Could not list directory: {error}")),
+    }
+
+    ReferencePreview {
+        title: "Directory Preview".to_string(),
+        lines,
+    }
+}
+
+fn png_reference_preview(path: &Path, display_path: String, bytes: u64) -> ReferencePreview {
+    let mut lines = vec![display_path, String::new()];
+    match png_dimensions(path) {
+        Some((width, height)) => lines.push(format!("{width} x {height} PNG")),
+        None => lines.push("PNG image".to_string()),
+    }
+    lines.push(format!("{bytes} bytes"));
+    lines.push("Press Enter to open with the system default app.".to_string());
+
+    ReferencePreview {
+        title: "PNG Preview".to_string(),
+        lines,
+    }
+}
+
+fn png_dimensions(path: &Path) -> Option<(u32, u32)> {
+    let bytes = fs::read(path).ok()?;
+    if bytes.len() < 24 || &bytes[0..8] != b"\x89PNG\r\n\x1a\n" || &bytes[12..16] != b"IHDR" {
+        return None;
+    }
+    let width = u32::from_be_bytes(bytes[16..20].try_into().ok()?);
+    let height = u32::from_be_bytes(bytes[20..24].try_into().ok()?);
+    Some((width, height))
+}
+
+fn web_reference_preview(reference: &ExternalRef) -> ReferencePreview {
+    let lower = reference.target.to_lowercase();
+    if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+        return no_reference_preview(reference.target.clone());
+    }
+
+    let Ok(output) = Command::new("curl")
+        .args([
+            "--location",
+            "--silent",
+            "--show-error",
+            "--max-time",
+            "3",
+            "--range",
+            "0-65535",
+            "--user-agent",
+            "mdmind-preview/0.6",
+            &reference.target,
+        ])
+        .output()
+    else {
+        return no_reference_preview(reference.target.clone());
+    };
+
+    if !output.status.success() || output.stdout.is_empty() {
+        return no_reference_preview(reference.target.clone());
+    }
+
+    let html = String::from_utf8_lossy(
+        &output.stdout[..output.stdout.len().min(WEB_REFERENCE_PREVIEW_MAX_BYTES)],
+    );
+    web_reference_preview_from_html(&reference.target, &html)
+        .unwrap_or_else(|| no_reference_preview(reference.target.clone()))
+}
+
+fn web_reference_preview_from_html(target: &str, html: &str) -> Option<ReferencePreview> {
+    let title = extract_html_title(html)?;
+    let description = extract_meta_description(html);
+    let mut lines = vec![target.to_string(), String::new(), title];
+    if let Some(description) = description {
+        lines.push(String::new());
+        lines.push(description);
+    }
+    lines.push(String::new());
+    lines.push("Press Enter to open with the system default app.".to_string());
+
+    Some(ReferencePreview {
+        title: "Web Preview".to_string(),
+        lines,
+    })
+}
+
+fn extract_html_title(html: &str) -> Option<String> {
+    let lower = html.to_lowercase();
+    let start = lower.find("<title")?;
+    let after_open = lower[start..].find('>')? + start + 1;
+    let end = lower[after_open..].find("</title>")? + after_open;
+    clean_html_text(&html[after_open..end])
+}
+
+fn extract_meta_description(html: &str) -> Option<String> {
+    let lower = html.to_lowercase();
+    for needle in [
+        "name=\"description\"",
+        "name='description'",
+        "property=\"og:description\"",
+        "property='og:description'",
+    ] {
+        let Some(index) = lower.find(needle) else {
+            continue;
+        };
+        let tag_start = lower[..index].rfind('<').unwrap_or(index);
+        let tag_end = lower[index..].find('>').map(|offset| index + offset)?;
+        let tag = &html[tag_start..tag_end];
+        if let Some(content) = extract_html_attribute(tag, "content") {
+            return clean_html_text(&content);
+        }
+    }
+    None
+}
+
+fn extract_html_attribute(tag: &str, name: &str) -> Option<String> {
+    let lower = tag.to_lowercase();
+    let index = lower.find(name)?;
+    let after_name = &tag[index + name.len()..];
+    let equals = after_name.find('=')?;
+    let mut value = after_name[equals + 1..].trim_start().chars();
+    let quote = value.next()?;
+    if quote != '"' && quote != '\'' {
+        return None;
+    }
+    let rest = value.as_str();
+    let end = rest.find(quote)?;
+    Some(rest[..end].to_string())
+}
+
+fn clean_html_text(value: &str) -> Option<String> {
+    let cleaned = value
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    (!cleaned.is_empty()).then_some(cleaned)
+}
+
+fn open_external_target(target: &str) -> Result<(), AppError> {
+    let result = if cfg!(target_os = "macos") {
+        Command::new("open").arg(target).spawn()
+    } else if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .args(["/C", "start", "", target])
+            .spawn()
+    } else {
+        Command::new("xdg-open").arg(target).spawn()
+    };
+
+    result
+        .map(|_| ())
+        .map_err(|error| AppError::new(format!("Could not open reference '{target}': {error}")))
+}
+
+fn new_local_file_picker_state(map_path: &Path) -> Result<LocalFilePickerState, AppError> {
+    let reference_base = canonicalize_or_original(map_reference_base_dir(map_path));
+    let base = local_file_picker_root(&reference_base);
+    let directory = reference_base.clone();
+    let canonical_map = map_path.canonicalize().ok();
+    let items = collect_local_reference_entries(
+        &base,
+        &reference_base,
+        &directory,
+        canonical_map.as_deref(),
+    )?;
+    Ok(LocalFilePickerState {
+        selected: 0,
+        base,
+        reference_base,
+        directory,
+        canonical_map,
+        items,
+    })
+}
+
+fn map_reference_base_dir(map_path: &Path) -> &Path {
+    map_path
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+}
+
+fn local_file_picker_change_directory(
+    picker: &mut LocalFilePickerState,
+    directory: PathBuf,
+) -> Result<(), AppError> {
+    if !local_file_picker_is_inside_base(&picker.base, &directory) {
+        return Err(AppError::new(
+            "File picker stays inside the filesystem root.",
+        ));
+    }
+
+    let items = collect_local_reference_entries(
+        &picker.base,
+        &picker.reference_base,
+        &directory,
+        picker.canonical_map.as_deref(),
+    )?;
+    picker.directory = directory;
+    picker.items = items;
+    picker.selected = 0;
+    Ok(())
+}
+
+fn local_file_picker_parent(picker: &LocalFilePickerState) -> Option<PathBuf> {
+    if picker.directory == picker.base {
+        None
+    } else {
+        picker.directory.parent().map(Path::to_path_buf)
+    }
+}
+
+fn local_file_picker_is_inside_base(base: &Path, directory: &Path) -> bool {
+    directory == base || directory.starts_with(base)
+}
+
+fn local_file_picker_title(picker: &LocalFilePickerState) -> String {
+    picker
+        .directory
+        .strip_prefix(&picker.base)
+        .ok()
+        .filter(|path| !path.as_os_str().is_empty())
+        .map(path_to_reference_target)
+        .unwrap_or_else(|| ".".to_string())
+}
+
+fn is_git_root(path: &Path) -> bool {
+    path.join(".git").exists()
+}
+
+fn canonicalize_or_original(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn local_file_picker_root(reference_base: &Path) -> PathBuf {
+    reference_base
+        .ancestors()
+        .last()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| reference_base.to_path_buf())
+}
+
+fn collect_local_reference_entries(
+    base: &Path,
+    reference_base: &Path,
+    directory: &Path,
+    canonical_map: Option<&Path>,
+) -> Result<Vec<LocalFilePickerItem>, AppError> {
+    let entries = fs::read_dir(directory).map_err(|error| {
+        AppError::new(format!("Could not read '{}': {error}", directory.display()))
+    })?;
+
+    let mut items = Vec::new();
+    if directory != base
+        && let Some(parent) = directory.parent()
+    {
+        items.push(LocalFilePickerItem {
+            label: "..".to_string(),
+            relative: "..".to_string(),
+            path: parent.to_path_buf(),
+            kind: LocalFilePickerItemKind::Parent,
+        });
+    }
+
+    for entry in entries.filter_map(|entry| entry.ok()) {
+        let path = entry.path();
+        let file_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default();
+        if should_skip_reference_path(file_name) {
+            continue;
+        }
+
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_dir() {
+            let Ok(relative_path) = path.strip_prefix(base) else {
+                continue;
+            };
+            let relative = path_to_reference_target(relative_path);
+            items.push(LocalFilePickerItem {
+                label: file_name.to_string(),
+                relative,
+                path,
+                kind: LocalFilePickerItemKind::Directory,
+            });
+        } else if file_type.is_file() {
+            if canonical_map
+                .and_then(|current| {
+                    path.canonicalize()
+                        .ok()
+                        .map(|candidate| candidate == current)
+                })
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            let Some(relative_path) = local_reference_path(reference_base, &path) else {
+                continue;
+            };
+            let relative = path_to_reference_target(&relative_path);
+            if relative.is_empty() {
+                continue;
+            }
+            let kind = reference_kind_for_target(&relative);
+            items.push(LocalFilePickerItem {
+                label: reference_label_for_target(&relative),
+                relative,
+                path,
+                kind: LocalFilePickerItemKind::File(kind),
+            });
+        }
+
+        if items.len() >= 1000 {
+            break;
+        }
+    }
+
+    items.sort_by(|left, right| {
+        let left_rank = local_file_picker_sort_rank(left.kind);
+        let right_rank = local_file_picker_sort_rank(right.kind);
+        left_rank
+            .cmp(&right_rank)
+            .then_with(|| left.relative.cmp(&right.relative))
+    });
+    Ok(items)
+}
+
+fn local_reference_path(reference_base: &Path, path: &Path) -> Option<PathBuf> {
+    path.strip_prefix(reference_base)
+        .map(Path::to_path_buf)
+        .ok()
+        .or_else(|| relative_path_between(reference_base, path))
+}
+
+fn relative_path_between(base: &Path, target: &Path) -> Option<PathBuf> {
+    let base_components = relative_components(base);
+    let target_components = relative_components(target);
+    let mut shared = 0;
+    while shared < base_components.len()
+        && shared < target_components.len()
+        && base_components[shared] == target_components[shared]
+    {
+        shared += 1;
+    }
+
+    if shared == 0 {
+        return None;
+    }
+
+    let mut relative = PathBuf::new();
+    for _ in shared..base_components.len() {
+        relative.push("..");
+    }
+    for component in &target_components[shared..] {
+        relative.push(Path::new(component));
+    }
+    Some(relative)
+}
+
+fn relative_components(path: &Path) -> Vec<OsString> {
+    path.components()
+        .filter_map(|component| match component {
+            Component::Prefix(prefix) => Some(prefix.as_os_str().to_os_string()),
+            Component::RootDir => Some(OsString::from(std::path::MAIN_SEPARATOR.to_string())),
+            Component::CurDir => None,
+            Component::ParentDir => Some(OsString::from("..")),
+            Component::Normal(value) => Some(value.to_os_string()),
+        })
+        .collect()
+}
+
+fn local_file_picker_sort_rank(kind: LocalFilePickerItemKind) -> u8 {
+    match kind {
+        LocalFilePickerItemKind::Parent => 0,
+        LocalFilePickerItemKind::Directory => 1,
+        LocalFilePickerItemKind::File(_) => 2,
+    }
+}
+
+fn should_skip_reference_path(file_name: &str) -> bool {
+    file_name.is_empty()
+        || file_name.starts_with('.')
+        || matches!(
+            file_name,
+            "target" | "node_modules" | "dist" | "build" | ".git" | ".venv" | "__pycache__"
+        )
 }
 
 #[allow(non_snake_case)]
@@ -8851,6 +9881,266 @@ fn render_relation_picker_overlay(
             key_hint("↑↓", "choose"),
             separator_span(),
             key_hint("Enter", "follow"),
+            separator_span(),
+            key_hint("Esc", "close"),
+        ]))
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(PALETTE.muted)),
+        sections[2],
+    );
+}
+
+#[allow(non_snake_case)]
+fn render_reference_picker_overlay(
+    frame: &mut Frame,
+    area: Rect,
+    app: &TuiApp,
+    picker: &ReferencePickerState,
+) {
+    let PALETTE = app.theme_colors();
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .title(styled_title("References", PALETTE.accent))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.accent))
+        .style(Style::default().bg(PALETTE.surface_alt))
+        .padding(Padding::uniform(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Min(6),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
+    frame.render_widget(
+        Paragraph::new("References attached to the current node. Enter opens the selected file or URL with the system default app.")
+            .style(Style::default().fg(PALETTE.muted))
+            .wrap(Wrap { trim: false }),
+        sections[0],
+    );
+
+    let body = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
+        .split(sections[1]);
+
+    let items = picker
+        .items
+        .iter()
+        .map(|reference| {
+            let kind = match reference.kind {
+                ExternalRefKind::Link => "link",
+                ExternalRefKind::Image => "image",
+            };
+            ListItem::new(vec![
+                Line::from(vec![
+                    Span::styled(
+                        reference.label.clone(),
+                        Style::default()
+                            .fg(PALETTE.text)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw("  "),
+                    Span::styled(kind, Style::default().fg(PALETTE.tag)),
+                ]),
+                Line::from(Span::styled(
+                    reference.target.clone(),
+                    Style::default().fg(PALETTE.muted),
+                )),
+            ])
+        })
+        .collect::<Vec<_>>();
+    let mut state = ListState::default();
+    if !picker.items.is_empty() {
+        state.select(Some(picker.selected.min(picker.items.len() - 1)));
+    }
+    frame.render_stateful_widget(
+        List::new(items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(PALETTE.tag))
+                    .style(Style::default().bg(PALETTE.surface)),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(PALETTE.selection)
+                    .fg(PALETTE.selection_text)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        body[0],
+        &mut state,
+    );
+
+    let selected = picker.selected.min(picker.previews.len().saturating_sub(1));
+    let preview = picker.previews.get(selected);
+    let preview_lines = preview
+        .map(|preview| {
+            preview
+                .lines
+                .iter()
+                .map(|line| {
+                    Line::from(Span::styled(
+                        line.clone(),
+                        Style::default().fg(PALETTE.text),
+                    ))
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| {
+            vec![Line::from(Span::styled(
+                "No preview available.",
+                Style::default().fg(PALETTE.muted),
+            ))]
+        });
+    let preview_title = preview
+        .map(|preview| preview.title.as_str())
+        .unwrap_or("Preview");
+    frame.render_widget(
+        Paragraph::new(preview_lines)
+            .block(
+                Block::default()
+                    .title(Line::from(Span::styled(
+                        preview_title.to_string(),
+                        Style::default()
+                            .fg(PALETTE.accent)
+                            .add_modifier(Modifier::BOLD),
+                    )))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(PALETTE.tag))
+                    .style(Style::default().bg(PALETTE.surface)),
+            )
+            .style(Style::default().fg(PALETTE.text))
+            .wrap(Wrap { trim: false }),
+        body[1],
+    );
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            key_hint("↑↓", "choose"),
+            separator_span(),
+            key_hint("Enter", "open"),
+            separator_span(),
+            key_hint("Esc", "close"),
+        ]))
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(PALETTE.muted)),
+        sections[2],
+    );
+}
+
+#[allow(non_snake_case)]
+fn render_local_file_picker_overlay(
+    frame: &mut Frame,
+    area: Rect,
+    app: &TuiApp,
+    picker: &LocalFilePickerState,
+) {
+    let PALETTE = app.theme_colors();
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .title(styled_title("Attach Local File", PALETTE.accent))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.accent))
+        .style(Style::default().bg(PALETTE.surface_alt))
+        .padding(Padding::uniform(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Min(8),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
+    let base = picker.base.display().to_string();
+    let current = local_file_picker_title(picker);
+    let git_marker = if is_git_root(&picker.directory) {
+        " git root"
+    } else {
+        ""
+    };
+    frame.render_widget(
+        Paragraph::new(format!(
+            "Browsing {current}{git_marker} within {base}. Enter opens folders or attaches files as relative Markdown references."
+        ))
+        .style(Style::default().fg(PALETTE.muted))
+        .wrap(Wrap { trim: false }),
+        sections[0],
+    );
+
+    let items = picker
+        .items
+        .iter()
+        .map(|item| {
+            let (label, kind) = match item.kind {
+                LocalFilePickerItemKind::Parent => ("../".to_string(), "up"),
+                LocalFilePickerItemKind::Directory => {
+                    let kind = if is_git_root(&item.path) {
+                        "git root"
+                    } else {
+                        "folder"
+                    };
+                    (format!("{}/", item.label), kind)
+                }
+                LocalFilePickerItemKind::File(ExternalRefKind::Link) => {
+                    (item.relative.clone(), "file")
+                }
+                LocalFilePickerItemKind::File(ExternalRefKind::Image) => {
+                    (item.relative.clone(), "image")
+                }
+            };
+            ListItem::new(vec![Line::from(vec![
+                Span::styled(
+                    label,
+                    Style::default()
+                        .fg(PALETTE.text)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw("  "),
+                Span::styled(kind, Style::default().fg(PALETTE.tag)),
+            ])])
+        })
+        .collect::<Vec<_>>();
+    let mut state = ListState::default();
+    if !picker.items.is_empty() {
+        state.select(Some(picker.selected.min(picker.items.len() - 1)));
+    }
+    frame.render_stateful_widget(
+        List::new(items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(PALETTE.tag))
+                    .style(Style::default().bg(PALETTE.surface)),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(PALETTE.selection)
+                    .fg(PALETTE.selection_text)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        sections[1],
+        &mut state,
+    );
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            key_hint("↑↓", "choose"),
+            separator_span(),
+            key_hint("Enter", "open/attach"),
+            separator_span(),
+            key_hint("←", "up"),
+            separator_span(),
+            key_hint("p", "paste"),
             separator_span(),
             key_hint("Esc", "close"),
         ]))
@@ -10283,6 +11573,20 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
                 )
             }
         }
+        HelpTopic::TableView => {
+            let rows = app.table_rows();
+            let metadata_counts = table_metadata_counts(&rows);
+            match metadata_counts.len() {
+                0 => "the current visible scope has no @key:value metadata columns yet".to_string(),
+                1 => {
+                    let key = metadata_counts.keys().next().cloned().unwrap_or_default();
+                    format!("the current visible scope has one metadata column: @{key}")
+                }
+                count => format!(
+                    "the current visible scope has {count} metadata column candidates"
+                ),
+            }
+        }
         HelpTopic::Syntax => app
             .editor
             .current()
@@ -11521,6 +12825,7 @@ fn prompt_token_kind(token: &str, mode: PromptMode) -> PromptTokenKind {
             }
         }
         PromptMode::EditDetail => PromptTokenKind::Text,
+        PromptMode::AttachFile => PromptTokenKind::Text,
         PromptMode::OpenId => PromptTokenKind::Id,
         PromptMode::SaveView | PromptMode::SaveCheckpoint => PromptTokenKind::Text,
     }
@@ -11572,6 +12877,7 @@ fn prompt_input_title(mode: PromptMode) -> &'static str {
             " Node line "
         }
         PromptMode::EditDetail => " Details ",
+        PromptMode::AttachFile => " File or URL ",
         PromptMode::OpenId => " Node id ",
         PromptMode::SaveView => " View name ",
         PromptMode::SaveCheckpoint => " Checkpoint name ",
@@ -11597,6 +12903,9 @@ fn prompt_footer_text(mode: PromptMode) -> Option<&'static str> {
         PromptMode::EditDetail => Some(
             "Details are stored below the node as | ... lines. ↑/↓ moves lines; Alt+←/→ jumps words; Ctrl+K deletes the current line.",
         ),
+        PromptMode::AttachFile => {
+            Some("Enter a local path, URL, or full Markdown link like [brief](docs/brief.md).")
+        }
         PromptMode::OpenId => Some("Ids come from [id:...] tokens on node lines."),
         PromptMode::SaveView => Some("Saves the current active filter under a reusable name."),
         PromptMode::SaveCheckpoint => {
@@ -11625,6 +12934,7 @@ fn prompt_assist(app: &TuiApp, prompt: &PromptState) -> PromptAssist {
             prompt_fragment_assist(app, prompt)
         }
         PromptMode::EditDetail => prompt_detail_assist(app, prompt.value.as_str()),
+        PromptMode::AttachFile => prompt_attach_file_assist(app, prompt.value.as_str()),
         PromptMode::OpenId => prompt_open_id_assist(app, prompt.value.trim()),
         PromptMode::SaveView => {
             if let Some(query) = app.current_search_query_for_save() {
@@ -11687,6 +12997,41 @@ fn prompt_detail_assist(app: &TuiApp, value: &str) -> PromptAssist {
             format!("Editing details for '{node_label}'."),
             format!("{line_count} line(s) will be stored under this node."),
         ],
+    }
+}
+
+fn prompt_attach_file_assist(app: &TuiApp, value: &str) -> PromptAssist {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        let base = app
+            .map_path
+            .parent()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| ".".to_string());
+        return PromptAssist {
+            tone: PromptAssistTone::Info,
+            lines: vec![
+                "Attach a file, image, or URL to the current node.".to_string(),
+                format!("Relative paths resolve from {base}."),
+            ],
+        };
+    }
+
+    match app.reference_from_attach_input(trimmed) {
+        Ok(reference) => PromptAssist {
+            tone: PromptAssistTone::Success,
+            lines: vec![
+                format!("Will add {}", reference.display_token()),
+                "The map stores only the reference, not the file contents.".to_string(),
+            ],
+        },
+        Err(error) => PromptAssist {
+            tone: PromptAssistTone::Warning,
+            lines: vec![
+                error.message().to_string(),
+                "Use a path, URL, or [label](path-or-url).".to_string(),
+            ],
+        },
     }
 }
 
@@ -12004,6 +13349,7 @@ fn collect_visible_rows(
                     .iter()
                     .map(|entry| format!("@{}:{}", entry.key, entry.value))
                     .collect(),
+                references: reference_tokens(&node.references),
                 relations: node
                     .relations
                     .iter()
@@ -14415,6 +15761,16 @@ mod tests {
             value_topics.contains(&HelpTopic::Syntax),
             "searching for 'value' should find the syntax topic"
         );
+        assert!(
+            value_topics.contains(&HelpTopic::TableView),
+            "searching for 'value' should also find the table view topic"
+        );
+
+        let column_topics = app.help_topics("column metadata");
+        assert!(
+            column_topics.contains(&HelpTopic::TableView),
+            "searching for column metadata should find the table view topic"
+        );
 
         let deep_link_topics = app.help_topics("deep link");
         assert!(
@@ -15448,6 +16804,325 @@ mod tests {
     }
 
     #[test]
+    fn attach_file_prompt_adds_a_markdown_reference_to_current_node() {
+        let map_path = temp_map_path("attach-file.md");
+        let asset_path = map_path.with_extension("png");
+        std::fs::write(&asset_path, "fake image").expect("asset fixture should be writable");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.begin_prompt(
+            PromptMode::AttachFile,
+            asset_path.to_string_lossy().to_string(),
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should submit");
+
+        let current = app.editor.current().expect("current node should exist");
+        assert_eq!(current.references.len(), 1);
+        assert!(current.references[0].label.ends_with("attach-file"));
+        assert_eq!(current.references[0].kind, ExternalRefKind::Image);
+        assert!(current.references[0].target.ends_with("attach-file.png"));
+
+        cleanup_sidecars(&map_path);
+        std::fs::remove_file(asset_path).ok();
+    }
+
+    #[test]
+    fn attach_file_key_opens_local_file_picker_and_adds_relative_reference() {
+        let directory = temp_map_path("attach-picker-dir");
+        std::fs::create_dir_all(directory.join("notes")).expect("fixture dir should be writable");
+        let map_path = directory.join("map.md");
+        let note_path = directory.join("notes").join("brief.md");
+        std::fs::write(&map_path, "- Research\n").expect("map fixture should be writable");
+        std::fs::write(&note_path, "# Brief\n").expect("note fixture should be writable");
+
+        let document = parse_document("- Research\n").document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE))
+            .expect("f should open local file picker");
+        let picker = app
+            .local_file_picker
+            .as_ref()
+            .expect("local file picker should open");
+        assert_eq!(picker.items.len(), 2);
+        assert_eq!(picker.items[0].kind, LocalFilePickerItemKind::Parent);
+        assert_eq!(picker.items[1].label, "notes");
+        assert_eq!(picker.items[1].kind, LocalFilePickerItemKind::Directory);
+
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("down should select directory");
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should open selected directory");
+        let picker = app
+            .local_file_picker
+            .as_ref()
+            .expect("local file picker should stay open");
+        assert!(local_file_picker_title(picker).ends_with("notes"));
+        assert_eq!(picker.items.len(), 2);
+        assert_eq!(picker.items[0].kind, LocalFilePickerItemKind::Parent);
+        assert_eq!(picker.items[1].relative, "notes/brief.md");
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter on parent should move up");
+        let picker = app
+            .local_file_picker
+            .as_ref()
+            .expect("local file picker should stay open");
+        assert!(
+            local_file_picker_title(picker)
+                .ends_with(directory.file_name().unwrap().to_string_lossy().as_ref())
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("down should select directory");
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should open selected directory again");
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("down should select file");
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should attach selected file");
+        let current = app.editor.current().expect("current node should exist");
+        assert_eq!(current.references.len(), 1);
+        assert_eq!(current.references[0].label, "brief");
+        assert_eq!(current.references[0].target, "notes/brief.md");
+
+        cleanup_sidecars(&map_path);
+        std::fs::remove_dir_all(directory).ok();
+    }
+
+    #[test]
+    fn attach_file_picker_can_browse_to_filesystem_root_and_marks_git_roots() {
+        let repository = temp_map_path("attach-picker-repo");
+        let examples = repository.join("examples");
+        std::fs::create_dir_all(repository.join(".git")).expect("git dir should be writable");
+        std::fs::create_dir_all(&examples).expect("examples dir should be writable");
+        let map_path = examples.join("map.md");
+        let readme_path = repository.join("README.md");
+        std::fs::write(&map_path, "- Research\n").expect("map fixture should be writable");
+        std::fs::write(&readme_path, "# Readme\n").expect("readme fixture should be writable");
+
+        let document = parse_document("- Research\n").document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE))
+            .expect("f should open local file picker");
+        let picker = app
+            .local_file_picker
+            .as_ref()
+            .expect("local file picker should open");
+        assert!(local_file_picker_title(picker).ends_with("examples"));
+        assert_eq!(picker.items[0].kind, LocalFilePickerItemKind::Parent);
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter on parent should browse to repo root");
+        let picker = app
+            .local_file_picker
+            .as_ref()
+            .expect("local file picker should stay open");
+        assert!(is_git_root(&picker.directory));
+        let readme_index = picker
+            .items
+            .iter()
+            .position(|item| item.relative == "../README.md")
+            .expect("repo-root file should be listed with map-relative target");
+        for _ in 0..readme_index {
+            app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+                .expect("down should move through picker");
+        }
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should attach repo-root file");
+
+        let current = app.editor.current().expect("current node should exist");
+        assert_eq!(current.references.len(), 1);
+        assert_eq!(current.references[0].label, "README");
+        assert_eq!(current.references[0].target, "../README.md");
+
+        cleanup_sidecars(&map_path);
+        std::fs::remove_dir_all(repository).ok();
+    }
+
+    #[test]
+    fn palette_can_open_current_node_references() {
+        let directory = temp_map_path("palette-references-dir");
+        std::fs::create_dir_all(directory.join("docs")).expect("fixture dir should be writable");
+        let map_path = directory.join("map.md");
+        std::fs::write(
+            directory.join("docs").join("brief.md"),
+            "# Brief\nPreview body.\n",
+        )
+        .expect("reference fixture should be writable");
+        let parsed = parse_document("- Research [brief](docs/brief.md)\n").document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            parsed,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let item = app
+            .palette_items("references")
+            .into_iter()
+            .find(|item| item.title == "Show References")
+            .expect("palette should expose reference browsing");
+        assert!(matches!(
+            item.target,
+            PaletteTarget::Action(PaletteAction::ShowReferences)
+        ));
+
+        app.execute_palette_target(PaletteTarget::Action(PaletteAction::ShowReferences))
+            .expect("show references action should run");
+        let picker = app
+            .reference_picker
+            .as_ref()
+            .expect("reference picker should open");
+        assert_eq!(picker.items.len(), 1);
+        assert_eq!(picker.items[0].target, "docs/brief.md");
+        assert_eq!(picker.previews[0].title, "Text Preview");
+        assert!(
+            picker.previews[0]
+                .lines
+                .iter()
+                .any(|line| line == "# Brief")
+        );
+
+        let rows = app.visible_rows();
+        let research = rows
+            .iter()
+            .find(|row| row.text == "Research")
+            .expect("research row should be visible");
+        assert_eq!(research.references, vec!["[brief](docs/brief.md)"]);
+
+        cleanup_sidecars(&map_path);
+        std::fs::remove_dir_all(directory).ok();
+    }
+
+    #[test]
+    fn p_opens_current_node_reference_preview() {
+        let map_path = temp_map_path("p-reference-preview.md");
+        let parsed = parse_document("- Research [brief](docs/brief.md)\n").document;
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            parsed,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE))
+            .expect("p should open reference picker");
+        let picker = app
+            .reference_picker
+            .as_ref()
+            .expect("reference picker should open");
+        assert_eq!(picker.items.len(), 1);
+        assert_eq!(picker.items[0].target, "docs/brief.md");
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn reference_previews_cover_text_png_web_and_unsupported_files() {
+        let directory = temp_map_path("reference-preview-dir");
+        std::fs::create_dir_all(&directory).expect("fixture dir should be writable");
+        let map_path = directory.join("map.md");
+        let text_path = directory.join("note.txt");
+        let png_path = directory.join("image.png");
+        let binary_path = directory.join("archive.zip");
+        std::fs::write(&map_path, "- Research\n").expect("map fixture should be writable");
+        std::fs::write(&text_path, "hello\nworld\n").expect("text fixture should be writable");
+        std::fs::write(
+            &png_path,
+            [
+                137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, b'I', b'H', b'D', b'R', 0, 0, 0, 3,
+                0, 0, 0, 2,
+            ],
+        )
+        .expect("png fixture should be writable");
+        std::fs::write(&binary_path, [0, 1, 2, 3]).expect("binary fixture should be writable");
+
+        let text_preview = reference_preview_for(
+            &map_path,
+            &ExternalRef {
+                label: "note".to_string(),
+                target: "note.txt".to_string(),
+                kind: ExternalRefKind::Link,
+            },
+        );
+        assert_eq!(text_preview.title, "Text Preview");
+        assert!(text_preview.lines.iter().any(|line| line == "hello"));
+
+        let png_preview = reference_preview_for(
+            &map_path,
+            &ExternalRef {
+                label: "image".to_string(),
+                target: "image.png".to_string(),
+                kind: ExternalRefKind::Image,
+            },
+        );
+        assert_eq!(png_preview.title, "PNG Preview");
+        assert!(png_preview.lines.iter().any(|line| line == "3 x 2 PNG"));
+
+        let unsupported_preview = reference_preview_for(
+            &map_path,
+            &ExternalRef {
+                label: "archive".to_string(),
+                target: "archive.zip".to_string(),
+                kind: ExternalRefKind::Link,
+            },
+        );
+        assert_eq!(unsupported_preview.title, "No Preview");
+        assert!(
+            unsupported_preview
+                .lines
+                .iter()
+                .any(|line| line == "No preview available.")
+        );
+
+        let web_preview = web_reference_preview_from_html(
+            "https://example.test",
+            "<html><head><title>Example &amp; Test</title><meta name=\"description\" content=\"A small page.\"></head></html>",
+        )
+        .expect("html should produce a web preview");
+        assert_eq!(web_preview.title, "Web Preview");
+        assert!(
+            web_preview
+                .lines
+                .iter()
+                .any(|line| line == "Example & Test")
+        );
+        assert!(web_preview.lines.iter().any(|line| line == "A small page."));
+
+        cleanup_sidecars(&map_path);
+        std::fs::remove_dir_all(directory).ok();
+    }
+
+    #[test]
     fn single_line_prompts_use_up_down_for_start_and_end() {
         let map_path = temp_map_path("prompt-up-down-boundaries.md");
         let document = sample_document();
@@ -15456,6 +17131,7 @@ mod tests {
             PromptMode::AddSibling,
             PromptMode::AddRoot,
             PromptMode::Edit,
+            PromptMode::AttachFile,
             PromptMode::OpenId,
             PromptMode::SaveView,
             PromptMode::SaveCheckpoint,
@@ -16863,6 +18539,26 @@ mod tests {
         let rendered = keybar_text(&app);
         assert!(rendered.contains("[ ]"));
         assert!(!rendered.contains("m:mindmap"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn keybar_shows_reference_preview_hint_when_current_node_has_references() {
+        let map_path = temp_map_path("keybar-references.md");
+        let document = parse_document("- Research [brief](docs/brief.md)\n").document;
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let rendered = keybar_text(&app);
+        assert!(rendered.contains("p"));
+        assert!(rendered.contains("refs"));
 
         cleanup_sidecars(&map_path);
     }

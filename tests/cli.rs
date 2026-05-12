@@ -138,6 +138,24 @@ fn links_can_list_deep_link_targets_for_examples() {
 }
 
 #[test]
+fn refs_can_list_external_references() {
+    let map_path = temp_file("refs.md");
+    std::fs::write(
+        &map_path,
+        "- Research [brief note](docs/project brief.md) ![diagram](assets/diagram.png)\n",
+    )
+    .expect("reference fixture should be writable");
+
+    let output = run_mdm(&["refs", map_path.to_str().unwrap(), "--plain"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("brief note\tdocs/project brief.md"));
+    assert!(stdout.contains("image\tdiagram\tassets/diagram.png"));
+
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
 fn relations_can_list_outgoing_links_and_backlinks() {
     let output = run_mdm(&["relations", &fixture("relations.md"), "--plain"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));
