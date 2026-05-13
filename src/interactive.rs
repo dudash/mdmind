@@ -8440,7 +8440,7 @@ fn reference_label_for_target(target: &str) -> String {
             .rsplit('/')
             .find(|segment| !segment.is_empty())
             .unwrap_or(trimmed)
-            .trim_end_matches(|character| character == '?' || character == '#')
+            .trim_end_matches(['?', '#'])
             .to_string();
     }
 
