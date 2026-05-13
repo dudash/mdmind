@@ -22,6 +22,7 @@ If you want to use `mdmind` with AI agents:
 - [AGENT_TODO_MEMORY.md](AGENT_TODO_MEMORY.md)
 - [AGENT_SKILL_INSTALLS.md](AGENT_SKILL_INSTALLS.md)
 - [SKILLS_CUSTOMIZING.md](SKILLS_CUSTOMIZING.md)
+- [LLM_WIKI_MINDSPACE_STRATEGY.md](LLM_WIKI_MINDSPACE_STRATEGY.md)
 
 If you want a product-status map instead of a tutorial:
 
@@ -59,6 +60,7 @@ If you care about product direction and future work:
 - [product/features/finished/README.md](product/features/finished/README.md)
 - [product/features/inwork/README.md](product/features/inwork/README.md)
 - [product/features/future/README.md](product/features/future/README.md)
+- [LLM_WIKI_MINDSPACE_STRATEGY.md](LLM_WIKI_MINDSPACE_STRATEGY.md)
 - [UX_DESIGN_REVIEW.md](UX_DESIGN_REVIEW.md)
 - [TERMINAL_EXPERIENCE.md](TERMINAL_EXPERIENCE.md)
 

@@ -13,6 +13,7 @@ If a feature is here, it should not be described anywhere else as already real.
 
 - [docs-site-and-adoption.md](docs-site-and-adoption.md)
 - [import-and-ingestion.md](import-and-ingestion.md)
+- [LLM wiki mindspace layer](../../../LLM_WIKI_MINDSPACE_STRATEGY.md)
 - [spatial-canvas.md](spatial-canvas.md)
 - [template-variables.md](template-variables.md)
 - [cli-help-and-completions.md](cli-help-and-completions.md)
