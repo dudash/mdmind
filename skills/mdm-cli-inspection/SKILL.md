@@ -4,7 +4,7 @@ description: Inspect, validate, query, audit, deep-link, list external refs, or 
 license: Apache-2.0
 metadata:
   author: mdmind
-  version: "0.5.2"
+  version: "0.7.0"
 ---
 
 # mdm CLI Inspection
@@ -37,6 +37,9 @@ If the task is mainly about creating or reshaping map content, use `mdmind-map-a
 
 - Start with the smallest command that answers the question.
 - Prefer `--plain` for grep-friendly inspection and quick human scanning.
+- Use command `--json` when another tool needs the mdm response envelope with
+  `ok`, `command`, `format`, `data`, `summary`, `error`, and `next_actions`.
+- Use `mdm export --format json` when another tool needs raw map document data.
 - Prefer deep links like `map.md#product/tasks` when the user cares about one branch.
 - Prefer `--query` on export when the user wants a filtered machine-readable subset.
 - Use `mdm refs <file>` when the question is about attached external files, URLs, or image refs.
@@ -95,7 +98,9 @@ When inspecting task files, expect explicit checkbox markers to round-trip in th
 2. Choose the narrowest `mdm` command that answers that need.
 3. If one branch matters, use a deep link target instead of the whole file.
 4. If the user is exploring, prefer plain output and small, focused queries.
-5. If the user needs a machine-consumable result, prefer `--json` or `export --format json`.
+5. If the user needs a machine-consumable result, choose deliberately:
+   use command `--json` for an mdm response envelope, or
+   `mdm export --format json` for raw document JSON.
 6. If the user asks to turn messy source material into a map, use map-authoring guidance and validate the authored result rather than relying on deterministic import.
 7. If the map looks malformed or generated, run `mdm validate` before drawing conclusions.
 8. Summarize the important result, not just the fact that a command ran.
@@ -132,6 +137,11 @@ Before handing back a result:
 - `refs` is for Markdown links/images that point outside the map; `links` is for map node ids.
 - `relations file.md` and `relations file.md#id` answer different questions.
 - `export --query` can return an empty tree if the filter matches nothing.
+- Command-style `--json` returns an envelope. The command-specific payload is
+  under `data`; do not expect top-level arrays from `find --json`, `refs --json`,
+  or `validate --json`.
+- `mdm export --format json` intentionally remains raw document JSON instead of
+  an envelope.
 - `--plain` and `--json` are mutually exclusive on commands that support both.
 - Agents are often better than deterministic import for messy ingestion: they can read PDFs/sites/prose, choose useful structure, preserve intent, and create cleaner mdmind files.
 - If a file has parser errors, some higher-level conclusions are unreliable until `validate` is addressed.
@@ -140,4 +150,5 @@ Before handing back a result:
 
 - For user questions, summarize the answer and include the exact command when useful.
 - For workflows, give the smallest command sequence that reaches the goal.
-- For automation-oriented tasks, prefer `--json` or `export --format json`.
+- For automation-oriented tasks, prefer command `--json` for response metadata
+  and `mdm export --format json` for raw map data.

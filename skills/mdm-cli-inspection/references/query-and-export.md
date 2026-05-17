@@ -31,9 +31,22 @@ Use `--json` when:
 
 - another tool needs structured output
 - the user wants machine-readable results
-- downstream code needs node refs from `mdm refs` or JSON export output
+- downstream code needs an mdm response envelope with success/error metadata
+- downstream code needs node refs from `mdm refs --json`
 
 Do not combine `--plain` and `--json` on commands that support both.
+
+Command-style `--json` returns an envelope:
+
+- `ok`: success boolean
+- `command`: mdm subcommand name
+- `format`: payload schema, such as `search_matches.v1`
+- `data`: command-specific payload
+- `summary`: compact counts when available
+- `error`: parseable failure object when `ok` is false
+- `next_actions`: safe follow-up commands when available
+
+For raw map document data, use `mdm export <target> --format json` instead.
 
 ## Deep Links
 

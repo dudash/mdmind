@@ -4,7 +4,7 @@ description: Create or revise native mdmind maps: plain-text Markdown outlines, 
 license: Apache-2.0
 metadata:
   author: mdmind
-  version: "0.4.0"
+  version: "0.7.0"
 ---
 
 # mdmind Map Authoring
@@ -102,7 +102,7 @@ Choose the lightest structure that preserves meaning:
 - Use `@key:value` metadata when repeated structured fields help filtering or clarity.
 - Use `[id:...]` for durable anchors that a human or tool is likely to revisit, deep-link, export, or reference later.
 - Use `[[target/id]]` or `[[rel:kind->target/id]]` only when lateral meaning matters across distant branches.
-- Use `[label](path-or-url)` or `![label](path-or-url)` when a node should point to an external file, URL, or image.
+- Use normal Markdown links or images when a node should point to an external file, URL, or image.
 
 Prefer this escalation order:
 
@@ -164,8 +164,8 @@ Do not jump to ids and relations before the tree shape is already good.
 
 ### External Markdown References
 
-- Use `[label](path-or-url)` for supporting files, web pages, and source artifacts.
-- Use `![label](path-or-url)` for image references that belong with the node.
+- Use normal Markdown links for supporting files, web pages, and source artifacts.
+- Use normal Markdown image references for images that belong with the node.
 - Prefer paths relative to the map file when the artifact lives in the same project tree.
 - Labels and targets may contain spaces; keep them as normal Markdown link text and destinations.
 - Do not use external refs as a replacement for ids or relations: refs point outside the map, while ids and relations structure the map itself.

@@ -8,6 +8,7 @@ Use:
 
 ```bash
 mdm validate map.md
+mdm validate map.md --json
 ```
 
 This is the first check when:
@@ -80,6 +81,8 @@ mdm refs map.md --json
 
 Use `refs` when the user needs attached Markdown links, local files, URLs, or image refs on map nodes. Local refs are interpreted relative to the map file by validation, and labels or paths may contain spaces when written as normal Markdown links.
 
+`refs --json` returns an mdm response envelope. Read rows from `data`.
+
 ## Inspect Relations
 
 Whole-file outgoing relations:
@@ -106,6 +109,6 @@ mdm export map.md --query "#todo @status:active" --format json
 
 Choose:
 
-- `json` for machine consumers
+- `json` for raw map document data
 - `mermaid` for lightweight diagrams
 - `opml` for outliner interchange

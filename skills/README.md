@@ -43,6 +43,9 @@ Good fits:
 - answering questions about one branch via deep links
 
 This skill teaches agents how to choose the right `mdm` command for the job.
+It also distinguishes command `--json` response envelopes from
+`mdm export --format json`, which remains raw map document JSON for downstream
+tools.
 
 ## Recommended Split
 
