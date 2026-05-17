@@ -411,9 +411,7 @@ fn next_html_region(source: &str, tag_name: &str, cursor: usize) -> Option<(usiz
 
     while let Some(relative_start) = source[cursor..].find('<') {
         let start = cursor + relative_start;
-        let Some(relative_end) = source[start..].find('>') else {
-            return None;
-        };
+        let relative_end = source[start..].find('>')?;
         let end = start + relative_end;
         let raw_tag = source[start + 1..end].trim();
         cursor = end + 1;
@@ -746,15 +744,13 @@ fn split_long_html_node_label(value: &str) -> (String, String) {
     }
 
     let mut split_at = 0usize;
-    let mut chars = 0usize;
-    for (index, ch) in value.char_indices() {
+    for (chars, (index, ch)) in value.char_indices().enumerate() {
         if chars > MAX_LABEL_CHARS {
             break;
         }
         if ch.is_whitespace() {
             split_at = index;
         }
-        chars += 1;
     }
 
     if split_at == 0 {

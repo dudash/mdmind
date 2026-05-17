@@ -191,8 +191,11 @@ enum Commands {
         #[command(subcommand)]
         command: ExampleCommands,
     },
-    #[command(about = "Print the mdm command catalog for agents and scripts.")]
-    Commands {
+    #[command(
+        name = "commands",
+        about = "Print the mdm command catalog for agents and scripts."
+    )]
+    Catalog {
         #[arg(long)]
         json: bool,
     },
@@ -363,7 +366,7 @@ impl Cli {
                 command: "validate",
                 target: Some(target.clone()),
             }),
-            Commands::Commands { json } if *json => Some(JsonContext {
+            Commands::Catalog { json } if *json => Some(JsonContext {
                 command: "commands",
                 target: None,
             }),
@@ -396,12 +399,14 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
                 &query,
             );
             print_output(
-                json,
-                plain,
-                "find",
-                Some(&target),
-                "search_matches.v1",
-                Some(count_summary(matches.len())),
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "find",
+                    target: Some(&target),
+                    format: "search_matches.v1",
+                    summary: Some(count_summary(matches.len())),
+                },
                 &matches,
                 || render_find(&matches),
                 || render_find_plain(&matches),
@@ -416,12 +421,14 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             ensure_parseable(&loaded).map_err(CliError::from_app)?;
             let tags = tag_counts(&select_document(&loaded).map_err(CliError::from_app)?);
             print_output(
-                json,
-                plain,
-                "tags",
-                Some(&target),
-                "tag_counts.v1",
-                Some(count_summary(tags.len())),
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "tags",
+                    target: Some(&target),
+                    format: "tag_counts.v1",
+                    summary: Some(count_summary(tags.len())),
+                },
                 &tags,
                 || render_tags(&tags),
                 || render_tags_plain(&tags),
@@ -440,12 +447,14 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
                 &keys,
             );
             print_output(
-                json,
-                plain,
-                "kv",
-                Some(&target),
-                "metadata_rows.v1",
-                Some(count_summary(rows.len())),
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "kv",
+                    target: Some(&target),
+                    format: "metadata_rows.v1",
+                    summary: Some(count_summary(rows.len())),
+                },
                 &rows,
                 || render_metadata(&rows),
                 || render_metadata_plain(&rows),
@@ -460,12 +469,14 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             ensure_parseable(&loaded).map_err(CliError::from_app)?;
             let links = link_entries(&select_document(&loaded).map_err(CliError::from_app)?);
             print_output(
-                json,
-                plain,
-                "links",
-                Some(&target),
-                "link_entries.v1",
-                Some(count_summary(links.len())),
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "links",
+                    target: Some(&target),
+                    format: "link_entries.v1",
+                    summary: Some(count_summary(links.len())),
+                },
                 &links,
                 || render_links(&links),
                 || render_links_plain(&links),
@@ -480,12 +491,14 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             ensure_parseable(&loaded).map_err(CliError::from_app)?;
             let refs = reference_entries(&select_document(&loaded).map_err(CliError::from_app)?);
             print_output(
-                json,
-                plain,
-                "refs",
-                Some(&target),
-                "reference_rows.v1",
-                Some(count_summary(refs.len())),
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "refs",
+                    target: Some(&target),
+                    format: "reference_rows.v1",
+                    summary: Some(count_summary(refs.len())),
+                },
                 &refs,
                 || render_references(&refs),
                 || render_references_plain(&refs),
@@ -507,12 +520,14 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
                 None => relation_entries(&select_document(&loaded).map_err(CliError::from_app)?),
             };
             print_output(
-                json,
-                plain,
-                "relations",
-                Some(&target),
-                "relation_rows.v1",
-                Some(count_summary(rows.len())),
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "relations",
+                    target: Some(&target),
+                    format: "relation_rows.v1",
+                    summary: Some(count_summary(rows.len())),
+                },
                 &rows,
                 || render_relations(&rows),
                 || render_relations_plain(&rows),
@@ -590,7 +605,7 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             report,
         ),
         Commands::Examples { command } => dispatch_examples(command),
-        Commands::Commands { json } => dispatch_commands(json),
+        Commands::Catalog { json } => dispatch_commands(json),
         Commands::Open {
             target,
             preview,
@@ -878,8 +893,10 @@ fn render_import_report(
     preview: bool,
     document: &Document,
 ) -> String {
-    let mut stats = ImportStats::default();
-    stats.roots = document.nodes.len();
+    let mut stats = ImportStats {
+        roots: document.nodes.len(),
+        ..Default::default()
+    };
     collect_import_stats(&document.nodes, 1, &mut stats);
     stats.duplicate_ids = stats.id_counts.values().filter(|count| **count > 1).count();
     for diagnostic in validate_document(document) {
@@ -1082,11 +1099,43 @@ struct CommandFlagInfo {
     values: Vec<&'static str>,
 }
 
+macro_rules! command_info {
+    (
+        $name:expr,
+        $summary:expr,
+        $reads:expr,
+        $writes:expr,
+        $network:expr,
+        $interactive:expr,
+        $output_modes:expr,
+        $args:expr,
+        $flags:expr,
+        $formats:expr,
+        $examples:expr $(,)?
+    ) => {
+        CommandInfo {
+            name: $name,
+            summary: $summary,
+            reads: $reads.to_vec(),
+            writes: $writes.to_vec(),
+            network: $network,
+            interactive: $interactive,
+            output_modes: $output_modes.to_vec(),
+            args: $args.to_vec(),
+            flags: $flags.to_vec(),
+            formats: $formats.to_vec(),
+            examples: $examples.to_vec(),
+            docs: vec!["docs/AGENT_CLI_CONTRACT.md"],
+            skills: vec!["skills/mdm-cli-inspection"],
+        }
+    };
+}
+
 fn command_catalog() -> CommandCatalog {
     CommandCatalog {
         version: APP_VERSION,
         commands: vec![
-            command_info(
+            command_info!(
                 "view",
                 "Render a read-only tree view for a map or deep link.",
                 &["map"],
@@ -1099,7 +1148,7 @@ fn command_catalog() -> CommandCatalog {
                 &[],
                 &["mdm view ideas.md", "mdm view ideas.md#product/mvp --json"],
             ),
-            command_info(
+            command_info!(
                 "find",
                 "Search labels, tags, metadata, ids, details, and task state.",
                 &["map"],
@@ -1115,7 +1164,7 @@ fn command_catalog() -> CommandCatalog {
                     "mdm find ideas.md \"#todo @status:active\" --json",
                 ],
             ),
-            command_info(
+            command_info!(
                 "tags",
                 "List tag counts across a map or deep link.",
                 &["map"],
@@ -1128,7 +1177,7 @@ fn command_catalog() -> CommandCatalog {
                 &[],
                 &["mdm tags ideas.md --plain"],
             ),
-            command_info(
+            command_info!(
                 "kv",
                 "List inline key:value metadata rows.",
                 &["map"],
@@ -1145,7 +1194,7 @@ fn command_catalog() -> CommandCatalog {
                 &[],
                 &["mdm kv ideas.md --keys status,owner --plain"],
             ),
-            command_info(
+            command_info!(
                 "links",
                 "List every node id and its deep-linkable path.",
                 &["map"],
@@ -1158,7 +1207,7 @@ fn command_catalog() -> CommandCatalog {
                 &[],
                 &["mdm links ideas.md --plain"],
             ),
-            command_info(
+            command_info!(
                 "refs",
                 "List external Markdown links, files, URLs, and image references.",
                 &["map"],
@@ -1171,7 +1220,7 @@ fn command_catalog() -> CommandCatalog {
                 &[],
                 &["mdm refs ideas.md --json"],
             ),
-            command_info(
+            command_info!(
                 "relations",
                 "List outgoing relations, or incoming backlinks for a deep-linked node.",
                 &["map"],
@@ -1187,7 +1236,7 @@ fn command_catalog() -> CommandCatalog {
                     "mdm relations ideas.md#product/mvp --json",
                 ],
             ),
-            command_info(
+            command_info!(
                 "validate",
                 "Validate parser structure, ids, references, relations, and metadata conventions.",
                 &["map"],
@@ -1200,7 +1249,7 @@ fn command_catalog() -> CommandCatalog {
                 &[],
                 &["mdm validate ideas.md", "mdm validate ideas.md --json"],
             ),
-            command_info(
+            command_info!(
                 "export",
                 "Export normalized map data, diagrams, or outliner interchange formats.",
                 &["map"],
@@ -1219,7 +1268,7 @@ fn command_catalog() -> CommandCatalog {
                     "mdm export ideas.md --query \"#todo @status:active\" --format json",
                 ],
             ),
-            command_info(
+            command_info!(
                 "init",
                 "Create a new map from a starter template.",
                 &["template"],
@@ -1235,7 +1284,7 @@ fn command_catalog() -> CommandCatalog {
                 &[],
                 &["mdm init TODO.md --template todo"],
             ),
-            command_info(
+            command_info!(
                 "import",
                 "Import an external outline or rough structural source into a native mdmind map.",
                 &["source"],
@@ -1269,7 +1318,7 @@ fn command_catalog() -> CommandCatalog {
                     "mdm import outline.md --from markdown --preview",
                 ],
             ),
-            command_info(
+            command_info!(
                 "examples",
                 "List, locate, or copy the bundled example maps.",
                 &["bundled_examples"],
@@ -1282,7 +1331,7 @@ fn command_catalog() -> CommandCatalog {
                 &[],
                 &["mdm examples list", "mdm examples copy all"],
             ),
-            command_info(
+            command_info!(
                 "examples list",
                 "List the bundled example maps.",
                 &["bundled_examples"],
@@ -1295,7 +1344,7 @@ fn command_catalog() -> CommandCatalog {
                 &[],
                 &["mdm examples list"],
             ),
-            command_info(
+            command_info!(
                 "examples path",
                 "Print the installed on-disk examples directory, when available.",
                 &["installed_examples"],
@@ -1308,7 +1357,7 @@ fn command_catalog() -> CommandCatalog {
                 &[],
                 &["mdm examples path"],
             ),
-            command_info(
+            command_info!(
                 "examples copy",
                 "Copy one bundled example, or all examples, into a directory.",
                 &["bundled_examples"],
@@ -1324,7 +1373,7 @@ fn command_catalog() -> CommandCatalog {
                     "mdm examples copy demo --to scratch",
                 ],
             ),
-            command_info(
+            command_info!(
                 "commands",
                 "Print the mdm command catalog for agents and scripts.",
                 &[],
@@ -1337,7 +1386,7 @@ fn command_catalog() -> CommandCatalog {
                 &["command_catalog.v1"],
                 &["mdm commands --json"],
             ),
-            command_info(
+            command_info!(
                 "open",
                 "Open a map or deep link in the interactive navigator.",
                 &["map"],
@@ -1355,7 +1404,7 @@ fn command_catalog() -> CommandCatalog {
                 &[],
                 &["mdm open ideas.md", "mdm open ideas.md --json"],
             ),
-            command_info(
+            command_info!(
                 "check-keys",
                 "Check how this terminal reports Alt+arrow keys.",
                 &["terminal_input"],
@@ -1368,7 +1417,7 @@ fn command_catalog() -> CommandCatalog {
                 &[],
                 &["mdm check-keys"],
             ),
-            command_info(
+            command_info!(
                 "version",
                 "Print the mdm version.",
                 &[],
@@ -1382,36 +1431,6 @@ fn command_catalog() -> CommandCatalog {
                 &["mdm version"],
             ),
         ],
-    }
-}
-
-fn command_info(
-    name: &'static str,
-    summary: &'static str,
-    reads: &[&'static str],
-    writes: &[&'static str],
-    network: bool,
-    interactive: bool,
-    output_modes: &[&'static str],
-    args: &[CommandArgInfo],
-    flags: &[CommandFlagInfo],
-    formats: &[&'static str],
-    examples: &[&'static str],
-) -> CommandInfo {
-    CommandInfo {
-        name,
-        summary,
-        reads: reads.to_vec(),
-        writes: writes.to_vec(),
-        network,
-        interactive,
-        output_modes: output_modes.to_vec(),
-        args: args.to_vec(),
-        flags: flags.to_vec(),
-        formats: formats.to_vec(),
-        examples: examples.to_vec(),
-        docs: vec!["docs/AGENT_CLI_CONTRACT.md"],
-        skills: vec!["skills/mdm-cli-inspection"],
     }
 }
 
@@ -1545,35 +1564,39 @@ fn render_view_like(
     Ok(())
 }
 
-fn print_output<T: serde::Serialize>(
+struct OutputSpec<'a> {
     json: bool,
     plain: bool,
     command: &'static str,
-    target: Option<&str>,
+    target: Option<&'a str>,
     format: &'static str,
     summary: Option<serde_json::Value>,
+}
+
+fn print_output<T: serde::Serialize>(
+    spec: OutputSpec<'_>,
     value: &T,
     pretty: impl FnOnce() -> String,
     plain_renderer: impl FnOnce() -> String,
 ) -> Result<(), CliError> {
-    if json && plain {
+    if spec.json && spec.plain {
         return Err(CliError::usage(
             "invalid_output_mode",
             "Choose either --json or --plain, not both.",
         ));
     }
 
-    if json {
+    if spec.json {
         print_json_envelope(
-            command,
-            target,
-            format,
-            summary,
+            spec.command,
+            spec.target,
+            spec.format,
+            spec.summary,
             Some(value),
             None,
             Vec::new(),
         );
-    } else if plain {
+    } else if spec.plain {
         println!("{}", plain_renderer());
     } else {
         println!("{}", pretty());
