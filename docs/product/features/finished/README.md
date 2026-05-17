@@ -24,6 +24,7 @@ Navigation and structure:
 - [ids-and-deep-links.md](ids-and-deep-links.md)
 - [relations-and-backlinks.md](relations-and-backlinks.md)
 - [cli-inspection-and-export.md](cli-inspection-and-export.md)
+- [import-and-ingestion.md](import-and-ingestion.md)
 
 Editing and safety:
 

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>Desktop outliner style project export</title>
+    <dateModified>Sun, 17 May 2026 08:10:00 GMT</dateModified>
+  </head>
+  <body>
+    <outline text="Migration Plan" _note="Outline exported from a desktop outliner." owner="mira" status="active">
+      <outline text="Discovery" created="2026-05-17T08:00:00Z" due="2026-05-24">
+        <outline text="Inventory current notes" />
+        <outline text="Tag source systems" _note="Keep original source names in metadata where possible." />
+      </outline>
+      <outline text="Cutover" priority="high">
+        <outline text="Export final OPML snapshot" />
+        <outline text="Validate imported map" />
+      </outline>
+    </outline>
+  </body>
+</opml>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>mdmind round-trip style export</title>
+  </head>
+  <body>
+    <outline text="Product Idea" mdm_id="product" mdm_tags="#idea" owner="jason" status="active">
+      <outline text="MVP Scope" mdm_task="open" mdm_id="product/mvp" mdm_tags="#todo" mdm_detail="Keep this as a first import target." />
+      <outline text="Supporting Brief" mdm_refs="[brief](docs/brief.md) ![diagram](assets/diagram.png)" />
+    </outline>
+  </body>
+</opml>

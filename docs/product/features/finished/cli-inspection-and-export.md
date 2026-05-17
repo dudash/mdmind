@@ -8,6 +8,7 @@ What it already does well:
 - inspect tags, metadata keys, ids, and relations
 - validate map structure
 - export current maps or deep-linked subtrees
+- import existing outlines and rough web structure into native maps
 - seed new work from starter templates
 
 Core commands:
@@ -20,6 +21,7 @@ Core commands:
 - `mdm relations`
 - `mdm validate`
 - `mdm export`
+- `mdm import`
 - `mdm init`
 - `mdm open`
 
@@ -37,7 +39,7 @@ Why it matters:
 - it gives a low-friction read-only surface for exploration
 - it is useful even for people who never open the TUI
 
-The richer export and future import story still belongs on the in-work shelf. This page is about the solid CLI baseline that already exists today.
+The remaining future import work is archive/PDF expansion, not the baseline CLI import path.
 
 Related docs:
 
@@ -45,3 +47,4 @@ Related docs:
 - [QUERY_LANGUAGE.md](../../../QUERY_LANGUAGE.md)
 - [TEMPLATES.md](../../../TEMPLATES.md)
 - [EXPORT_TARGETS.md](../../../EXPORT_TARGETS.md)
+- [IMPORT_AND_INGESTION.md](../../../IMPORT_AND_INGESTION.md)

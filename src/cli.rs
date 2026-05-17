@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -15,7 +16,9 @@ use crate::examples::{
     readme_contents as examples_readme_contents,
 };
 use crate::export::export_document;
+use crate::importer::import_document;
 use crate::interactive::{run_interactive, run_key_diagnostics};
+use crate::model::{Document, ExternalRefKind, Node, Severity, TaskState};
 use crate::query::{
     filter_document, find_matches, link_entries, metadata_rows, reference_entries,
     relation_entries, relation_entries_for_path, tag_counts,
@@ -26,8 +29,10 @@ use crate::render::{
     render_relations_plain, render_tags, render_tags_plain, render_tree, render_validate,
     render_validate_plain,
 };
+use crate::serializer::serialize_document;
 use crate::startup::choose_startup_target;
 use crate::templates::TemplateKind;
+use crate::validate::validate_document;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -35,7 +40,7 @@ use crate::templates::TemplateKind;
     version,
     about = "Inspect and validate local markdown-like thought maps.",
     long_about = "mdm is the CLI for local-first structured maps. It reads plain-text tree files, renders them for humans, and exports machine-friendly output when you ask for --json or --plain.",
-    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm init TODO.md --template todo\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm refs ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
+    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm init TODO.md --template todo\n  mdm import notes.opml\n  mdm import map.mm\n  mdm import article.html --preview --report\n  mdm import outline.md --from markdown -o map.md\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm refs ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -130,6 +135,50 @@ enum Commands {
         template: String,
         #[arg(long, action = ArgAction::SetTrue)]
         force: bool,
+    },
+    #[command(
+        about = "Import an external outline or map into a native mdmind map.",
+        long_about = "Import OPML, FreeMind .mm, Markdown outlines, local HTML files, or remote web pages into mdmind's native Markdown map format. OPML, FreeMind, and Markdown are faithful outline import paths. HTML and web are lossy structural ingestion paths that keep headings, lists, and paragraphs. XMind, MindManager, and PDF are recognized as planned paths and return guided errors.",
+        after_help = "Examples:\n  mdm import notes.opml\n  mdm import map.mm\n  mdm import https://example.com --preview --report\n  mdm import article.html --preview --report\n  mdm import outline.md --from markdown -o outline-mind.md\n\nCurrent writing formats: opml, freemind, markdown, html, web.\nPlanned/guided formats: xmind, mindmanager, pdf.\nFormats can be inferred from URLs and from .opml, .mm, .html, .htm, .md, .markdown, .mdown, .mkd, .xmind, .mmap, and .pdf. Use --from when the extension is missing or ambiguous. If -o/--output is omitted for a writing import, mdm writes beside the source as <source-stem>-mind.md."
+    )]
+    Import {
+        #[arg(help = "Source file or URL to import.")]
+        source: PathBuf,
+        #[arg(
+            long,
+            value_parser = PossibleValuesParser::new([
+                "freemind",
+                "html",
+                "markdown",
+                "mindmanager",
+                "opml",
+                "pdf",
+                "web",
+                "xmind"
+            ]),
+            help = "Source format. Inferred from the extension when omitted."
+        )]
+        from: Option<String>,
+        #[arg(
+            short = 'o',
+            long = "output",
+            help = "Destination native .md map. Defaults to <source-stem>-mind.md unless --preview is set."
+        )]
+        output: Option<PathBuf>,
+        #[arg(long, action = ArgAction::SetTrue, help = "Overwrite an existing output file.")]
+        force: bool,
+        #[arg(
+            long,
+            action = ArgAction::SetTrue,
+            help = "Print the generated map to stdout without writing a file."
+        )]
+        preview: bool,
+        #[arg(
+            long,
+            action = ArgAction::SetTrue,
+            help = "Print import quality and preservation stats to stderr."
+        )]
+        report: bool,
     },
     #[command(about = "List, locate, or copy the bundled example maps.")]
     Examples {
@@ -411,6 +460,21 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             println!("{}", path.display());
             Ok(())
         }
+        Commands::Import {
+            source,
+            from,
+            output,
+            force,
+            preview,
+            report,
+        } => import_source(
+            &source,
+            from.as_deref(),
+            output.as_deref(),
+            force,
+            preview,
+            report,
+        ),
         Commands::Examples { command } => dispatch_examples(command),
         Commands::Open {
             target,
@@ -430,6 +494,392 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             println!("mdm {APP_VERSION}");
             Ok(())
         }
+    }
+}
+
+fn import_source(
+    source_path: &std::path::Path,
+    format: Option<&str>,
+    output_path: Option<&std::path::Path>,
+    force: bool,
+    preview: bool,
+    report: bool,
+) -> Result<(), CliError> {
+    let format = match format {
+        Some(format) => format.to_string(),
+        None => infer_import_format(source_path)?,
+    };
+    if let Some(error) = unsupported_import_error(&format) {
+        return Err(error);
+    }
+    let import_format = match format.as_str() {
+        "web" => "html",
+        other => other,
+    };
+    let resolved_output_path = if preview {
+        output_path.map(std::path::Path::to_path_buf)
+    } else {
+        Some(
+            output_path
+                .map(std::path::Path::to_path_buf)
+                .unwrap_or_else(|| default_import_output_path(source_path)),
+        )
+    };
+    let output_path = resolved_output_path.as_deref();
+
+    if let Some(output_path) = output_path
+        && output_path.exists()
+        && !force
+    {
+        return Err(CliError::runtime(format!(
+            "Refusing to overwrite '{}'. Use --force to replace it.",
+            output_path.display()
+        )));
+    }
+
+    let source = read_import_source(source_path, &format)?;
+    let document = import_document(&source, import_format).map_err(CliError::runtime)?;
+    let serialized = serialize_document(&document);
+
+    if report {
+        eprintln!(
+            "{}",
+            render_import_report(&format, source_path, output_path, preview, &document)
+        );
+    }
+
+    if preview {
+        print!("{serialized}");
+        return Ok(());
+    }
+
+    let Some(output_path) = output_path else {
+        return Err(CliError::runtime(
+            "Import needs an output path unless --preview is set.",
+        ));
+    };
+    write_imported_map(output_path, &serialized)?;
+    eprintln!(
+        "Imported '{}' as {} into '{}'.",
+        source_path.display(),
+        format,
+        output_path.display()
+    );
+    println!("{}", output_path.display());
+    Ok(())
+}
+
+fn infer_import_format(source_path: &std::path::Path) -> Result<String, CliError> {
+    if is_remote_source(source_path) {
+        return Ok("web".to_string());
+    }
+    let extension = source_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase);
+    match extension.as_deref() {
+        Some("opml") => Ok("opml".to_string()),
+        Some("mm") => Ok("freemind".to_string()),
+        Some("html" | "htm") => Ok("html".to_string()),
+        Some("md" | "markdown" | "mdown" | "mkd") => Ok("markdown".to_string()),
+        Some("xmind") => Ok("xmind".to_string()),
+        Some("mmap") => Ok("mindmanager".to_string()),
+        Some("pdf") => Ok("pdf".to_string()),
+        Some(extension) => Err(CliError::runtime(format!(
+            "Could not infer import format from extension '.{extension}'. Use --from freemind, --from html, --from markdown, --from mindmanager, --from opml, --from pdf, --from web, or --from xmind."
+        ))),
+        None => Err(CliError::runtime(
+            "Could not infer import format because the source has no extension. Use --from freemind, --from html, --from markdown, --from mindmanager, --from opml, --from pdf, --from web, or --from xmind.",
+        )),
+    }
+}
+
+fn is_remote_source(source_path: &std::path::Path) -> bool {
+    let source = source_path.to_string_lossy();
+    source.starts_with("http://") || source.starts_with("https://")
+}
+
+fn unsupported_import_error(format: &str) -> Option<CliError> {
+    match format {
+        "freemind" | "html" | "markdown" | "opml" | "web" => None,
+        "xmind" => Some(CliError::runtime(
+            "XMind `.xmind` import is planned but not implemented yet. `.xmind` files are ZIP archives; export OPML from XMind for now, or track this as the archive-reader follow-up.",
+        )),
+        "mindmanager" => Some(CliError::runtime(
+            "MindManager `.mmap` import is not implemented. Prefer exporting OPML from MindManager for now; first-class `.mmap` support needs real samples and a format decision.",
+        )),
+        "pdf" => Some(CliError::runtime(
+            "PDF ingestion is intentionally agent-authored for now. Have an agent read the PDF, create a mdmind map with the map-authoring guidance, then run `mdm validate` on the result.",
+        )),
+        _ => Some(CliError::runtime(format!(
+            "Unsupported import format '{format}'. Choose one of: freemind, html, markdown, opml."
+        ))),
+    }
+}
+
+fn read_import_source(source_path: &std::path::Path, format: &str) -> Result<String, CliError> {
+    if is_remote_source(source_path) {
+        eprintln!(
+            "warning: web import is rough structural extraction. Agents should usually read messy pages and author a mdmind map directly when meaning matters."
+        );
+        return fetch_remote_import_source(&source_path.to_string_lossy());
+    }
+
+    if format == "web" {
+        eprintln!(
+            "warning: local --from web uses the HTML structural extractor. Use --from html when you want to be explicit."
+        );
+    }
+
+    std::fs::read_to_string(source_path).map_err(|error| {
+        CliError::runtime(format!(
+            "Could not read '{}': {error}",
+            source_path.display()
+        ))
+    })
+}
+
+fn fetch_remote_import_source(url: &str) -> Result<String, CliError> {
+    let response = reqwest::blocking::get(url)
+        .map_err(|error| CliError::runtime(format!("Could not fetch '{url}': {error}")))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(CliError::runtime(format!(
+            "Could not fetch '{url}': HTTP {status}"
+        )));
+    }
+    response.text().map_err(|error| {
+        CliError::runtime(format!("Could not read response from '{url}': {error}"))
+    })
+}
+
+fn default_import_output_path(source_path: &std::path::Path) -> PathBuf {
+    if is_remote_source(source_path) {
+        return PathBuf::from(format!("{}-mind.md", remote_import_stem(source_path)));
+    }
+
+    let stem = source_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| !stem.is_empty())
+        .unwrap_or("imported");
+    let file_name = format!("{stem}-mind.md");
+    match source_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        Some(parent) => parent.join(file_name),
+        None => PathBuf::from(file_name),
+    }
+}
+
+fn remote_import_stem(source_path: &std::path::Path) -> String {
+    let source = source_path.to_string_lossy();
+    let without_scheme = source
+        .strip_prefix("https://")
+        .or_else(|| source.strip_prefix("http://"))
+        .unwrap_or(&source);
+    let without_query = without_scheme
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(without_scheme);
+    let candidate = without_query
+        .trim_end_matches('/')
+        .rsplit('/')
+        .find(|segment| !segment.is_empty())
+        .unwrap_or("web");
+    let sanitized = candidate
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+
+    if sanitized.is_empty() {
+        "web".to_string()
+    } else {
+        sanitized
+    }
+}
+
+fn write_imported_map(output_path: &std::path::Path, serialized: &str) -> Result<(), CliError> {
+    if let Some(parent) = output_path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent).map_err(|error| {
+            CliError::runtime(format!(
+                "Could not create parent directory '{}': {error}",
+                parent.display()
+            ))
+        })?;
+    }
+
+    std::fs::write(output_path, serialized).map_err(|error| {
+        CliError::runtime(format!(
+            "Could not write imported map to '{}': {error}",
+            output_path.display()
+        ))
+    })
+}
+
+#[derive(Debug, Default)]
+struct ImportStats {
+    nodes: usize,
+    roots: usize,
+    leaves: usize,
+    max_depth: usize,
+    detail_lines: usize,
+    detail_nodes: usize,
+    tags: usize,
+    metadata: usize,
+    ids: usize,
+    duplicate_ids: usize,
+    references: usize,
+    reference_links: usize,
+    reference_images: usize,
+    reference_urls: usize,
+    reference_local: usize,
+    relations: usize,
+    tasks: usize,
+    task_open: usize,
+    task_done: usize,
+    validation_errors: usize,
+    validation_warnings: usize,
+    tag_counts: BTreeMap<String, usize>,
+    metadata_key_counts: BTreeMap<String, usize>,
+    id_counts: BTreeMap<String, usize>,
+}
+
+fn render_import_report(
+    format: &str,
+    source_path: &std::path::Path,
+    output_path: Option<&std::path::Path>,
+    preview: bool,
+    document: &Document,
+) -> String {
+    let mut stats = ImportStats::default();
+    stats.roots = document.nodes.len();
+    collect_import_stats(&document.nodes, 1, &mut stats);
+    stats.duplicate_ids = stats.id_counts.values().filter(|count| **count > 1).count();
+    for diagnostic in validate_document(document) {
+        match diagnostic.severity {
+            Severity::Error => stats.validation_errors += 1,
+            Severity::Warning => stats.validation_warnings += 1,
+        }
+    }
+    let destination = if preview {
+        "preview only".to_string()
+    } else {
+        output_path
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "(missing output)".to_string())
+    };
+
+    [
+        "Import report".to_string(),
+        format!("- source: {}", source_path.display()),
+        format!("- format: {format}"),
+        format!("- destination: {destination}"),
+        format!("- nodes: {}", stats.nodes),
+        format!("- roots: {}", stats.roots),
+        format!("- leaves: {}", stats.leaves),
+        format!("- max_depth: {}", stats.max_depth),
+        format!("- detail_lines: {}", stats.detail_lines),
+        format!("- detail_nodes: {}", stats.detail_nodes),
+        format!("- tags: {}", stats.tags),
+        format!("- metadata: {}", stats.metadata),
+        format!("- ids: {}", stats.ids),
+        format!("- duplicate_ids: {}", stats.duplicate_ids),
+        format!("- references: {}", stats.references),
+        format!("- reference_links: {}", stats.reference_links),
+        format!("- reference_images: {}", stats.reference_images),
+        format!("- reference_urls: {}", stats.reference_urls),
+        format!("- reference_local: {}", stats.reference_local),
+        format!("- relations: {}", stats.relations),
+        format!("- tasks: {}", stats.tasks),
+        format!("- task_open: {}", stats.task_open),
+        format!("- task_done: {}", stats.task_done),
+        format!("- validation_errors: {}", stats.validation_errors),
+        format!("- validation_warnings: {}", stats.validation_warnings),
+        format!(
+            "- tag_breakdown: {}",
+            render_count_breakdown(&stats.tag_counts)
+        ),
+        format!(
+            "- metadata_keys: {}",
+            render_count_breakdown(&stats.metadata_key_counts)
+        ),
+    ]
+    .join("\n")
+}
+
+fn collect_import_stats(nodes: &[Node], depth: usize, stats: &mut ImportStats) {
+    for node in nodes {
+        stats.nodes += 1;
+        if node.children.is_empty() {
+            stats.leaves += 1;
+        }
+        stats.max_depth = stats.max_depth.max(depth);
+        stats.detail_lines += node.detail.len();
+        stats.detail_nodes += usize::from(!node.detail.is_empty());
+        stats.tags += node.tags.len();
+        for tag in &node.tags {
+            *stats.tag_counts.entry(tag.clone()).or_default() += 1;
+        }
+        stats.metadata += node.metadata.len();
+        for entry in &node.metadata {
+            *stats
+                .metadata_key_counts
+                .entry(entry.key.clone())
+                .or_default() += 1;
+        }
+        if let Some(id) = &node.id {
+            stats.ids += 1;
+            *stats.id_counts.entry(id.clone()).or_default() += 1;
+        }
+        stats.references += node.references.len();
+        for reference in &node.references {
+            match reference.kind {
+                ExternalRefKind::Link => stats.reference_links += 1,
+                ExternalRefKind::Image => stats.reference_images += 1,
+            }
+            if reference.is_url() {
+                stats.reference_urls += 1;
+            } else {
+                stats.reference_local += 1;
+            }
+        }
+        stats.relations += node.relations.len();
+        match node.task {
+            Some(TaskState::Open) => {
+                stats.tasks += 1;
+                stats.task_open += 1;
+            }
+            Some(TaskState::Done) => {
+                stats.tasks += 1;
+                stats.task_done += 1;
+            }
+            None => {}
+        }
+        collect_import_stats(&node.children, depth + 1, stats);
+    }
+}
+
+fn render_count_breakdown(counts: &BTreeMap<String, usize>) -> String {
+    if counts.is_empty() {
+        "none".to_string()
+    } else {
+        counts
+            .iter()
+            .map(|(key, count)| format!("{key}={count}"))
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 

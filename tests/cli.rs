@@ -1,5 +1,8 @@
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn fixture(name: &str) -> String {
@@ -23,6 +26,27 @@ fn temp_file(name: &str) -> PathBuf {
         .expect("system clock should be after unix epoch")
         .as_nanos();
     std::env::temp_dir().join(format!("mdmind-{nonce}-{name}"))
+}
+
+fn serve_once(body: &'static str) -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("test server should bind");
+    let address = listener
+        .local_addr()
+        .expect("test server should have an address");
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("test server should accept");
+        let mut request = [0_u8; 1024];
+        let _ = stream.read(&mut request);
+        let response = format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: text/html; charset=utf-8\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        stream
+            .write_all(response.as_bytes())
+            .expect("test server should respond");
+    });
+    (format!("http://{address}/article"), handle)
 }
 
 fn stdout(output: &std::process::Output) -> String {
@@ -228,6 +252,520 @@ fn export_outputs_opml() {
     assert!(stdout.contains(
         r##"<outline text="MVP Scope" mdm_id="product/mvp" mdm_tags="#todo" status="active">"##
     ));
+}
+
+#[test]
+fn import_opml_writes_native_map() {
+    let source = temp_file("source.opml");
+    let destination = temp_file("imported.md");
+    std::fs::write(
+        &source,
+        r##"<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="Imported Project" mdm_id="imported" mdm_tags="#idea">
+      <outline text="MVP Scope" mdm_task="open" status="active" mdm_detail="Keep this note" />
+      <outline text="Reference" url="https://example.com/article" />
+    </outline>
+  </body>
+</opml>
+"##,
+    )
+    .expect("opml fixture should be writable");
+
+    let source_str = source.to_string_lossy().into_owned();
+    let destination_str = destination.to_string_lossy().into_owned();
+    let output = run_mdm(&[
+        "import",
+        &source_str,
+        "--from",
+        "opml",
+        "-o",
+        &destination_str,
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(Path::new(&destination).exists());
+
+    let contents = std::fs::read_to_string(&destination).expect("import should write a map");
+    assert!(contents.contains("- Imported Project #idea [id:imported]"));
+    assert!(contents.contains("  - [ ] MVP Scope @status:active"));
+    assert!(contents.contains("    | Keep this note"));
+    assert!(contents.contains("  - Reference [url](https://example.com/article)"));
+
+    let validate = run_mdm(&["validate", &destination_str]);
+    assert!(
+        validate.status.success(),
+        "stderr: {}\nstdout: {}",
+        stderr(&validate),
+        stdout(&validate)
+    );
+
+    std::fs::remove_file(source).ok();
+    std::fs::remove_file(destination).ok();
+}
+
+#[test]
+fn import_refuses_to_overwrite_without_force() {
+    let source = temp_file("source.opml");
+    let destination = temp_file("existing.md");
+    std::fs::write(
+        &source,
+        r#"<opml version="2.0"><body><outline text="Imported" /></body></opml>"#,
+    )
+    .expect("opml fixture should be writable");
+    std::fs::write(&destination, "- Existing\n").expect("existing output should be writable");
+
+    let output = run_mdm(&[
+        "import",
+        source.to_str().unwrap(),
+        "--from",
+        "opml",
+        "-o",
+        destination.to_str().unwrap(),
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("Refusing to overwrite"));
+
+    let contents = std::fs::read_to_string(&destination).expect("existing file should remain");
+    assert_eq!(contents, "- Existing\n");
+
+    std::fs::remove_file(source).ok();
+    std::fs::remove_file(destination).ok();
+}
+
+#[test]
+fn import_opml_fixture_pack_writes_valid_maps() {
+    let fixture_names = [
+        "mdmind-roundtrip.opml",
+        "feed-subscriptions.opml",
+        "research-notes.opml",
+        "desktop-outliner.opml",
+    ];
+
+    for fixture_name in fixture_names {
+        let source = fixture(&format!("import/opml/{fixture_name}"));
+        let destination = temp_file(&format!("{fixture_name}.md"));
+        let destination_str = destination.to_string_lossy().into_owned();
+        let output = run_mdm(&["import", &source, "--from", "opml", "-o", &destination_str]);
+        assert!(
+            output.status.success(),
+            "{fixture_name} import stderr: {}",
+            stderr(&output)
+        );
+
+        let validate = run_mdm(&["validate", &destination_str]);
+        assert!(
+            validate.status.success(),
+            "{fixture_name} validate stderr: {}\nstdout: {}",
+            stderr(&validate),
+            stdout(&validate)
+        );
+
+        let contents = std::fs::read_to_string(&destination).expect("imported map should exist");
+        assert!(
+            contents.starts_with("- "),
+            "{fixture_name} should write native map nodes"
+        );
+        std::fs::remove_file(destination).ok();
+    }
+}
+
+#[test]
+fn import_markdown_writes_native_map() {
+    let source = temp_file("source.md");
+    let destination = temp_file("imported-markdown.md");
+    std::fs::write(
+        &source,
+        "# Imported Project [id:imported]\n\nOpening detail.\n\n## Tasks\n\n- [ ] First task #todo @status:active\n  - Nested note\n",
+    )
+    .expect("markdown fixture should be writable");
+
+    let source_str = source.to_string_lossy().into_owned();
+    let destination_str = destination.to_string_lossy().into_owned();
+    let output = run_mdm(&[
+        "import",
+        &source_str,
+        "--from",
+        "markdown",
+        "-o",
+        &destination_str,
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+
+    let contents = std::fs::read_to_string(&destination).expect("import should write a map");
+    assert!(contents.contains("- Imported Project [id:imported]"));
+    assert!(contents.contains("  | Opening detail."));
+    assert!(contents.contains("  - Tasks"));
+    assert!(contents.contains("    - [ ] First task #todo @status:active"));
+    assert!(contents.contains("      - Nested note"));
+
+    let validate = run_mdm(&["validate", &destination_str]);
+    assert!(
+        validate.status.success(),
+        "stderr: {}\nstdout: {}",
+        stderr(&validate),
+        stdout(&validate)
+    );
+
+    std::fs::remove_file(source).ok();
+    std::fs::remove_file(destination).ok();
+}
+
+#[test]
+fn import_markdown_fixture_pack_writes_valid_maps() {
+    let fixture_names = ["headings.md", "bullets.md", "mixed-notes.md"];
+
+    for fixture_name in fixture_names {
+        let source = fixture(&format!("import/markdown/{fixture_name}"));
+        let destination = temp_file(&format!("{fixture_name}.imported.md"));
+        let destination_str = destination.to_string_lossy().into_owned();
+        let output = run_mdm(&[
+            "import",
+            &source,
+            "--from",
+            "markdown",
+            "-o",
+            &destination_str,
+        ]);
+        assert!(
+            output.status.success(),
+            "{fixture_name} import stderr: {}",
+            stderr(&output)
+        );
+
+        let validate = run_mdm(&["validate", &destination_str]);
+        assert!(
+            validate.status.success(),
+            "{fixture_name} validate stderr: {}\nstdout: {}",
+            stderr(&validate),
+            stdout(&validate)
+        );
+
+        let contents = std::fs::read_to_string(&destination).expect("imported map should exist");
+        assert!(
+            contents.starts_with("- "),
+            "{fixture_name} should write native map nodes"
+        );
+        std::fs::remove_file(destination).ok();
+    }
+}
+
+#[test]
+fn import_freemind_fixture_pack_writes_valid_maps() {
+    let fixture_names = ["basic.mm", "multiple-roots.mm", "freeplane-style.mm"];
+
+    for fixture_name in fixture_names {
+        let source = fixture(&format!("import/freemind/{fixture_name}"));
+        let destination = temp_file(&format!("{fixture_name}.imported.md"));
+        let destination_str = destination.to_string_lossy().into_owned();
+        let output = run_mdm(&[
+            "import",
+            &source,
+            "--from",
+            "freemind",
+            "-o",
+            &destination_str,
+        ]);
+        assert!(
+            output.status.success(),
+            "{fixture_name} import stderr: {}",
+            stderr(&output)
+        );
+
+        let validate = run_mdm(&["validate", &destination_str]);
+        assert!(
+            validate.status.success(),
+            "{fixture_name} validate stderr: {}\nstdout: {}",
+            stderr(&validate),
+            stdout(&validate)
+        );
+
+        let contents = std::fs::read_to_string(&destination).expect("imported map should exist");
+        assert!(
+            contents.starts_with("- "),
+            "{fixture_name} should write native map nodes"
+        );
+        std::fs::remove_file(destination).ok();
+    }
+}
+
+#[test]
+fn import_html_fixture_pack_writes_valid_maps() {
+    let fixture_names = ["article.html", "browser-export.html"];
+
+    for fixture_name in fixture_names {
+        let source = fixture(&format!("import/html/{fixture_name}"));
+        let destination = temp_file(&format!("{fixture_name}.imported.md"));
+        let destination_str = destination.to_string_lossy().into_owned();
+        let output = run_mdm(&["import", &source, "-o", &destination_str]);
+        assert!(
+            output.status.success(),
+            "{fixture_name} import stderr: {}",
+            stderr(&output)
+        );
+
+        let contents = std::fs::read_to_string(&destination).expect("imported map should exist");
+        assert!(
+            contents.starts_with("- "),
+            "{fixture_name} should write native map nodes"
+        );
+
+        let validate = run_mdm(&["validate", &destination_str]);
+        assert!(
+            validate.status.success(),
+            "{fixture_name} validate stderr: {}\nstdout: {}",
+            stderr(&validate),
+            stdout(&validate)
+        );
+
+        std::fs::remove_file(destination).ok();
+    }
+}
+
+#[test]
+fn import_preview_prints_map_without_output_path() {
+    let source = temp_file("preview-source.md");
+    std::fs::write(&source, "# Preview Map\n\n- Child\n")
+        .expect("preview source should be writable");
+
+    let output = run_mdm(&[
+        "import",
+        source.to_str().unwrap(),
+        "--from",
+        "markdown",
+        "--preview",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("- Preview Map"));
+    assert!(stdout.contains("  - Child"));
+
+    std::fs::remove_file(source).ok();
+}
+
+#[test]
+fn import_infers_format_and_default_output_path() {
+    let source = temp_file("auto.md");
+    std::fs::write(&source, "# Auto Import\n\n- Child\n").expect("source should be writable");
+    let expected_output = source.with_file_name(format!(
+        "{}-mind.md",
+        source
+            .file_stem()
+            .expect("source should have a stem")
+            .to_string_lossy()
+    ));
+
+    let output = run_mdm(&["import", source.to_str().unwrap()]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output).trim(), expected_output.to_string_lossy());
+    assert!(expected_output.exists());
+
+    let contents = std::fs::read_to_string(&expected_output).expect("default output should exist");
+    assert!(contents.contains("- Auto Import"));
+    assert!(contents.contains("  - Child"));
+
+    std::fs::remove_file(source).ok();
+    std::fs::remove_file(expected_output).ok();
+}
+
+#[test]
+fn import_preview_can_infer_format_without_output_path() {
+    let source = temp_file("auto-preview.opml");
+    std::fs::write(
+        &source,
+        r#"<opml version="2.0"><body><outline text="Auto Preview" /></body></opml>"#,
+    )
+    .expect("source should be writable");
+
+    let output = run_mdm(&["import", source.to_str().unwrap(), "--preview"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stdout(&output).contains("- Auto Preview"));
+
+    std::fs::remove_file(source).ok();
+}
+
+#[test]
+fn import_can_infer_freemind_format() {
+    let source = temp_file("auto.mm");
+    std::fs::write(
+        &source,
+        r#"<map version="1.0.1"><node TEXT="Auto FreeMind" /></map>"#,
+    )
+    .expect("source should be writable");
+
+    let output = run_mdm(&["import", source.to_str().unwrap(), "--preview"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stdout(&output).contains("- Auto FreeMind"));
+
+    std::fs::remove_file(source).ok();
+}
+
+#[test]
+fn import_requires_from_when_extension_is_unknown() {
+    let source = temp_file("unknown.data");
+    std::fs::write(&source, "# Unknown\n").expect("source should be writable");
+
+    let output = run_mdm(&["import", source.to_str().unwrap(), "--preview"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("Could not infer import format"));
+
+    std::fs::remove_file(source).ok();
+}
+
+#[test]
+fn import_guides_planned_archive_and_pdf_formats() {
+    let cases = [
+        ("archive.xmind", "XMind `.xmind` import is planned"),
+        (
+            "archive.mmap",
+            "MindManager `.mmap` import is not implemented",
+        ),
+        (
+            "report.pdf",
+            "PDF ingestion is intentionally agent-authored",
+        ),
+    ];
+
+    for (name, expected) in cases {
+        let source = temp_file(name);
+        std::fs::write(&source, "placeholder").expect("source should be writable");
+
+        let output = run_mdm(&["import", source.to_str().unwrap(), "--preview"]);
+        assert_eq!(output.status.code(), Some(1), "{name} should fail");
+        assert!(
+            stderr(&output).contains(expected),
+            "{name} stderr should contain {expected:?}; got {}",
+            stderr(&output)
+        );
+
+        std::fs::remove_file(source).ok();
+    }
+}
+
+#[test]
+fn import_fetches_remote_web_sources_with_agent_guidance() {
+    let (url, handle) = serve_once(
+        "<!doctype html><html><body><h1>Remote Article</h1><p>Fetched body.</p><ul><li>Point one</li></ul></body></html>",
+    );
+
+    let output = run_mdm(&["import", &url, "--preview", "--report"]);
+    handle.join().expect("test server should finish");
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).contains("warning: web import is rough structural extraction"));
+    assert!(stderr(&output).contains("- format: web"));
+    assert!(stdout(&output).contains("- Remote Article"));
+    assert!(stdout(&output).contains("  | Fetched body."));
+    assert!(stdout(&output).contains("  - Point one"));
+}
+
+#[test]
+fn import_fetches_remote_html_when_format_is_explicit() {
+    let (url, handle) =
+        serve_once("<!doctype html><html><body><h1>Explicit HTML</h1></body></html>");
+
+    let output = run_mdm(&["import", &url, "--from", "html", "--preview"]);
+    handle.join().expect("test server should finish");
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).contains("warning: web import is rough structural extraction"));
+    assert!(stdout(&output).contains("- Explicit HTML"));
+}
+
+#[test]
+fn import_report_summarizes_imported_map() {
+    let source = temp_file("report-source.md");
+    let destination = temp_file("report-output.md");
+    std::fs::write(
+        &source,
+        "# Report Map [id:report]\n\nDetail line.\n\n- [ ] Task #todo @status:active [brief](docs/brief.md)\n",
+    )
+    .expect("report source should be writable");
+
+    let output = run_mdm(&[
+        "import",
+        source.to_str().unwrap(),
+        "--from",
+        "markdown",
+        "-o",
+        destination.to_str().unwrap(),
+        "--report",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let report = stderr(&output);
+    assert!(report.contains("Import report"));
+    assert!(report.contains("- format: markdown"));
+    assert!(report.contains("- nodes: 2"));
+    assert!(report.contains("- roots: 1"));
+    assert!(report.contains("- leaves: 1"));
+    assert!(report.contains("- detail_lines: 1"));
+    assert!(report.contains("- detail_nodes: 1"));
+    assert!(report.contains("- tags: 1"));
+    assert!(report.contains("- metadata: 1"));
+    assert!(report.contains("- ids: 1"));
+    assert!(report.contains("- duplicate_ids: 0"));
+    assert!(report.contains("- references: 1"));
+    assert!(report.contains("- reference_links: 1"));
+    assert!(report.contains("- reference_images: 0"));
+    assert!(report.contains("- reference_urls: 0"));
+    assert!(report.contains("- reference_local: 1"));
+    assert!(report.contains("- tasks: 1"));
+    assert!(report.contains("- task_open: 1"));
+    assert!(report.contains("- task_done: 0"));
+    assert!(report.contains("- validation_errors: 0"));
+    assert!(report.contains("- validation_warnings: 0"));
+    assert!(report.contains("- tag_breakdown: #todo=1"));
+    assert!(report.contains("- metadata_keys: status=1"));
+    assert!(report.contains("Imported '"));
+
+    std::fs::remove_file(source).ok();
+    std::fs::remove_file(destination).ok();
+}
+
+#[test]
+fn import_report_flags_duplicate_ids() {
+    let source = temp_file("report-duplicates.md");
+    std::fs::write(
+        &source,
+        "# Duplicate A [id:dupe]\n\n# Duplicate B [id:dupe]\n",
+    )
+    .expect("report source should be writable");
+
+    let output = run_mdm(&[
+        "import",
+        source.to_str().unwrap(),
+        "--from",
+        "markdown",
+        "--preview",
+        "--report",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let report = stderr(&output);
+    assert!(report.contains("- duplicate_ids: 1"));
+    assert!(report.contains("- validation_errors: 1"));
+
+    std::fs::remove_file(source).ok();
+}
+
+#[test]
+fn import_help_lists_formats_defaults_and_reporting() {
+    let output = run_mdm(&["import", "--help"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let help = stdout(&output);
+
+    assert!(help.contains("freemind"));
+    assert!(help.contains("html"));
+    assert!(help.contains("markdown"));
+    assert!(help.contains("mindmanager"));
+    assert!(help.contains("opml"));
+    assert!(help.contains("pdf"));
+    assert!(help.contains("web"));
+    assert!(help.contains("xmind"));
+    assert!(help.contains(".opml"));
+    assert!(help.contains(".html"));
+    assert!(help.contains(".xmind"));
+    assert!(help.contains(".pdf"));
+    assert!(help.contains("<source-stem>-mind.md"));
+    assert!(help.contains("--preview"));
+    assert!(help.contains("--report"));
 }
 
 #[test]

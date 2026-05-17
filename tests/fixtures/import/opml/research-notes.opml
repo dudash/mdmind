@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline title='Roadmap &amp; Research' _note="Alpha&#10;Beta &#x2713;" owner='jason' priority="high">
+      <outline text="Question &lt;One&gt;" note="Preserve body text as detail." />
+      <outline text="Decision Candidate" created="2026-05-13T03:45:00Z" status="draft">
+        <outline text="Pros" />
+        <outline text="Cons" />
+      </outline>
+    </outline>
+  </body>
+</opml>

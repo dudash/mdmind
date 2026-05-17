@@ -23,12 +23,13 @@ Use the product shelves for the current picture:
 - outliner guides and help is now shipped and tracked in the finished shelf
 - branch index is now shipped and tracked in the finished shelf
 - richer export now includes filtered export through `mdm export --query`
+- baseline import now supports OPML, FreeMind, Markdown, local HTML, and rough remote web import through `mdm import`
 
 ## Still Future
 
 - checklist semantics: [docs/product/features/future/checklist-semantics.md](product/features/future/checklist-semantics.md)
 - document and branch stats: [docs/product/features/future/document-and-branch-stats.md](product/features/future/document-and-branch-stats.md)
-- import and ingestion: [docs/product/features/future/import-and-ingestion.md](product/features/future/import-and-ingestion.md)
+- archive and document ingestion: [docs/product/features/future/archive-and-document-ingestion.md](product/features/future/archive-and-document-ingestion.md)
 - LLM wiki mindspace layer: [docs/LLM_WIKI_MINDSPACE_STRATEGY.md](LLM_WIKI_MINDSPACE_STRATEGY.md)
 - spatial canvas: [docs/product/features/future/spatial-canvas.md](product/features/future/spatial-canvas.md)
 - template variables: [docs/product/features/future/template-variables.md](product/features/future/template-variables.md)

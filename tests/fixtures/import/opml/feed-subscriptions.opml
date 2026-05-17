@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.0">
+  <head>
+    <title>RSS subscriptions</title>
+  </head>
+  <body>
+    <outline text="Technology">
+      <outline text="Example Engineering Blog" type="rss" xmlUrl="https://example.com/feed.xml" htmlUrl="https://example.com/blog" category="engineering" />
+      <outline text="Product Notes" type="rss" xmlUrl="https://example.com/product.xml" htmlUrl="https://example.com/product" category="product" />
+    </outline>
+    <outline text="Research">
+      <outline text="Local Lab Updates" type="rss" xmlUrl="https://example.org/lab.xml" htmlUrl="https://example.org/lab" />
+    </outline>
+  </body>
+</opml>

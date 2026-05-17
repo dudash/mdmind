@@ -28,6 +28,7 @@ Complete enough to present as current product:
 - stable ids and deep links across CLI, TUI navigation, subtree export, and cross-map references
 - CLI inspection for viewing, finding, tags, metadata, links, relations, validation, examples, and export
 - export to JSON, Mermaid, and OPML, including query-filtered and deep-linked scopes
+- import from OPML, FreeMind, Markdown outlines, local HTML, and rough remote web pages
 - visual mindmap overlay with relation edges when endpoints are visible and PNG export
 - read-only metadata/task table view over the current visible TUI scope, including selectable per-map columns
 - templates, examples, release installers, and Homebrew install support
@@ -39,7 +40,7 @@ Real, but still a moving target:
 
 Not complete yet:
 
-- import from existing outline and mind-map formats
+- richer archive/PDF import and merge workflows beyond the baseline importer
 - saved table presets, direct metadata editing, and broader derived table fields if real maps need them
 - richer binary attachment previews and open-in-external-app polish
 - polished presentation-grade visual/outline export

@@ -1,15 +1,15 @@
 ---
 name: mdm-cli-inspection
-description: Inspect, validate, query, audit, deep-link, list external refs, or export mdmind Markdown outline and mind map files with the mdm CLI. Use for existing maps, structured notes, knowledge maps, tags, metadata, ids, relations, external Markdown refs, subtree inspection, filtered search, plain/json output, or exports to JSON, Mermaid, and OPML. Do not use for drafting new map content from source material when the main task is authoring structure.
+description: Inspect, validate, query, audit, deep-link, list external refs, or export mdmind Markdown outline and mind map files with the mdm CLI. Use for existing maps, structured notes, knowledge maps, tags, metadata, ids, relations, external Markdown refs, subtree inspection, filtered search, plain/json output, or exports to JSON, Mermaid, and OPML. Do not use this skill for messy source ingestion; agents should read PDFs, websites, and prose-heavy HTML themselves, author the mdmind map with map-authoring guidance, then validate it.
 license: Apache-2.0
 metadata:
   author: mdmind
-  version: "0.4.0"
+  version: "0.5.2"
 ---
 
 # mdm CLI Inspection
 
-Use `mdm` as the read, query, validate, and export surface for existing map files.
+Use `mdm` as the read, query, validate, and export surface for map files.
 
 ## Use For
 
@@ -26,7 +26,8 @@ Use `mdm` as the read, query, validate, and export surface for existing map file
 
 ## Do Not Use For
 
-- Drafting a new map from notes when the main work is authoring structure.
+- Ingesting PDFs, websites, saved articles, or prose-heavy HTML. Agents are usually better at reading the source, deciding the outline structure, writing the mdmind map directly, and validating it.
+- Converting external outline files unless the user explicitly asks to use `mdm import`; keep this skill focused on inspection, validation, querying, and export.
 - Rewriting large parts of a map unless the user is explicitly asking for file edits.
 - Purely visual diagram design.
 
@@ -95,8 +96,9 @@ When inspecting task files, expect explicit checkbox markers to round-trip in th
 3. If one branch matters, use a deep link target instead of the whole file.
 4. If the user is exploring, prefer plain output and small, focused queries.
 5. If the user needs a machine-consumable result, prefer `--json` or `export --format json`.
-6. If the map looks malformed or generated, run `mdm validate` before drawing conclusions.
-7. Summarize the important result, not just the fact that a command ran.
+6. If the user asks to turn messy source material into a map, use map-authoring guidance and validate the authored result rather than relying on deterministic import.
+7. If the map looks malformed or generated, run `mdm validate` before drawing conclusions.
+8. Summarize the important result, not just the fact that a command ran.
 
 ## Output Conventions
 
@@ -115,6 +117,7 @@ Before handing back a result:
 4. If using `refs`, distinguish external Markdown refs from internal ids or `[[...]]` relations.
 5. Check that export format matches the downstream use case.
 6. If using `relations`, be explicit whether the result is whole-map outgoing relations or node-focused incoming plus outgoing relations.
+7. If authoring from messy source material, validate the authored map and mention that agent interpretation was used.
 
 ## Example User Prompts
 
@@ -130,6 +133,7 @@ Before handing back a result:
 - `relations file.md` and `relations file.md#id` answer different questions.
 - `export --query` can return an empty tree if the filter matches nothing.
 - `--plain` and `--json` are mutually exclusive on commands that support both.
+- Agents are often better than deterministic import for messy ingestion: they can read PDFs/sites/prose, choose useful structure, preserve intent, and create cleaner mdmind files.
 - If a file has parser errors, some higher-level conclusions are unreliable until `validate` is addressed.
 
 ## Return Format
