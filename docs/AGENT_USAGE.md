@@ -180,8 +180,17 @@ See [SKILLS_CUSTOMIZING.md](SKILLS_CUSTOMIZING.md) for guidance on extending
 the base mdmind skills with project-specific tags, metadata keys, and validation
 loops.
 
+## CLI Contract For Agents
+
+When an agent is driving `mdm` directly, prefer commands that are documented as
+non-interactive and parseable in [AGENT_CLI_CONTRACT.md](AGENT_CLI_CONTRACT.md).
+That contract defines stdout/stderr rules, exit codes, JSON migration risks,
+interactive command boundaries, and the follow-up slices for command discovery
+and next actions.
+
 ## Related Docs
 
+- [AGENT_CLI_CONTRACT.md](AGENT_CLI_CONTRACT.md)
 - [AGENT_SKILL_INSTALLS.md](AGENT_SKILL_INSTALLS.md)
 - [AGENT_TODO_MEMORY.md](AGENT_TODO_MEMORY.md)
 - [SKILLS_CUSTOMIZING.md](SKILLS_CUSTOMIZING.md)

@@ -18,12 +18,15 @@ Core commands:
 - `mdm tags`
 - `mdm kv`
 - `mdm links`
+- `mdm refs`
 - `mdm relations`
 - `mdm validate`
 - `mdm export`
 - `mdm import`
 - `mdm init`
+- `mdm examples`
 - `mdm open`
+- `mdm version`
 
 What export already ships:
 
@@ -45,6 +48,7 @@ Related docs:
 
 - [README.md](../../../../README.md)
 - [QUERY_LANGUAGE.md](../../../QUERY_LANGUAGE.md)
+- [AGENT_CLI_CONTRACT.md](../../../AGENT_CLI_CONTRACT.md)
 - [TEMPLATES.md](../../../TEMPLATES.md)
 - [EXPORT_TARGETS.md](../../../EXPORT_TARGETS.md)
 - [IMPORT_AND_INGESTION.md](../../../IMPORT_AND_INGESTION.md)
