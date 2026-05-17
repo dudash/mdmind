@@ -45,7 +45,7 @@ Good fits:
 This skill teaches agents how to choose the right `mdm` command for the job.
 It also distinguishes command `--json` response envelopes from
 `mdm export --format json`, which remains raw map document JSON for downstream
-tools.
+tools, and can use `mdm commands --json` as the local command discovery layer.
 
 ## Recommended Split
 

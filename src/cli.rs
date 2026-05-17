@@ -1,7 +1,11 @@
 use std::collections::BTreeMap;
+#[cfg(test)]
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+#[cfg(test)]
+use clap::CommandFactory;
 use clap::builder::PossibleValuesParser;
 use clap::error::ErrorKind;
 use clap::{ArgAction, Parser, Subcommand};
@@ -187,6 +191,11 @@ enum Commands {
         #[command(subcommand)]
         command: ExampleCommands,
     },
+    #[command(about = "Print the mdm command catalog for agents and scripts.")]
+    Commands {
+        #[arg(long)]
+        json: bool,
+    },
     #[command(about = "Open a map or deep link in the interactive navigator.")]
     Open {
         target: String,
@@ -353,6 +362,10 @@ impl Cli {
             Commands::Validate { target, json, .. } if *json => Some(JsonContext {
                 command: "validate",
                 target: Some(target.clone()),
+            }),
+            Commands::Commands { json } if *json => Some(JsonContext {
+                command: "commands",
+                target: None,
             }),
             Commands::Open { target, json, .. } if *json => Some(JsonContext {
                 command: "open",
@@ -577,6 +590,7 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             report,
         ),
         Commands::Examples { command } => dispatch_examples(command),
+        Commands::Commands { json } => dispatch_commands(json),
         Commands::Open {
             target,
             preview,
@@ -1009,6 +1023,418 @@ fn dispatch_examples(command: ExampleCommands) -> Result<(), CliError> {
     }
 }
 
+fn dispatch_commands(json: bool) -> Result<(), CliError> {
+    let catalog = command_catalog();
+    if json {
+        print_json_envelope(
+            "commands",
+            None,
+            "command_catalog.v1",
+            Some(count_summary(catalog.commands.len())),
+            Some(&catalog),
+            None,
+            Vec::new(),
+        );
+        return Ok(());
+    }
+
+    println!("mdm commands");
+    for command in &catalog.commands {
+        println!("- {}: {}", command.name, command.summary);
+    }
+    println!("\nUse `mdm commands --json` for agent-readable safety and output metadata.");
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+struct CommandCatalog {
+    version: &'static str,
+    commands: Vec<CommandInfo>,
+}
+
+#[derive(Debug, Serialize)]
+struct CommandInfo {
+    name: &'static str,
+    summary: &'static str,
+    reads: Vec<&'static str>,
+    writes: Vec<&'static str>,
+    network: bool,
+    interactive: bool,
+    output_modes: Vec<&'static str>,
+    args: Vec<CommandArgInfo>,
+    flags: Vec<CommandFlagInfo>,
+    formats: Vec<&'static str>,
+    examples: Vec<&'static str>,
+    docs: Vec<&'static str>,
+    skills: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct CommandArgInfo {
+    name: &'static str,
+    required: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct CommandFlagInfo {
+    name: &'static str,
+    takes_value: bool,
+    values: Vec<&'static str>,
+}
+
+fn command_catalog() -> CommandCatalog {
+    CommandCatalog {
+        version: APP_VERSION,
+        commands: vec![
+            command_info(
+                "view",
+                "Render a read-only tree view for a map or deep link.",
+                &["map"],
+                &[],
+                false,
+                false,
+                &["pretty", "json"],
+                &[arg("target", true)],
+                &[flag("--json"), flag_value("--max-depth", &["usize"])],
+                &[],
+                &["mdm view ideas.md", "mdm view ideas.md#product/mvp --json"],
+            ),
+            command_info(
+                "find",
+                "Search labels, tags, metadata, ids, details, and task state.",
+                &["map"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("target", true), arg("query", true)],
+                &[flag("--json"), flag("--plain")],
+                &[],
+                &[
+                    "mdm find TODO.md \"task:open\" --plain",
+                    "mdm find ideas.md \"#todo @status:active\" --json",
+                ],
+            ),
+            command_info(
+                "tags",
+                "List tag counts across a map or deep link.",
+                &["map"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("target", true)],
+                &[flag("--json"), flag("--plain")],
+                &[],
+                &["mdm tags ideas.md --plain"],
+            ),
+            command_info(
+                "kv",
+                "List inline key:value metadata rows.",
+                &["map"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("target", true)],
+                &[
+                    flag("--json"),
+                    flag("--plain"),
+                    flag_value("--keys", &["key,..."]),
+                ],
+                &[],
+                &["mdm kv ideas.md --keys status,owner --plain"],
+            ),
+            command_info(
+                "links",
+                "List every node id and its deep-linkable path.",
+                &["map"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("target", true)],
+                &[flag("--json"), flag("--plain")],
+                &[],
+                &["mdm links ideas.md --plain"],
+            ),
+            command_info(
+                "refs",
+                "List external Markdown links, files, URLs, and image references.",
+                &["map"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("target", true)],
+                &[flag("--json"), flag("--plain")],
+                &[],
+                &["mdm refs ideas.md --json"],
+            ),
+            command_info(
+                "relations",
+                "List outgoing relations, or incoming backlinks for a deep-linked node.",
+                &["map"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("target", true)],
+                &[flag("--json"), flag("--plain")],
+                &[],
+                &[
+                    "mdm relations ideas.md --plain",
+                    "mdm relations ideas.md#product/mvp --json",
+                ],
+            ),
+            command_info(
+                "validate",
+                "Validate parser structure, ids, references, relations, and metadata conventions.",
+                &["map"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("target", true)],
+                &[flag("--json"), flag("--plain")],
+                &[],
+                &["mdm validate ideas.md", "mdm validate ideas.md --json"],
+            ),
+            command_info(
+                "export",
+                "Export normalized map data, diagrams, or outliner interchange formats.",
+                &["map"],
+                &[],
+                false,
+                false,
+                &["json", "mermaid", "opml"],
+                &[arg("target", true)],
+                &[
+                    flag_value("--format", &["json", "mermaid", "opml"]),
+                    flag_value("--query", &["query"]),
+                ],
+                &["json", "mermaid", "opml"],
+                &[
+                    "mdm export ideas.md --format json",
+                    "mdm export ideas.md --query \"#todo @status:active\" --format json",
+                ],
+            ),
+            command_info(
+                "init",
+                "Create a new map from a starter template.",
+                &["template"],
+                &["map"],
+                false,
+                false,
+                &["path"],
+                &[arg("path", true)],
+                &[
+                    flag_value("--template", TemplateKind::names()),
+                    flag("--force"),
+                ],
+                &[],
+                &["mdm init TODO.md --template todo"],
+            ),
+            command_info(
+                "import",
+                "Import an external outline or rough structural source into a native mdmind map.",
+                &["source"],
+                &["map"],
+                true,
+                false,
+                &["path", "preview"],
+                &[arg("source", true)],
+                &[
+                    flag_value(
+                        "--from",
+                        &[
+                            "freemind",
+                            "html",
+                            "markdown",
+                            "mindmanager",
+                            "opml",
+                            "pdf",
+                            "web",
+                            "xmind",
+                        ],
+                    ),
+                    flag_value("--output", &["path"]),
+                    flag("--force"),
+                    flag("--preview"),
+                    flag("--report"),
+                ],
+                &["freemind", "html", "markdown", "opml"],
+                &[
+                    "mdm import notes.opml",
+                    "mdm import outline.md --from markdown --preview",
+                ],
+            ),
+            command_info(
+                "examples",
+                "List, locate, or copy the bundled example maps.",
+                &["bundled_examples"],
+                &[],
+                false,
+                false,
+                &["pretty"],
+                &[],
+                &[],
+                &[],
+                &["mdm examples list", "mdm examples copy all"],
+            ),
+            command_info(
+                "examples list",
+                "List the bundled example maps.",
+                &["bundled_examples"],
+                &[],
+                false,
+                false,
+                &["pretty"],
+                &[],
+                &[],
+                &[],
+                &["mdm examples list"],
+            ),
+            command_info(
+                "examples path",
+                "Print the installed on-disk examples directory, when available.",
+                &["installed_examples"],
+                &[],
+                false,
+                false,
+                &["path"],
+                &[],
+                &[],
+                &[],
+                &["mdm examples path"],
+            ),
+            command_info(
+                "examples copy",
+                "Copy one bundled example, or all examples, into a directory.",
+                &["bundled_examples"],
+                &["files"],
+                false,
+                false,
+                &["path"],
+                &[arg("name", true)],
+                &[flag_value("--to", &["path"]), flag("--force")],
+                &[],
+                &[
+                    "mdm examples copy all",
+                    "mdm examples copy demo --to scratch",
+                ],
+            ),
+            command_info(
+                "commands",
+                "Print the mdm command catalog for agents and scripts.",
+                &[],
+                &[],
+                false,
+                false,
+                &["pretty", "json"],
+                &[],
+                &[flag("--json")],
+                &["command_catalog.v1"],
+                &["mdm commands --json"],
+            ),
+            command_info(
+                "open",
+                "Open a map or deep link in the interactive navigator.",
+                &["map"],
+                &["session_sidecars"],
+                false,
+                true,
+                &["interactive", "preview", "json"],
+                &[arg("target", true)],
+                &[
+                    flag("--preview"),
+                    flag("--autosave"),
+                    flag("--json"),
+                    flag_value("--max-depth", &["usize"]),
+                ],
+                &[],
+                &["mdm open ideas.md", "mdm open ideas.md --json"],
+            ),
+            command_info(
+                "check-keys",
+                "Check how this terminal reports Alt+arrow keys.",
+                &["terminal_input"],
+                &[],
+                false,
+                true,
+                &["interactive"],
+                &[],
+                &[],
+                &[],
+                &["mdm check-keys"],
+            ),
+            command_info(
+                "version",
+                "Print the mdm version.",
+                &[],
+                &[],
+                false,
+                false,
+                &["plain"],
+                &[],
+                &[],
+                &[],
+                &["mdm version"],
+            ),
+        ],
+    }
+}
+
+fn command_info(
+    name: &'static str,
+    summary: &'static str,
+    reads: &[&'static str],
+    writes: &[&'static str],
+    network: bool,
+    interactive: bool,
+    output_modes: &[&'static str],
+    args: &[CommandArgInfo],
+    flags: &[CommandFlagInfo],
+    formats: &[&'static str],
+    examples: &[&'static str],
+) -> CommandInfo {
+    CommandInfo {
+        name,
+        summary,
+        reads: reads.to_vec(),
+        writes: writes.to_vec(),
+        network,
+        interactive,
+        output_modes: output_modes.to_vec(),
+        args: args.to_vec(),
+        flags: flags.to_vec(),
+        formats: formats.to_vec(),
+        examples: examples.to_vec(),
+        docs: vec!["docs/AGENT_CLI_CONTRACT.md"],
+        skills: vec!["skills/mdm-cli-inspection"],
+    }
+}
+
+fn arg(name: &'static str, required: bool) -> CommandArgInfo {
+    CommandArgInfo { name, required }
+}
+
+fn flag(name: &'static str) -> CommandFlagInfo {
+    CommandFlagInfo {
+        name,
+        takes_value: false,
+        values: Vec::new(),
+    }
+}
+
+fn flag_value(name: &'static str, values: &[&'static str]) -> CommandFlagInfo {
+    CommandFlagInfo {
+        name,
+        takes_value: true,
+        values: values.to_vec(),
+    }
+}
+
 fn copy_examples(name: &str, to: Option<PathBuf>, force: bool) -> Result<(), CliError> {
     if name.eq_ignore_ascii_case("all") {
         let destination = to.unwrap_or_else(|| PathBuf::from("mdmind-examples"));
@@ -1397,10 +1823,71 @@ fn raw_args_json_context() -> Option<JsonContext> {
         Some("refs") => "refs",
         Some("relations") => "relations",
         Some("validate") => "validate",
+        Some("commands") => "commands",
         Some("open") => "open",
         _ => "mdm",
     };
     let target = args.get(1).filter(|value| !value.starts_with('-')).cloned();
 
     Some(JsonContext { command, target })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn command_catalog_covers_clap_subcommands() {
+        let mut clap_paths = BTreeSet::new();
+        collect_clap_subcommands(&Cli::command(), None, &mut clap_paths);
+        let catalog_paths = command_catalog()
+            .commands
+            .iter()
+            .map(|command| command.name.to_string())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(catalog_paths, clap_paths);
+    }
+
+    fn collect_clap_subcommands(
+        command: &clap::Command,
+        parent: Option<String>,
+        paths: &mut BTreeSet<String>,
+    ) {
+        for subcommand in command.get_subcommands() {
+            let path = match &parent {
+                Some(parent) => format!("{} {}", parent, subcommand.get_name()),
+                None => subcommand.get_name().to_string(),
+            };
+            paths.insert(path.clone());
+            collect_clap_subcommands(subcommand, Some(path), paths);
+        }
+    }
+
+    #[test]
+    fn command_catalog_marks_interactive_and_writing_commands() {
+        let catalog = command_catalog();
+        let open = catalog
+            .commands
+            .iter()
+            .find(|command| command.name == "open")
+            .expect("open should be cataloged");
+        assert!(open.interactive);
+        assert!(open.output_modes.contains(&"json"));
+
+        let init = catalog
+            .commands
+            .iter()
+            .find(|command| command.name == "init")
+            .expect("init should be cataloged");
+        assert!(init.writes.contains(&"map"));
+        assert!(!init.interactive);
+
+        let command_catalog = catalog
+            .commands
+            .iter()
+            .find(|command| command.name == "commands")
+            .expect("commands should be cataloged");
+        assert!(command_catalog.formats.contains(&"command_catalog.v1"));
+    }
 }

@@ -58,7 +58,7 @@ The stable contract should instead use explicit, composable modes:
   useful
 - `--json` for parseable command results
 - `mdm export --format json` for raw document export
-- future `mdm commands --json` for command discovery
+- `mdm commands --json` for command discovery
 
 If a future command needs to suppress prompts, add a clear non-interactive flag
 such as `--non-interactive` or command-specific required flags. Avoid making
@@ -119,6 +119,7 @@ payload lives in `data`:
 | `refs --json` | `reference_rows.v1` | `ReferenceRow[]` |
 | `relations --json` | `relation_rows.v1` | `RelationRow[]` |
 | `validate --json` | `diagnostics.v1` | `Diagnostic[]` |
+| `commands --json` | `command_catalog.v1` | `CommandCatalog` object |
 | `export --format json` | raw export | `ExportDocument` object |
 
 `mdm export --format json` intentionally remains raw document export because
@@ -243,7 +244,7 @@ listed as interactive in `mdm commands --json`.
 | `mdm export <target>` | map | no | no | no | Use `--format json`, `mermaid`, or `opml`; use `--query` for filtered exports. |
 | `mdm init <path>` | templates | map file | no | no | Requires `--template`; use `--force` only when overwriting intentionally. |
 | `mdm import <source>` | source | map file unless `--preview` | URL sources only | no | Prefer `--preview` for agent review; remote URL import is lossy and fetches the network. |
-| `mdm examples list` | bundled examples | no | no | no | Human-readable list only today; future command catalog may cover machine discovery. |
+| `mdm examples list` | bundled examples | no | no | no | Human-readable list; use `mdm commands --json` for machine discovery metadata. |
 | `mdm examples path` | installed examples | no | no | no | Prints examples directory when available. |
 | `mdm examples copy <name>` | bundled examples | files | no | no | Use `all` to materialize examples; use `--force` only when intentional. |
 | `mdm open <target>` | map | session/location sidecars in interactive mode | no | yes by default | Agents should use `--preview` or `--json`; avoid bare `open`. |
@@ -255,36 +256,47 @@ listed as interactive in `mdm commands --json`.
 
 ## Command Discovery Target
 
-`mdm commands --json` should expose the command surface in one local,
-machine-readable result.
+`mdm commands --json` exposes the command surface in one local,
+machine-readable result. Like other command-style JSON output, it uses the mdm
+response envelope; the catalog lives under `data`.
 
-Minimum shape:
+Envelope payload shape:
 
 ```json
 {
-  "version": "0.7.0",
-  "commands": [
-    {
-      "name": "find",
-      "summary": "Search labels, tags, metadata, and ids.",
-      "reads": ["map"],
-      "writes": [],
-      "network": false,
-      "interactive": false,
-      "output_modes": ["pretty", "plain", "json"],
-      "args": [
-        {"name": "target", "required": true},
-        {"name": "query", "required": true}
-      ],
-      "flags": [
-        {"name": "--plain", "takes_value": false},
-        {"name": "--json", "takes_value": false}
-      ],
-      "examples": [
-        "mdm find TODO.md \"task:open\" --plain"
-      ]
-    }
-  ]
+  "ok": true,
+  "command": "commands",
+  "format": "command_catalog.v1",
+  "data": {
+    "version": "0.7.0",
+    "commands": [
+      {
+        "name": "find",
+        "summary": "Search labels, tags, metadata, ids, details, and task state.",
+        "reads": ["map"],
+        "writes": [],
+        "network": false,
+        "interactive": false,
+        "output_modes": ["pretty", "plain", "json"],
+        "args": [
+          {"name": "target", "required": true},
+          {"name": "query", "required": true}
+        ],
+        "flags": [
+          {"name": "--plain", "takes_value": false, "values": []},
+          {"name": "--json", "takes_value": false, "values": []}
+        ],
+        "formats": [],
+        "examples": [
+          "mdm find TODO.md \"task:open\" --plain"
+        ],
+        "docs": ["docs/AGENT_CLI_CONTRACT.md"],
+        "skills": ["skills/mdm-cli-inspection"]
+      }
+    ]
+  },
+  "summary": {"count": 19},
+  "next_actions": []
 }
 ```
 
@@ -329,6 +341,7 @@ The implementation slices that follow this contract should add tests for:
 - `validate` exits `0` for warnings-only diagnostics and `1` for errors
 - interactive commands fail clearly when run without a TTY
 - no progress or warning text contaminates JSON stdout
+- `mdm commands --json` stays synchronized with Clap subcommand definitions
 - `mdm export --format json` remains raw document data
 
 ## Follow-Up Slices

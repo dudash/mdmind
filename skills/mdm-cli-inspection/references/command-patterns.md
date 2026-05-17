@@ -2,6 +2,17 @@
 
 Use these patterns to choose the right command quickly.
 
+## Discover The CLI Surface
+
+Use:
+
+```bash
+mdm commands --json
+```
+
+The command catalog returns an mdm response envelope. Read command metadata from
+`data.commands`.
+
 ## Validate First
 
 Use:
