@@ -57,6 +57,10 @@ fn stderr(output: &std::process::Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr should be utf-8")
 }
 
+fn json_stdout(output: &std::process::Output) -> serde_json::Value {
+    serde_json::from_str(&stdout(output)).expect("stdout should be valid json")
+}
+
 #[test]
 fn view_renders_tree_output() {
     let output = run_mdm(&["view", &fixture("sample.md")]);
@@ -85,6 +89,87 @@ fn find_supports_plain_output() {
     let stdout = stdout(&output);
     assert!(stdout.contains("Prompt Library"));
     assert!(stdout.contains("prompts/library"));
+}
+
+#[test]
+fn find_json_uses_a_success_envelope() {
+    let output = run_mdm(&["find", &fixture("sample.md"), "#prompt", "--json"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "find");
+    assert_eq!(value["format"], "search_matches.v1");
+    assert_eq!(value["target"], fixture("sample.md"));
+    assert_eq!(value["summary"]["count"], 1);
+    assert_eq!(value["data"][0]["text"], "Prompt Library");
+    assert_eq!(value["data"][0]["id"], "prompts/library");
+}
+
+#[test]
+fn find_json_query_miss_returns_an_empty_success_envelope() {
+    let output = run_mdm(&[
+        "find",
+        &fixture("sample.md"),
+        "no-such-query-token",
+        "--json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "find");
+    assert_eq!(value["summary"]["count"], 0);
+    assert_eq!(
+        value["data"]
+            .as_array()
+            .expect("data should be an array")
+            .len(),
+        0
+    );
+}
+
+#[test]
+fn json_mode_invalid_output_flags_return_an_error_envelope() {
+    let output = run_mdm(&[
+        "find",
+        &fixture("sample.md"),
+        "#prompt",
+        "--json",
+        "--plain",
+    ]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], false);
+    assert_eq!(value["command"], "find");
+    assert_eq!(value["format"], "error.v1");
+    assert_eq!(value["error"]["code"], "invalid_output_mode");
+    assert_eq!(value["error"]["category"], "usage");
+    assert!(
+        value["error"]["message"]
+            .as_str()
+            .expect("message should be a string")
+            .contains("Choose either --json or --plain")
+    );
+}
+
+#[test]
+fn json_mode_runtime_failures_return_an_error_envelope() {
+    let missing = temp_file("missing.md");
+    let output = run_mdm(&["view", missing.to_str().unwrap(), "--json"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], false);
+    assert_eq!(value["command"], "view");
+    assert_eq!(value["format"], "error.v1");
+    assert_eq!(value["target"], missing.to_string_lossy().as_ref());
+    assert_eq!(value["error"]["code"], "file_read_failed");
+    assert_eq!(value["error"]["category"], "filesystem");
 }
 
 #[test]
@@ -806,6 +891,42 @@ fn validate_fails_with_exit_code_one_for_invalid_maps() {
     let stdout = stdout(&output);
     assert!(stdout.contains("error"));
     assert!(stdout.contains("Duplicate id"));
+}
+
+#[test]
+fn validate_json_failure_includes_diagnostics_in_an_error_envelope() {
+    let output = run_mdm(&["validate", &fixture("invalid.md"), "--json"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], false);
+    assert_eq!(value["command"], "validate");
+    assert_eq!(value["format"], "diagnostics.v1");
+    assert_eq!(value["error"]["code"], "validation_failed");
+    assert_eq!(value["summary"]["errors"], 3);
+    assert!(
+        value["data"]
+            .as_array()
+            .expect("diagnostics should be an array")
+            .iter()
+            .any(|diagnostic| diagnostic["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("Duplicate id"))
+    );
+    assert_eq!(
+        value["next_actions"][0]["command"][0],
+        serde_json::Value::String("mdm".to_string())
+    );
+}
+
+#[test]
+fn unsupported_export_formats_remain_human_readable_errors() {
+    let output = run_mdm(&["export", &fixture("sample.md"), "--format", "yaml"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stdout(&output).is_empty());
+    assert!(stderr(&output).contains("Unsupported export format 'yaml'"));
 }
 
 #[test]

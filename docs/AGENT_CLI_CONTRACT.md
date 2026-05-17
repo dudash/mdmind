@@ -105,23 +105,24 @@ error diagnostics.
 
 ## JSON Contract
 
-Current `--json` output is command-specific raw JSON:
+Command-style `--json` output uses a consistent envelope. The command-specific
+payload lives in `data`:
 
-| Command | Current top-level JSON |
-| --- | --- |
-| `view --json` | `ExportDocument` object |
-| `open --json` | `ExportDocument` object |
-| `find --json` | `SearchMatch[]` |
-| `tags --json` | `TagCount[]` |
-| `kv --json` | `MetadataRow[]` |
-| `links --json` | `LinkEntry[]` |
-| `refs --json` | `ReferenceRow[]` |
-| `relations --json` | `RelationRow[]` |
-| `validate --json` | `Diagnostic[]` |
-| `export --format json` | `ExportDocument` object |
+| Command | Envelope `format` | `data` payload |
+| --- | --- | --- |
+| `view --json` | `export_document.v1` | `ExportDocument` object |
+| `open --json` | `export_document.v1` | `ExportDocument` object |
+| `find --json` | `search_matches.v1` | `SearchMatch[]` |
+| `tags --json` | `tag_counts.v1` | `TagCount[]` |
+| `kv --json` | `metadata_rows.v1` | `MetadataRow[]` |
+| `links --json` | `link_entries.v1` | `LinkEntry[]` |
+| `refs --json` | `reference_rows.v1` | `ReferenceRow[]` |
+| `relations --json` | `relation_rows.v1` | `RelationRow[]` |
+| `validate --json` | `diagnostics.v1` | `Diagnostic[]` |
+| `export --format json` | raw export | `ExportDocument` object |
 
-The stable agent contract should add a consistent envelope for command-style
-JSON while preserving raw document export for `mdm export --format json`.
+`mdm export --format json` intentionally remains raw document export because
+downstream tools use it as document data, not command metadata.
 
 Target success envelope:
 
@@ -184,13 +185,11 @@ Error object fields:
 - `line`: optional 1-based line number.
 - `details`: optional object for command-specific context.
 
-Migration risk: current consumers may expect top-level arrays from
+Migration risk: pre-MDM-18 consumers may expect top-level arrays from
 `find --json`, `tags --json`, `kv --json`, `links --json`, `refs --json`,
-`relations --json`, and `validate --json`. The envelope migration must either
-ship with an explicit compatibility mode or be treated as the pre-1.0 breaking
-change that establishes the stable agent contract. `mdm export --format json`
-should remain a raw export object because downstream tools use it as document
-data, not command metadata.
+`relations --json`, and `validate --json`. The envelope is the stable pre-1.0
+agent contract from MDM-18 onward. `mdm export --format json` remains a raw
+export object.
 
 ## Plain Output Contract
 

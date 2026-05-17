@@ -5,6 +5,8 @@ use std::process::ExitCode;
 use clap::builder::PossibleValuesParser;
 use clap::error::ErrorKind;
 use clap::{ArgAction, Parser, Subcommand};
+use serde::Serialize;
+use serde_json::json;
 
 use crate::APP_VERSION;
 use crate::app::{
@@ -122,7 +124,7 @@ enum Commands {
         #[arg(
             long,
             default_value = "json",
-            value_parser = PossibleValuesParser::new(["json", "mermaid", "opml"])
+            help = "Export format: json, mermaid, or opml."
         )]
         format: String,
         #[arg(long)]
@@ -244,6 +246,8 @@ struct TuiPreviewCli {
 struct CliError {
     message: Option<String>,
     exit_code: u8,
+    code: &'static str,
+    category: &'static str,
 }
 
 impl CliError {
@@ -251,32 +255,111 @@ impl CliError {
         Self {
             message: Some(message.into()),
             exit_code: 1,
+            code: "runtime_error",
+            category: "runtime",
+        }
+    }
+
+    fn usage(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            message: Some(message.into()),
+            exit_code: 2,
+            code,
+            category: "usage",
         }
     }
 
     fn from_app(error: AppError) -> Self {
-        Self::runtime(error.message().to_string())
+        let mut cli_error = Self::runtime(error.message().to_string());
+        let message = error.message();
+        if message.starts_with("Could not read ") {
+            cli_error.code = "file_read_failed";
+            cli_error.category = "filesystem";
+        } else if message.starts_with("The map contains parser errors") {
+            cli_error.code = "parser_errors";
+            cli_error.category = "parse";
+        } else if message.starts_with("No node id or label path matches anchor")
+            || message.starts_with("Anchor ")
+        {
+            cli_error.code = "anchor_resolution_failed";
+        }
+        cli_error
     }
 
     fn silent(exit_code: u8) -> Self {
         Self {
             message: None,
             exit_code,
+            code: "silent",
+            category: "runtime",
         }
     }
 }
 
 pub fn run_mdm() -> ExitCode {
     match Cli::try_parse() {
-        Ok(cli) => finish(dispatch(cli)),
-        Err(error) => finish_clap_error(error),
+        Ok(cli) => {
+            let json_context = cli.json_context();
+            finish(dispatch(cli), json_context)
+        }
+        Err(error) => finish_clap_error(error, raw_args_json_context()),
     }
 }
 
 pub fn run_mdmind() -> ExitCode {
     match TuiPreviewCli::try_parse() {
-        Ok(cli) => finish(dispatch_tui_preview(cli)),
-        Err(error) => finish_clap_error(error),
+        Ok(cli) => finish(dispatch_tui_preview(cli), None),
+        Err(error) => finish_clap_error(error, None),
+    }
+}
+
+#[derive(Debug, Clone)]
+struct JsonContext {
+    command: &'static str,
+    target: Option<String>,
+}
+
+impl Cli {
+    fn json_context(&self) -> Option<JsonContext> {
+        match &self.command {
+            Commands::View { target, json, .. } if *json => Some(JsonContext {
+                command: "view",
+                target: Some(target.clone()),
+            }),
+            Commands::Find { target, json, .. } if *json => Some(JsonContext {
+                command: "find",
+                target: Some(target.clone()),
+            }),
+            Commands::Tags { target, json, .. } if *json => Some(JsonContext {
+                command: "tags",
+                target: Some(target.clone()),
+            }),
+            Commands::Kv { target, json, .. } if *json => Some(JsonContext {
+                command: "kv",
+                target: Some(target.clone()),
+            }),
+            Commands::Links { target, json, .. } if *json => Some(JsonContext {
+                command: "links",
+                target: Some(target.clone()),
+            }),
+            Commands::Refs { target, json, .. } if *json => Some(JsonContext {
+                command: "refs",
+                target: Some(target.clone()),
+            }),
+            Commands::Relations { target, json, .. } if *json => Some(JsonContext {
+                command: "relations",
+                target: Some(target.clone()),
+            }),
+            Commands::Validate { target, json, .. } if *json => Some(JsonContext {
+                command: "validate",
+                target: Some(target.clone()),
+            }),
+            Commands::Open { target, json, .. } if *json => Some(JsonContext {
+                command: "open",
+                target: Some(target.clone()),
+            }),
+            _ => None,
+        }
     }
 }
 
@@ -286,7 +369,7 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             target,
             json,
             max_depth,
-        } => render_view_like(&target, json, max_depth),
+        } => render_view_like("view", &target, json, max_depth),
         Commands::Find {
             target,
             query,
@@ -302,6 +385,10 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             print_output(
                 json,
                 plain,
+                "find",
+                Some(&target),
+                "search_matches.v1",
+                Some(count_summary(matches.len())),
                 &matches,
                 || render_find(&matches),
                 || render_find_plain(&matches),
@@ -318,6 +405,10 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             print_output(
                 json,
                 plain,
+                "tags",
+                Some(&target),
+                "tag_counts.v1",
+                Some(count_summary(tags.len())),
                 &tags,
                 || render_tags(&tags),
                 || render_tags_plain(&tags),
@@ -338,6 +429,10 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             print_output(
                 json,
                 plain,
+                "kv",
+                Some(&target),
+                "metadata_rows.v1",
+                Some(count_summary(rows.len())),
                 &rows,
                 || render_metadata(&rows),
                 || render_metadata_plain(&rows),
@@ -354,6 +449,10 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             print_output(
                 json,
                 plain,
+                "links",
+                Some(&target),
+                "link_entries.v1",
+                Some(count_summary(links.len())),
                 &links,
                 || render_links(&links),
                 || render_links_plain(&links),
@@ -370,6 +469,10 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             print_output(
                 json,
                 plain,
+                "refs",
+                Some(&target),
+                "reference_rows.v1",
+                Some(count_summary(refs.len())),
                 &refs,
                 || render_references(&refs),
                 || render_references_plain(&refs),
@@ -393,6 +496,10 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             print_output(
                 json,
                 plain,
+                "relations",
+                Some(&target),
+                "relation_rows.v1",
+                Some(count_summary(rows.len())),
                 &rows,
                 || render_relations(&rows),
                 || render_relations_plain(&rows),
@@ -405,13 +512,7 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
         } => {
             let loaded = load_document(&target).map_err(CliError::from_app)?;
             let diagnostics = diagnostics_for_validate(&loaded);
-            print_output(
-                json,
-                plain,
-                &diagnostics,
-                || render_validate(&diagnostics),
-                || render_validate_plain(&diagnostics),
-            )?;
+            print_validate_output(json, plain, &target, &diagnostics)?;
 
             if diagnostics_have_errors(&diagnostics) {
                 return Err(CliError::silent(1));
@@ -484,7 +585,7 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             max_depth,
         } => {
             if preview || json {
-                render_view_like(&target, json, max_depth)
+                render_view_like("open", &target, json, max_depth)
             } else {
                 run_interactive(&target, autosave).map_err(CliError::from_app)
             }
@@ -987,19 +1088,30 @@ fn dispatch_tui_preview(cli: TuiPreviewCli) -> Result<(), CliError> {
     };
 
     if cli.preview {
-        render_view_like(&target, false, cli.max_depth)
+        render_view_like("mdmind", &target, false, cli.max_depth)
     } else {
         run_interactive(&target, cli.autosave).map_err(CliError::from_app)
     }
 }
 
-fn render_view_like(target: &str, json: bool, max_depth: Option<usize>) -> Result<(), CliError> {
+fn render_view_like(
+    command: &'static str,
+    target: &str,
+    json: bool,
+    max_depth: Option<usize>,
+) -> Result<(), CliError> {
     let loaded = load_document(target).map_err(CliError::from_app)?;
     let document = select_document(&loaded).map_err(CliError::from_app)?;
     if json {
-        println!(
-            "{}",
-            export_document(&document, "json").expect("json export should succeed")
+        let exported = document.export();
+        print_json_envelope(
+            command,
+            Some(target),
+            "export_document.v1",
+            Some(count_summary(exported.nodes.len())),
+            Some(&exported),
+            None,
+            Vec::new(),
         );
     } else {
         println!("{}", render_tree(&document, max_depth));
@@ -1010,20 +1122,30 @@ fn render_view_like(target: &str, json: bool, max_depth: Option<usize>) -> Resul
 fn print_output<T: serde::Serialize>(
     json: bool,
     plain: bool,
+    command: &'static str,
+    target: Option<&str>,
+    format: &'static str,
+    summary: Option<serde_json::Value>,
     value: &T,
     pretty: impl FnOnce() -> String,
     plain_renderer: impl FnOnce() -> String,
 ) -> Result<(), CliError> {
     if json && plain {
-        return Err(CliError::runtime(
+        return Err(CliError::usage(
+            "invalid_output_mode",
             "Choose either --json or --plain, not both.",
         ));
     }
 
     if json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(value).expect("serialization should succeed")
+        print_json_envelope(
+            command,
+            target,
+            format,
+            summary,
+            Some(value),
+            None,
+            Vec::new(),
         );
     } else if plain {
         println!("{}", plain_renderer());
@@ -1033,27 +1155,252 @@ fn print_output<T: serde::Serialize>(
     Ok(())
 }
 
+fn print_validate_output(
+    json: bool,
+    plain: bool,
+    target: &str,
+    diagnostics: &[crate::model::Diagnostic],
+) -> Result<(), CliError> {
+    if json && plain {
+        return Err(CliError::usage(
+            "invalid_output_mode",
+            "Choose either --json or --plain, not both.",
+        ));
+    }
+
+    if json {
+        let has_errors = diagnostics_have_errors(diagnostics);
+        let error = has_errors.then(|| JsonError {
+            code: "validation_failed",
+            category: "validation",
+            message: "Map validation reported one or more errors.".to_string(),
+            path: Some(target.to_string()),
+            line: None,
+            details: None,
+        });
+        let next_actions = if has_errors {
+            vec![JsonNextAction {
+                label: "Review validation diagnostics as plain text".to_string(),
+                command: vec![
+                    "mdm".to_string(),
+                    "validate".to_string(),
+                    target.to_string(),
+                    "--plain".to_string(),
+                ],
+                writes: false,
+            }]
+        } else {
+            Vec::new()
+        };
+        print_json_envelope(
+            "validate",
+            Some(target),
+            "diagnostics.v1",
+            Some(diagnostics_summary(diagnostics)),
+            Some(diagnostics),
+            error,
+            next_actions,
+        );
+    } else if plain {
+        println!("{}", render_validate_plain(diagnostics));
+    } else {
+        println!("{}", render_validate(diagnostics));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+struct JsonEnvelope<'a, T: Serialize + ?Sized> {
+    ok: bool,
+    command: &'static str,
+    format: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    target: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<&'a T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<JsonError>,
+    next_actions: Vec<JsonNextAction>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonError {
+    code: &'static str,
+    category: &'static str,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    line: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    details: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonNextAction {
+    label: String,
+    command: Vec<String>,
+    writes: bool,
+}
+
+fn print_json_envelope<T: Serialize + ?Sized>(
+    command: &'static str,
+    target: Option<&str>,
+    format: &'static str,
+    summary: Option<serde_json::Value>,
+    data: Option<&T>,
+    error: Option<JsonError>,
+    next_actions: Vec<JsonNextAction>,
+) {
+    let envelope = JsonEnvelope {
+        ok: error.is_none(),
+        command,
+        format,
+        target,
+        data,
+        summary,
+        error,
+        next_actions,
+    };
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&envelope).expect("json envelope should serialize")
+    );
+}
+
+fn count_summary(count: usize) -> serde_json::Value {
+    json!({ "count": count })
+}
+
+fn diagnostics_summary(diagnostics: &[crate::model::Diagnostic]) -> serde_json::Value {
+    let errors = diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == Severity::Error)
+        .count();
+    let warnings = diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == Severity::Warning)
+        .count();
+    json!({
+        "errors": errors,
+        "warnings": warnings,
+        "count": diagnostics.len()
+    })
+}
+
 fn template_name(template: TemplateKind) -> &'static str {
     template.name()
 }
 
-fn finish(result: Result<(), CliError>) -> ExitCode {
+fn finish(result: Result<(), CliError>, json_context: Option<JsonContext>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            if let Some(message) = error.message {
-                eprintln!("error: {message}");
+            if let Some(message) = &error.message {
+                if let Some(context) = json_context {
+                    print_json_error(&context, &error, message.clone());
+                } else {
+                    eprintln!("error: {message}");
+                }
             }
             ExitCode::from(error.exit_code)
         }
     }
 }
 
-fn finish_clap_error(error: clap::Error) -> ExitCode {
+fn finish_clap_error(error: clap::Error, json_context: Option<JsonContext>) -> ExitCode {
     let exit_code = match error.kind() {
         ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => 0,
         _ => 2,
     };
-    error.print().expect("clap should print help");
+    if exit_code == 0 || json_context.is_none() {
+        error.print().expect("clap should print help");
+    } else if let Some(context) = json_context {
+        let cli_error = CliError::usage("invalid_usage", error.to_string());
+        print_json_error(&context, &cli_error, error.to_string());
+    }
     ExitCode::from(exit_code)
+}
+
+fn print_json_error(context: &JsonContext, error: &CliError, message: String) {
+    let json_error = JsonError {
+        code: error.code,
+        category: error.category,
+        message,
+        path: context.target.clone(),
+        line: None,
+        details: None,
+    };
+    print_json_envelope::<serde_json::Value>(
+        context.command,
+        context.target.as_deref(),
+        "error.v1",
+        None,
+        None,
+        Some(json_error),
+        recovery_actions(context, error),
+    );
+}
+
+fn recovery_actions(context: &JsonContext, error: &CliError) -> Vec<JsonNextAction> {
+    let Some(target) = &context.target else {
+        return Vec::new();
+    };
+
+    match error.code {
+        "anchor_resolution_failed" => vec![JsonNextAction {
+            label: "Inspect available ids".to_string(),
+            command: vec![
+                "mdm".to_string(),
+                "links".to_string(),
+                target_path_without_anchor(target),
+                "--plain".to_string(),
+            ],
+            writes: false,
+        }],
+        "parser_errors" => vec![JsonNextAction {
+            label: "Review validation diagnostics".to_string(),
+            command: vec![
+                "mdm".to_string(),
+                "validate".to_string(),
+                target_path_without_anchor(target),
+                "--plain".to_string(),
+            ],
+            writes: false,
+        }],
+        _ => Vec::new(),
+    }
+}
+
+fn target_path_without_anchor(target: &str) -> String {
+    target
+        .split_once('#')
+        .map(|(path, _)| path)
+        .unwrap_or(target)
+        .to_string()
+}
+
+fn raw_args_json_context() -> Option<JsonContext> {
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    if !args.iter().any(|arg| arg == "--json") {
+        return None;
+    }
+
+    let command = match args.first().map(String::as_str) {
+        Some("view") => "view",
+        Some("find") => "find",
+        Some("tags") => "tags",
+        Some("kv") => "kv",
+        Some("links") => "links",
+        Some("refs") => "refs",
+        Some("relations") => "relations",
+        Some("validate") => "validate",
+        Some("open") => "open",
+        _ => "mdm",
+    };
+    let target = args.get(1).filter(|value| !value.starts_with('-')).cloned();
+
+    Some(JsonContext { command, target })
 }
