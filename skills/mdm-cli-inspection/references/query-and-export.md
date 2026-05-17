@@ -48,6 +48,9 @@ Command-style `--json` returns an envelope:
 
 For raw map document data, use `mdm export <target> --format json` instead.
 
+Use `mdm commands --json` when an agent or script needs to discover available
+commands, arguments, flags, output modes, safety metadata, and examples.
+
 ## Deep Links
 
 Use deep links when one branch matters more than the full map:

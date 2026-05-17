@@ -36,6 +36,8 @@ If the task is mainly about creating or reshaping map content, use `mdmind-map-a
 ## Defaults
 
 - Start with the smallest command that answers the question.
+- Use `mdm commands --json` when you need to discover command safety,
+  interactivity, arguments, flags, output modes, and examples locally.
 - Prefer `--plain` for grep-friendly inspection and quick human scanning.
 - Use command `--json` when another tool needs the mdm response envelope with
   `ok`, `command`, `format`, `data`, `summary`, `error`, and `next_actions`.
@@ -73,6 +75,7 @@ If `mdm` is missing, do not invent command results. Tell the user to install `md
 - Use `mdm refs <file>` to list external Markdown refs attached to nodes.
 - Use `mdm relations <file>` or `mdm relations <file>#id` to inspect graph edges.
 - Use `mdm export <file> --format json|mermaid|opml` for downstream tools.
+- Use `mdm commands --json` to discover the current command catalog.
 
 ## TODO Map Inspection
 

@@ -173,6 +173,79 @@ fn json_mode_runtime_failures_return_an_error_envelope() {
 }
 
 #[test]
+fn commands_json_lists_agent_command_catalog() {
+    let output = run_mdm(&["commands", "--json"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "commands");
+    assert_eq!(value["format"], "command_catalog.v1");
+    assert_eq!(value["data"]["version"], env!("CARGO_PKG_VERSION"));
+
+    let commands = value["data"]["commands"]
+        .as_array()
+        .expect("commands should be an array");
+    let names = commands
+        .iter()
+        .filter_map(|command| command["name"].as_str())
+        .collect::<Vec<_>>();
+
+    for expected in [
+        "view",
+        "find",
+        "tags",
+        "kv",
+        "links",
+        "refs",
+        "relations",
+        "validate",
+        "export",
+        "init",
+        "import",
+        "examples",
+        "examples list",
+        "examples path",
+        "examples copy",
+        "commands",
+        "open",
+        "check-keys",
+        "version",
+    ] {
+        assert!(
+            names.contains(&expected),
+            "catalog should include {expected}; got {names:?}"
+        );
+    }
+
+    let find = commands
+        .iter()
+        .find(|command| command["name"] == "find")
+        .expect("find should be cataloged");
+    assert_eq!(find["interactive"], false);
+    assert!(
+        find["output_modes"]
+            .as_array()
+            .unwrap()
+            .contains(&"json".into())
+    );
+    assert!(find["args"].as_array().unwrap().len() >= 2);
+
+    let open = commands
+        .iter()
+        .find(|command| command["name"] == "open")
+        .expect("open should be cataloged");
+    assert_eq!(open["interactive"], true);
+    assert!(
+        open["writes"]
+            .as_array()
+            .unwrap()
+            .contains(&"session_sidecars".into())
+    );
+}
+
+#[test]
 fn find_supports_task_state_queries() {
     let map_path = temp_file("task-query.md");
     std::fs::write(
