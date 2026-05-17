@@ -55,6 +55,13 @@ Use `mdm-cli-inspection` when the core task is CLI-based inspection or export.
 
 If both are needed, author first and inspect second.
 
+## Evaluation
+
+Outcome evals for these skills live in
+[evals/skill-workflows](../evals/skill-workflows). The local harness initializes
+clean workspaces, lets an agent write requested artifacts, and grades the
+results with deterministic checks and `mdm` commands.
+
 ## Installation
 
 Clone the repo once, then install one or both skill folders:

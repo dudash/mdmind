@@ -1,0 +1,3 @@
+workspace/
+golden/**/grading.json
+golden/**/benchmark.json

@@ -1,0 +1,194 @@
+{
+  "version": "mdmind.skill_evals.v1",
+  "description": "Outcome evals for mdmind agent skills. The suite is runner-neutral: agents fill outputs/ and scripts/skill_eval.py grades artifacts deterministically where possible.",
+  "cases": [
+    {
+      "id": "author-meeting-map",
+      "title": "Author a meeting notes action map",
+      "skill": "mdmind-map-authoring",
+      "capability": "map_authoring",
+      "prompt": "Turn the meeting notes in inputs/notes.md into a native mdmind map. Keep the tree easy to scan, preserve decisions and follow-up work, add ids only to durable branches, and write the result to outputs/map.md.",
+      "expected_artifacts": [
+        "map.md"
+      ],
+      "inputs": [
+        {
+          "path": "notes.md",
+          "content": "Product sync notes\n\nPeople: Jason, Priya, Theo\n\nDecision: keep the beta invite-only until onboarding copy is clear.\nDecision: do not ship the analytics panel in the first beta.\n\nFollow-ups:\n- Priya drafts onboarding copy by Tuesday.\n- Theo checks whether the empty-state copy is still accurate.\n- Jason creates a small launch checklist and marks analytics as deferred.\n\nContext: The team wants a durable handoff map, not a transcript. The open risk is that beta users may misunderstand setup if the copy is vague."
+        }
+      ],
+      "checks": [
+        {
+          "type": "file_exists",
+          "path": "outputs/map.md"
+        },
+        {
+          "type": "mdm_validate",
+          "path": "outputs/map.md"
+        },
+        {
+          "type": "mdm_find",
+          "path": "outputs/map.md",
+          "query": "#decision",
+          "min_matches": 2
+        },
+        {
+          "type": "mdm_find",
+          "path": "outputs/map.md",
+          "query": "#todo",
+          "min_matches": 3
+        },
+        {
+          "type": "mdm_links",
+          "path": "outputs/map.md",
+          "min_links": 2,
+          "required_ids": [
+            "eval/meeting",
+            "eval/meeting/actions"
+          ]
+        },
+        {
+          "type": "max_label_chars",
+          "path": "outputs/map.md",
+          "max": 90
+        }
+      ]
+    },
+    {
+      "id": "author-research-synthesis",
+      "title": "Synthesize research into evidence and questions",
+      "skill": "mdmind-map-authoring",
+      "capability": "map_authoring",
+      "prompt": "Convert inputs/research.md into an mdmind research synthesis map at outputs/map.md. Separate themes, evidence, open questions, and next actions. Use detail lines for nuance rather than long labels.",
+      "expected_artifacts": [
+        "map.md"
+      ],
+      "inputs": [
+        {
+          "path": "research.md",
+          "content": "Research dump\n\nUsers like local-first notes because they can inspect and edit them without a service dependency. Two interviewees said ids matter only after a map starts being reused. One maintainer warned that too many metadata fields make maps feel like spreadsheets. Open question: how should agents decide when to add relations? Next action: compare a sparse map and a heavily annotated map on the same source material."
+        }
+      ],
+      "checks": [
+        {
+          "type": "file_exists",
+          "path": "outputs/map.md"
+        },
+        {
+          "type": "mdm_validate",
+          "path": "outputs/map.md"
+        },
+        {
+          "type": "mdm_find",
+          "path": "outputs/map.md",
+          "query": "#evidence",
+          "min_matches": 2
+        },
+        {
+          "type": "mdm_find",
+          "path": "outputs/map.md",
+          "query": "#question",
+          "min_matches": 1
+        },
+        {
+          "type": "mdm_find",
+          "path": "outputs/map.md",
+          "query": "#todo",
+          "min_matches": 1
+        },
+        {
+          "type": "mdm_links",
+          "path": "outputs/map.md",
+          "min_links": 2,
+          "required_ids": [
+            "eval/research/themes",
+            "eval/research/actions"
+          ]
+        },
+        {
+          "type": "max_label_chars",
+          "path": "outputs/map.md",
+          "max": 100
+        }
+      ]
+    },
+    {
+      "id": "inspect-blocked-owner",
+      "title": "Pick the narrow CLI query for blocked owned work",
+      "skill": "mdm-cli-inspection",
+      "capability": "cli_inspection",
+      "prompt": "Using inputs/agent-todo-workflow.md, find blocked work owned by Jason. Prefer the smallest mdm command sequence that answers the question. Write the answer and command sequence to outputs/response.md.",
+      "expected_artifacts": [
+        "response.md"
+      ],
+      "inputs": [
+        {
+          "path": "agent-todo-workflow.md",
+          "source": "examples/agent-todo-workflow.md"
+        }
+      ],
+      "checks": [
+        {
+          "type": "file_exists",
+          "path": "outputs/response.md"
+        },
+        {
+          "type": "contains",
+          "path": "outputs/response.md",
+          "all": [
+            "mdm find",
+            "task:blocked",
+            "@owner:jason",
+            "Parent rollup visualization"
+          ],
+          "none": [
+            "mdm export"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "export-active-todos",
+      "title": "Choose raw export JSON instead of command envelopes",
+      "skill": "mdm-cli-inspection",
+      "capability": "cli_inspection",
+      "prompt": "Export active todo branches from inputs/agent-todo-workflow.md as raw map JSON for a downstream tool. Write the command rationale to outputs/response.md and the JSON artifact to outputs/export.json.",
+      "expected_artifacts": [
+        "response.md",
+        "export.json"
+      ],
+      "inputs": [
+        {
+          "path": "agent-todo-workflow.md",
+          "source": "examples/agent-todo-workflow.md"
+        }
+      ],
+      "checks": [
+        {
+          "type": "file_exists",
+          "path": "outputs/response.md"
+        },
+        {
+          "type": "contains",
+          "path": "outputs/response.md",
+          "all": [
+            "mdm export",
+            "--format json",
+            "--query"
+          ],
+          "none": [
+            " find ",
+            " --json"
+          ]
+        },
+        {
+          "type": "json_valid",
+          "path": "outputs/export.json",
+          "required_top_level": [
+            "nodes"
+          ]
+        }
+      ]
+    }
+  ]
+}

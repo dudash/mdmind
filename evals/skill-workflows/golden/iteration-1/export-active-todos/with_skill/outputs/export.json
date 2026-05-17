@@ -1,0 +1,15 @@
+{
+  "nodes": [
+    {
+      "label": "Current Session",
+      "tags": [
+        "todo"
+      ],
+      "metadata": {
+        "status": "active"
+      },
+      "id": "codex-todo/current",
+      "children": []
+    }
+  ]
+}
