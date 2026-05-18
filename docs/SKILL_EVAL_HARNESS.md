@@ -115,16 +115,41 @@ workspace root.
 
 ## What To Measure Next
 
-The first fixtures cover:
+The first fixtures are a seed suite. They prove the fixture format, local
+workspace flow, deterministic grading, and baseline-vs-revised comparison path.
+They are not the complete product battery for every mdmind use case.
+
+The seed fixtures cover:
 
 - map authoring from meeting notes
 - research synthesis into themes/evidence/questions/actions
 - narrow CLI inspection for blocked owned work
 - choosing raw `mdm export --format json` instead of command `--json`
 
+The north-star eval battery should grow around two use cases:
+
+- human-consumable thinking maps: meetings, research, planning, writing,
+  decisions, product status, and messy-map cleanup where short labels, coherent
+  hierarchy, sparse structure, and readable details matter
+- agent-operational software maps: TODO trees, local memory, current focus,
+  backlog, blockers, decisions, done logs, validation repair, and handoff notes
+  that Codex, Claude Code, or another agent can safely update over time
+
 The next useful additions are:
 
 - negative trigger cases where the skill should not activate
+- skill routing cases that distinguish map authoring, CLI inspection, and plain
+  prose answers
+- TODO memory cases where an agent creates, updates, queries, and validates a
+  software-development task tree
+- existing-map cleanup cases that shorten labels, move prose into details, and
+  reduce overuse of ids, metadata, or relations
+- validation-repair cases where the first map has parser, duplicate-id, or
+  unresolved-relation diagnostics and the agent must fix them
+- inspection cases for `mdm view`, `mdm tags`, `mdm kv`, `mdm links`,
+  `mdm refs`, and `mdm relations`
+- import and export cases for OPML, Markdown, FreeMind, HTML/web preview,
+  Mermaid, OPML export, subtree export, and filtered exports
 - repeated runs to measure variance
 - runner adapters that launch Codex, Claude Code, or Promptfoo automatically
 - optional LLM-as-judge grading for holistic map quality after deterministic
