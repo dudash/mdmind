@@ -58,6 +58,13 @@ Codex reads the repo marketplace from:
 .agents/plugins/marketplace.json
 ```
 
-Restart Codex after changing the plugin or marketplace metadata, then install
-or enable the `mdmind` plugin from the `mdmind` marketplace in the plugin
-directory.
+Restart Codex after changing the plugin or marketplace metadata, or register
+the repo marketplace explicitly:
+
+```bash
+codex plugin marketplace add .
+```
+
+Then install or enable the `mdmind` plugin from the `mdmind` marketplace in the
+plugin directory. The `.agents` folder is shared agent workspace convention, but
+`.agents/plugins/marketplace.json` is the Codex plugin marketplace path.

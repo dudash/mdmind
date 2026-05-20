@@ -132,8 +132,15 @@ claude plugin install mdmind@mdmind
 ```
 
 Codex reads the repo marketplace from `.agents/plugins/marketplace.json`. Restart
-Codex after pulling this repo, then install or enable the `mdmind` plugin from
-the `mdmind` marketplace in the plugin directory.
+Codex after pulling this repo, or register the repo marketplace explicitly:
+
+```bash
+codex plugin marketplace add .
+```
+
+Then install or enable the `mdmind` plugin from the `mdmind` marketplace in the
+plugin directory. The `.agents` folder is shared agent workspace convention, but
+`.agents/plugins/marketplace.json` is the Codex plugin marketplace path.
 
 Use `npx skills` when you only want standalone skills. Use the plugin when you
 want the agent-native plugin surface, namespaced skills, and bundled skill

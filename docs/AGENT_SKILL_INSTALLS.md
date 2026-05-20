@@ -84,9 +84,18 @@ Claude Code exposes plugin skills with the plugin namespace:
 mdmind ships a Codex marketplace at `.agents/plugins/marketplace.json` and the
 same shared plugin package at `plugins/mdmind`.
 
-After pulling the repo, restart Codex and install or enable the `mdmind` plugin
-from the `mdmind` marketplace in the plugin directory. Codex resolves the
-marketplace entry's `source.path` relative to the repo root.
+After pulling the repo, restart Codex or register the repo marketplace from the
+repo root:
+
+```bash
+codex plugin marketplace add .
+```
+
+Then install or enable the `mdmind` plugin from the `mdmind` marketplace in the
+plugin directory. Codex resolves the marketplace entry's `source.path` relative
+to the repo root. The `.agents` folder is shared agent workspace convention, but
+`.agents/plugins/marketplace.json` is the Codex plugin marketplace path; keep
+other agent-specific marketplaces in their own namespaced folders.
 
 ## Manual Fallback
 
