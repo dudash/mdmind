@@ -1,0 +1,74 @@
+- mdmind Conventions #guide @audience:agents @surface:skills [id:skill/mdmind/conventions]
+  - When mdmind is the right target #guide [id:skill/mdmind/conventions/when]
+    - choose mdmind when the output needs real hierarchy
+    - choose mdmind when durable branches matter
+    - choose mdmind when lightweight markers like tags would help
+    - choose mdmind when repeated structured fields like metadata would help
+    - choose mdmind when stable deep-link anchors with [id:...] would help
+    - choose mdmind when lateral links between distant branches matter
+    - choose mdmind when attached notes are useful but the whole file should not become prose
+    - prefer ordinary Markdown when the user only needs a short one-off answer
+  - Good default syntax #reference [id:skill/mdmind/conventions/syntax]
+    - visible label first
+    - #tag is available for grouping or workflow markers
+    - @key:value is available for repeated structured fields
+    - [id:path/to/node] only on durable branches
+    - use | detail lines for real prose
+    - use cross links only when lateral structure matters
+    - use normal Markdown link or image syntax for external files, URLs, and images
+    - Example relation #reference [id:skill/mdmind/conventions/syntax/example-relation]
+      - Relation example [[skill/mdmind/conventions/ids/examples]]
+      - Typed relation example [[rel:related-to->skill/mdmind/conventions/good-output]]
+  - Tags and metadata are optional structure #reference [id:skill/mdmind/conventions/defaults]
+    - use tags when lightweight grouping helps
+    - use metadata when repeated fields help filtering or clarity
+    - keep any vocabulary small and internally consistent
+    - do not invent a schema unless the task really benefits from one
+  - When to add ids #guide [id:skill/mdmind/conventions/ids]
+    - add ids when durable anchors will help navigation, deep links, export, or cross-links
+    - add ids to sections or branches that are likely to be revisited
+    - avoid ids on branches that are unlikely to be linked or revisited
+    - avoid ids on every node
+    - good id patterns #example [id:skill/mdmind/conventions/ids/examples]
+      - topic/subtopic
+      - plan/workstream-a
+      - subject/phase-1
+  - When to use details #guide [id:skill/mdmind/conventions/details]
+    - use detail lines for rationale
+    - use detail lines for source quotes
+    - use detail lines for meeting context
+    - use detail lines for scene notes
+    - use detail lines for research excerpts
+    - use detail lines for a sentence or two of explanation that belongs to one node
+    - do not use detail lines for every branch
+    - if most nodes need paragraphs the map structure is probably wrong or the result should be prose
+  - When to use relations #guide [id:skill/mdmind/conventions/relations]
+    - use relations when the tree alone cannot express the meaning cleanly
+    - good cases #reference [id:skill/mdmind/conventions/relations/cases]
+      - a blocking branch points to the branch it blocks
+      - an evidence branch points to the claim it supports
+      - a follow-up branch points to the question it resolves
+      - one branch depends on another branch outside its local tree position
+    - prefer plain cross links first
+    - use typed relations when preserving the relation meaning is valuable
+  - When to use external refs #guide [id:skill/mdmind/conventions/external-refs]
+    - use a Markdown link when a node should keep a supporting file, source URL, or web page reachable
+    - use a Markdown image ref for image artifacts attached to a node
+    - prefer map-relative paths for files in the same project tree
+    - labels and paths may contain spaces when written as normal Markdown links
+    - use ids and relations for map structure; use external refs for artifacts outside the map
+  - What good map output looks like #guide [id:skill/mdmind/conventions/good-output]
+    - root and major branches are obvious
+    - labels scan cleanly in plain text
+    - metadata is repeated enough to support search
+    - ids are present where deep links will help later
+    - details hold the prose, not the labels
+    - relations are sparse and meaningful
+  - Validation shortlist #checklist [id:skill/mdmind/conventions/validation]
+    - parses cleanly
+    - mdm validate passes when available
+    - no duplicate ids
+    - metadata keys are consistent
+    - relation targets exist
+    - local Markdown refs resolve relative to the map file when possible
+    - labels are readable as plain Markdown without relying on interactive rendering

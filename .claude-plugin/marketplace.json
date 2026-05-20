@@ -1,0 +1,35 @@
+{
+  "name": "mdmind",
+  "owner": {
+    "name": "mdmind"
+  },
+  "description": "mdmind agent skills for Claude Code.",
+  "version": "0.7.0",
+  "plugins": [
+    {
+      "name": "mdmind",
+      "source": "./plugins/mdmind",
+      "description": "Adds mdmind map-authoring and mdm CLI inspection skills to Claude Code.",
+      "version": "0.7.0",
+      "author": {
+        "name": "mdmind"
+      },
+      "homepage": "https://github.com/dudash/mdmind/tree/main/skills",
+      "repository": "https://github.com/dudash/mdmind",
+      "license": "Apache-2.0",
+      "keywords": [
+        "agent-skills",
+        "markdown",
+        "mind-map",
+        "mdmind",
+        "structured-notes"
+      ],
+      "category": "Productivity",
+      "tags": [
+        "skills",
+        "markdown",
+        "maps"
+      ]
+    }
+  ]
+}

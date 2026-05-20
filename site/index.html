@@ -136,7 +136,7 @@
           </div>
           <div class="proof-item">
             <strong>Agent-ready</strong>
-            <span>Skills help Codex, Claude, Cursor, and similar agents write native mdmind maps.</span>
+            <span>Install skills or plugins so Codex, Claude, and similar agents write native mdmind maps.</span>
           </div>
         </section>
 
@@ -215,8 +215,8 @@
               <h3>Give agents a format they can use on purpose.</h3>
               <p>
                 mdmind gives agents a small, explicit vocabulary for hierarchy, details, ids, tags,
-                and cross-links. You can also install mdmind skills for Codex, Claude, Cursor, and similar agents so generated
-                maps open cleanly and use the format on purpose.
+                and cross-links. Install the skills with <code>npx skills</code>, or use the Claude
+                Code and Codex plugin packages when you want an agent-native distribution surface.
                 <a class="text-link" href="#agent-skills">Install the skill pack.</a>
               </p>
             </article>
@@ -375,59 +375,74 @@ brew install mdmind</code></pre>
 
           <div class="section-heading" id="agent-skills">
             <div class="eyebrow">Agent mode</div>
-            <h2>Install mdmind as a skill for your agents.</h2>
+            <h2>Install mdmind for your coding agents.</h2>
             <p>
-              Teach your coding agents to write native mdmind maps and inspect them with <code>mdm</code>.
-              Clone the repo once, then install the skill pack for one project or for all your work.
-              Some agents use their own paths, so check the full notes.
+              Teach agents to write native mdmind maps and inspect them with <code>mdm</code>.
+              Use <code>npx skills</code> for standalone skills, or install the plugin package
+              for Claude Code and Codex.
             </p>
           </div>
 
           <div class="downloads-grid">
             <article class="download-card">
-              <div class="eyebrow">What you get</div>
-              <h3>Grab the skill pack</h3>
+              <div class="eyebrow">Preview</div>
+              <h3>See the two mdmind skills</h3>
               <p>
                 <code>mdmind-map-authoring</code> teaches agents to write clean native maps.
                 <code>mdm-cli-inspection</code> teaches them to validate, inspect, and export existing maps.
               </p>
               <div class="copyable-command">
                 <button class="copy-button" type="button">Copy</button>
-                <pre><code>git clone https://github.com/dudash/mdmind ~/mdmind</code></pre>
+                <pre><code>npx skills add dudash/mdmind --list</code></pre>
               </div>
               <a class="text-link" href="https://github.com/dudash/mdmind/tree/main/skills" target="_blank" rel="noreferrer">Browse the skill pack</a>
             </article>
 
             <article class="download-card">
-              <div class="eyebrow">One project</div>
-              <h3>Install for this repo</h3>
-              <p>Copy the skill folders into the project Agent Skills directory so each repo can customize its own mdmind behavior.</p>
+              <div class="eyebrow">Standalone skills</div>
+              <h3>Install for this project</h3>
+              <p>Use the open skills CLI to install both mdmind skills for Claude Code and Codex.</p>
               <div class="copyable-command">
                 <button class="copy-button" type="button">Copy</button>
-                <pre><code>mkdir -p .agents/skills
-cp -R ~/mdmind/skills/mdmind-map-authoring .agents/skills/
-cp -R ~/mdmind/skills/mdm-cli-inspection .agents/skills/</code></pre>
+                <pre><code>npx skills add dudash/mdmind \
+  --skill mdmind-map-authoring \
+  --skill mdm-cli-inspection \
+  -a claude-code \
+  -a codex</code></pre>
               </div>
             </article>
 
             <article class="download-card">
-              <div class="eyebrow">All your work</div>
-              <h3>Install for your user</h3>
-              <p>Copy the skill folders into your user-level Agent Skills directory.</p>
+              <div class="eyebrow">Global install</div>
+              <h3>Install for all your work</h3>
+              <p>Add <code>-g</code> when the skills should be available across your user account.</p>
               <div class="copyable-command">
                 <button class="copy-button" type="button">Copy</button>
-                <pre><code>mkdir -p ~/.agents/skills
-cp -R ~/mdmind/skills/mdmind-map-authoring ~/.agents/skills/
-cp -R ~/mdmind/skills/mdm-cli-inspection ~/.agents/skills/</code></pre>
+                <pre><code>npx skills add dudash/mdmind \
+  --skill mdmind-map-authoring \
+  --skill mdm-cli-inspection \
+  -g \
+  -a claude-code \
+  -a codex</code></pre>
               </div>
             </article>
 
             <article class="download-card">
-              <div class="eyebrow">Need the guide?</div>
-              <h3>Full skill install notes</h3>
+              <div class="eyebrow">Plugins</div>
+              <h3>Use the agent-native package</h3>
               <p>
-                The repo includes a portable skills README, agent-specific install paths,
-                example prompts, customization notes, and a compact AGENTS.md snippet.
+                mdmind also ships a shared plugin package for Claude Code and Codex. Use it when
+                you want plugin install surfaces, namespaced skills, and bundled skill assets.
+              </p>
+              <div class="copyable-command">
+                <button class="copy-button" type="button">Copy</button>
+                <pre><code>claude plugin marketplace add dudash/mdmind --sparse .claude-plugin plugins
+claude plugin install mdmind@mdmind</code></pre>
+              </div>
+              <p>
+                <strong>Codex:</strong> restart Codex in this repo, open Plugins, and enable
+                <code>mdmind</code> from the repo-local marketplace at
+                <code>.agents/plugins/marketplace.json</code>.
               </p>
               <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/skills/README.md" target="_blank" rel="noreferrer">Open the skills README</a>
               <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/docs/AGENT_SKILL_INSTALLS.md" target="_blank" rel="noreferrer">Open agent install notes</a>

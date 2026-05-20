@@ -1,0 +1,43 @@
+{
+  "name": "mdmind",
+  "version": "0.7.0",
+  "description": "Agent skills for authoring, validating, querying, and exporting mdmind Markdown maps.",
+  "author": {
+    "name": "mdmind",
+    "url": "https://github.com/dudash/mdmind"
+  },
+  "homepage": "https://github.com/dudash/mdmind/tree/main/skills",
+  "repository": "https://github.com/dudash/mdmind",
+  "license": "Apache-2.0",
+  "keywords": [
+    "agent-skills",
+    "markdown",
+    "mind-map",
+    "mdmind",
+    "structured-notes"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "mdmind",
+    "shortDescription": "Author and inspect mdmind Markdown maps",
+    "longDescription": "Bundle the mdmind map-authoring and mdm CLI inspection skills so Codex can create durable Markdown maps, validate structure, inspect TODO maps, query ids and metadata, and export focused context.",
+    "developerName": "mdmind",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/dudash/mdmind",
+    "privacyPolicyURL": "https://github.com/dudash/mdmind",
+    "termsOfServiceURL": "https://github.com/dudash/mdmind/blob/main/LICENSE",
+    "defaultPrompt": [
+      "Turn these notes into an mdmind map.",
+      "Inspect this mdmind TODO map.",
+      "Validate and export this mdmind map."
+    ],
+    "brandColor": "#00A86B",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png",
+    "screenshots": []
+  }
+}

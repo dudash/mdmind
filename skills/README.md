@@ -64,12 +64,6 @@ results with deterministic checks and `mdm` commands.
 
 ## Installation
 
-Clone the repo once, then install one or both skill folders:
-
-```bash
-git clone https://github.com/dudash/mdmind ~/mdmind
-```
-
 Skill folders:
 
 - `mdmind-map-authoring`
@@ -78,10 +72,83 @@ Skill folders:
 Each skill is a portable package: one directory containing a required `SKILL.md`
 and optional `references/`, `examples/`, and `agents/` metadata.
 
-### Install For One Project
+### Recommended: Skills CLI
 
-If your agent supports the shared Agent Skills convention, copy the skills into
-the current project:
+Use Vercel Labs' open `skills` CLI for normal local installs. It can preview,
+install, update, and remove skills without hand-copying agent directories.
+
+Preview the mdmind skills:
+
+```bash
+npx skills add dudash/mdmind --list
+```
+
+Install both skills for the current project in Claude Code and Codex:
+
+```bash
+npx skills add dudash/mdmind \
+  --skill mdmind-map-authoring \
+  --skill mdm-cli-inspection \
+  -a claude-code \
+  -a codex
+```
+
+Install globally for your user account:
+
+```bash
+npx skills add dudash/mdmind \
+  --skill mdmind-map-authoring \
+  --skill mdm-cli-inspection \
+  -g \
+  -a claude-code \
+  -a codex
+```
+
+For non-interactive setup, add `-y`. The CLI symlinks by default so updates can
+flow through one canonical copy; add `--copy` only when symlinks are not
+acceptable in your environment.
+
+Useful maintenance commands:
+
+```bash
+npx skills list
+npx skills update
+npx skills remove mdmind-map-authoring mdm-cli-inspection
+```
+
+The checked-in skill folders under `skills/` remain the development source of
+truth for mdmind. The CLI is the recommended installation and update path.
+
+### Agent Plugins
+
+mdmind also ships a shared plugin package at [plugins/mdmind](../plugins/mdmind)
+for agents that support plugins as the reusable distribution layer.
+
+Claude Code marketplace install:
+
+```bash
+claude plugin marketplace add dudash/mdmind --sparse .claude-plugin plugins
+claude plugin install mdmind@mdmind
+```
+
+Codex reads the repo marketplace from `.agents/plugins/marketplace.json`. Restart
+Codex after pulling this repo, then install or enable the `mdmind` plugin from
+the `mdmind` marketplace in the plugin directory.
+
+Use `npx skills` when you only want standalone skills. Use the plugin when you
+want the agent-native plugin surface, namespaced skills, and bundled skill
+assets.
+
+### Manual Fallback
+
+If the CLI is unavailable, clone the repo and copy the skill folders into your
+agent's supported skills directory.
+
+```bash
+git clone https://github.com/dudash/mdmind ~/mdmind
+```
+
+Codex and other agents that support the shared Agent Skills convention:
 
 ```bash
 mkdir -p .agents/skills
@@ -89,85 +156,7 @@ cp -R ~/mdmind/skills/mdmind-map-authoring .agents/skills/
 cp -R ~/mdmind/skills/mdm-cli-inspection .agents/skills/
 ```
 
-This keeps mdmind behavior scoped to one repository or workspace.
-
-### Install For All Your Work
-
-If your agent supports user-level shared Agent Skills, copy the skills into your
-home directory:
-
-```bash
-mkdir -p ~/.agents/skills
-cp -R ~/mdmind/skills/mdmind-map-authoring ~/.agents/skills/
-cp -R ~/mdmind/skills/mdm-cli-inspection ~/.agents/skills/
-```
-
-This is the most portable user-level layout for Codex, Cursor, Gemini CLI,
-Copilot-compatible tools, OpenCode, Warp, Pi, Windsurf, and similar agents.
-Claude Code currently uses `.claude/skills/` and `~/.claude/skills/` instead.
-
-For a dated agent-specific table, see
-[docs/AGENT_SKILL_INSTALLS.md](../docs/AGENT_SKILL_INSTALLS.md).
-
-### Alternative: Skills CLI
-
-If you already use Vercel Labs' open `skills` CLI, install mdmind from the
-public GitHub repo:
-
-```bash
-npx skills add dudash/mdmind --skill mdmind-map-authoring --skill mdm-cli-inspection
-```
-
-Preview the skills first:
-
-```bash
-npx skills add dudash/mdmind --list
-```
-
-Install globally instead of into the current project:
-
-```bash
-npx skills add dudash/mdmind --skill mdmind-map-authoring --skill mdm-cli-inspection --global
-```
-
-This is a convenience path, not the source of truth. The source of truth remains
-the checked-in skill folders under `skills/`.
-
-For maintainers: there is no separate skills.sh registration flow. Keep the
-skills in a public repo, make sure each `SKILL.md` has valid `name` and
-`description` frontmatter, and verify discovery with `npx skills add dudash/mdmind
---list`. The skills can appear on skills.sh after users install them through the
-CLI's telemetry-backed directory.
-
-### Codex
-
-Codex can load shared Agent Skills from `~/.agents/skills/` and project-local
-`.agents/skills/` directories. Use project installs when the skills should
-travel with one repository, or user installs when the skills should apply across
-your work.
-
-Then restart Codex if the skills do not appear.
-
-Optional: install from GitHub with Codex's built-in installer:
-
-```text
-$skill-installer install https://github.com/dudash/mdmind/tree/main/skills/mdmind-map-authoring
-$skill-installer install https://github.com/dudash/mdmind/tree/main/skills/mdm-cli-inspection
-```
-
-### Claude Code
-
-Claude Code expects each skill folder directly under the skills directory.
-
-Install for all projects:
-
-```bash
-mkdir -p ~/.claude/skills
-cp -R ~/mdmind/skills/mdmind-map-authoring ~/.claude/skills/
-cp -R ~/mdmind/skills/mdm-cli-inspection ~/.claude/skills/
-```
-
-Install for one project only:
+Claude Code native skills directory:
 
 ```bash
 mkdir -p .claude/skills
@@ -175,12 +164,20 @@ cp -R ~/mdmind/skills/mdmind-map-authoring .claude/skills/
 cp -R ~/mdmind/skills/mdm-cli-inspection .claude/skills/
 ```
 
-Claude usually picks up skill edits live once the skills directory already exists.
+Restart the agent if the skills do not appear.
+
+For maintainers: there is no separate skills.sh registration flow. Keep the
+skills in a public repo, make sure each `SKILL.md` has valid `name` and
+`description` frontmatter, and verify discovery with `npx skills add dudash/mdmind
+--list`. The skills can appear on skills.sh after users install them through the
+CLI's telemetry-backed directory.
 
 ### Other Agents
 
 Most modern coding agents use the same package shape but different search paths.
-Install the two mdmind skill folders directly under the target skills directory.
+Prefer `npx skills` with a specific `-a <agent>` target when that agent is
+supported. If you must install manually, put the two mdmind skill folders
+directly under the target skills directory.
 
 | Agent | Good install target |
 |---|---|

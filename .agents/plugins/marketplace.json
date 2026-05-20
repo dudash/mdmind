@@ -1,0 +1,20 @@
+{
+  "name": "mdmind",
+  "interface": {
+    "displayName": "mdmind"
+  },
+  "plugins": [
+    {
+      "name": "mdmind",
+      "source": {
+        "source": "local",
+        "path": "./plugins/mdmind"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
