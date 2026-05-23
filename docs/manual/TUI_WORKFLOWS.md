@@ -1,0 +1,287 @@
+# Working In mdmind
+
+This page is about the day-to-day feel of using `mdmind`.
+
+It is not a full feature reference. It is the practical workflow guide for how someone actually works in the TUI once a map exists.
+
+## The Core Loop
+
+Most work in `mdmind` follows the same pattern:
+
+1. move to the part of the tree you care about
+2. add, edit, or reshape a few nodes
+3. narrow the visible surface if the map gets noisy
+4. save, checkpoint, or undo when needed
+
+That is the product.
+
+Everything else, including ids, cross-links, themes, and the visual mindmap, exists to make that loop clearer, faster, or safer.
+
+## First Session Workflow
+
+If you are new:
+
+1. open a small map in `mdmind`
+2. move with `↑` and `↓`
+3. use `→` to expand or enter a branch
+4. press `a` to add a child
+5. press `e` to edit a line
+6. press `/` to search
+7. press `:` or `Ctrl+P` to open the palette
+8. press `?` to open built-in help
+
+That is enough to become productive.
+
+If you naturally think in nested notes or outlines, also read [USING_MDMIND_AS_OUTLINER.md](USING_MDMIND_AS_OUTLINER.md). It frames the same product in a simpler outline-first way.
+
+## Browsing The Tree
+
+The outline is still the main working surface.
+
+Use it when:
+
+- you are learning a map
+- you are reviewing structure
+- you are making local edits
+- you are scanning nearby context
+
+Important movement keys:
+
+- `↑ / ↓` move through visible nodes
+- `←` collapses a branch or moves to the parent
+- `→` expands a branch or enters the first child
+- `Enter` toggles branch expansion
+- `Space` toggles a focused `[ ]` / `[x]` TODO item, or falls back to branch expansion on non-task rows
+- `z / Z` collapse or expand the current working scope
+- `g` jumps to the root
+
+If the tree starts feeling noisy, do not keep scrolling blindly. Change the visible working set first.
+
+## Editing Without Losing Your Place
+
+`mdmind` works best when editing feels local.
+
+Use:
+
+- `a` to add a child
+- `A` to add a sibling
+- `Shift+R` to add a root branch
+- `e` to edit the current node
+- `d` to edit longer details for the current node
+- `f` to browse local folders up to the filesystem root and attach a file as a map-relative reference, with git-root indicators and a paste-path fallback
+- `p` or palette `Show References` to review attached files with previews for `.txt`, `.md`, web links, and PNG metadata, then `Enter` to open externally
+- `x` to delete after confirmation
+- `Alt+↑ / Alt+↓` to reorder among siblings
+- `Alt+← / Alt+→` to move out or indent into the previous sibling
+
+If a terminal does not move nodes with `Alt` plus arrows, run `mdm check-keys`
+or `mdmind --check-keys`.
+For each `Alt` arrow, mdmind should report `code=<arrow>` and `modifiers=ALT`.
+If the arrow arrives without `ALT`, configure the terminal to send `Esc+`/Meta for the
+Option key or remove custom key bindings for those chords.
+If `Option+Up` opens add-child or `Option+Down` opens edit-node, the terminal is
+sending mdmind's plain `a` or `e` editing keys instead of an `Alt` arrow event.
+
+The important part is that edits happen relative to the current focus. You are shaping a branch, not switching into a different editing application.
+
+Single-line prompt boxes support small editor-style shortcuts:
+
+- `↑ / ↓` to jump to the start or end of the prompt
+- `Alt+← / Alt+→` to move by word
+- `Alt+Backspace` to delete the previous word
+
+### When To Use Details
+
+Node labels should stay short enough to scan quickly in the tree.
+
+Use details when one branch needs:
+
+- a paragraph of rationale
+- a quote
+- meeting notes
+- a scene note
+- a short research excerpt
+
+In the raw file, details are stored as `| ...` lines directly under the node. In the TUI, press `d` to open the detail editor, use `Enter` for new lines, `Ctrl+K` to delete the current line, and `Ctrl+S` to save.
+
+## Narrowing The Working Set
+
+When the map gets large, reduce the visible surface instead of relying on memory.
+
+You have three main tools:
+
+### Search
+
+Use `/` for queries, `b` for browse, and `w` for saved views.
+
+Good beginner progression:
+
+1. plain text
+2. `#tags`
+3. `@key:value`
+4. combined queries
+
+Examples:
+
+```text
+rate limit
+#todo
+@status:active
+#todo @owner:jason
+```
+
+### View Modes
+
+Use `v` or `V` to change projection.
+
+- `Full Map`: broad orientation
+- `Focus Branch`: local context plus nearby structure
+- `Subtree Only`: one branch becomes a temporary workspace
+- `Filtered Focus`: search-driven work with enough context to stay oriented
+
+The key mental model is: view modes change what you see, not the underlying document.
+
+### Palette
+
+Use `:` or `Ctrl+P` when you already know what you want:
+
+- a branch
+- an id
+- a saved view
+- a recent location
+- a workflow recipe
+- a relation jump
+- a help topic
+
+The palette is the fastest high-level jump surface in the product.
+
+## A Good “Work Inside One Branch” Flow
+
+This is one of the most useful everyday patterns:
+
+1. move focus to the branch you care about
+2. switch to `Subtree Only`
+3. do your add, edit, and reorder work locally
+4. use `g` to return to the subtree root if you drift
+5. press `Esc` when you want the broader map back
+
+This is better than manually collapsing unrelated branches because the mode is explicit and reversible.
+
+## A Good “Review Work” Flow
+
+For task-heavy maps:
+
+1. open search
+2. query `task:open`, `task:blocked`, `#todo`, `@status:active`, or a combined filter
+3. move through results with `n` and `N`
+4. save the filter if it is recurring
+5. switch to `Filtered Focus` if you want the filtered working set to dominate the screen
+
+If the map has stable task markers, `@owner`, or `@status` values, the palette can also surface contextual recipes so you do not need to remember every exact filter string.
+
+Press `C` or run `Open Table View` from the palette when you want to scan the current visible scope as columns. The table is read-only: use it for comparing owner, status, priority, area, task state, and other repeated metadata fields without making the map column-centric. Press `c` inside the table to choose columns; that choice persists per map in the local `.mdmind-views.json` sidecar. Use `←` / `→` to collapse or expand the selected branch, and `v` / `V` to cycle view modes without leaving the table. Press `Enter` on a row to focus it back in the outline for edits.
+
+## Relations In Daily Use
+
+Relations are useful when the tree is not enough on its own.
+
+Use them for:
+
+- dependencies
+- support links
+- chapter-to-character references
+- quest-to-region or quest-to-faction links
+
+Daily interaction model:
+
+- use `]` to follow outgoing relations
+- use `[` to follow backlinks
+- if there is more than one possible target, `mdmind` opens a small picker
+- use the palette when you want a more explicit relation jump surface
+
+Relations should add clarity, not replace basic structure.
+
+## Spatial Canvas And Visual Map
+
+The spatial canvas and the older fixed visual mindmap are best used after you already have the right working set.
+
+Good times to open the spatial canvas with `m`:
+
+- after isolating a branch
+- after applying a filter
+- when you want to navigate visually without leaving the current focus model
+- when you want the map to behave like the outline, with arrow-key navigation and explicit expand/collapse state
+
+Good times to open the legacy visual mindmap with `M`:
+
+- when presenting or reviewing branch shape
+- when exporting a PNG
+- when you want a fixed visual projection rather than a navigation surface
+
+Poor times to open either visual surface:
+
+- before you know what scope you care about
+- when the full map is still too noisy to read in the tree
+
+The tree should usually lead. The spatial canvas and visual mindmap are second lenses.
+
+## Reading Heavy Branches
+
+If one node has longer notes or attached detail lines, use reading mode instead of changing the tree projection again.
+
+Good pattern:
+
+1. focus the branch you care about
+2. use `Focus Branch` or `Subtree Only` if needed
+3. turn on `reading mode` from the palette
+4. keep navigating in the outline while the selected node expands inline into a calmer document-style reader for its details
+
+That keeps the whole tree visible while making the long-form content feel more like a focused reading surface than a stack of utility panels.
+
+## Safety Workflow
+
+The safety layer should make you faster, not slower.
+
+Use:
+
+- `u` to undo
+- `U` to redo
+- checkpoints before bigger structural changes
+- recent history in the palette when you want to jump back more than one step
+
+If a change feels risky, take a manual checkpoint first instead of editing timidly.
+
+## The Calm Setup
+
+If you want a quieter pro surface:
+
+1. open the palette
+2. choose the `Monograph` theme
+3. turn on `minimal mode`
+
+If you are working with longer notes, also turn on `reading mode`. That keeps the calm shell while making the selected node expand into a more useful inline reading surface.
+
+That setup gives you:
+
+- less shell chrome
+- more room for the main outline
+- quieter overlays
+- a cleaner working feel on large maps
+
+## Practical Advice
+
+- use the tree until the tree stops being enough
+- use search when you know what kind of thing you want
+- use view modes when noise is the real problem
+- use the palette when you already know the target
+- use ids for durable branches
+- use relations only where lateral structure is genuinely helpful
+- use the mindmap after you have already chosen the right scope
+
+## Related Docs
+
+- [USER_GUIDE.md](../help/USER_GUIDE.md)
+- [NODE_DETAILS.md](../reference/NODE_DETAILS.md)
+- [QUERY_LANGUAGE.md](../reference/QUERY_LANGUAGE.md)
+- [IDS_AND_DEEP_LINKS.md](../reference/IDS_AND_DEEP_LINKS.md)
+- [CROSS_LINKS_AND_BACKLINKS.md](../reference/CROSS_LINKS_AND_BACKLINKS.md)

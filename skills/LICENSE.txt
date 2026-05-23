@@ -1,3 +1,0 @@
-These skill files are licensed under Apache-2.0.
-
-See the repository root LICENSE file for the full license text.

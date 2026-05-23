@@ -1,6 +1,6 @@
 {
   "version": "mdmind.skill_evals.v1",
-  "description": "Outcome evals for mdmind agent skills. The suite is runner-neutral: agents fill outputs/ and scripts/skill_eval.py grades artifacts deterministically where possible.",
+  "description": "Outcome evals for mdmind agent skills. The suite is runner-neutral: agents fill outputs/ and evals/skill-workflows/skill_eval.py grades artifacts deterministically where possible.",
   "cases": [
     {
       "id": "author-meeting-map",

@@ -16,8 +16,8 @@ Agent and crawler discovery:
 - `.well-known/agent-skills/index.json`
 - `.well-known/agent-skills/*.tar.gz`
 
-When the checked-in skills change, rebuild the `.well-known/agent-skills/*.tar.gz`
-archives and update their SHA-256 values in the skills index.
+When the plugin skill packages change, rebuild the `.well-known/agent-skills/*.tar.gz`
+archives from `plugins/mdmind/skills/` and update their SHA-256 values in the skills index.
 
 Assets:
 

@@ -1125,8 +1125,8 @@ macro_rules! command_info {
             flags: $flags.to_vec(),
             formats: $formats.to_vec(),
             examples: $examples.to_vec(),
-            docs: vec!["docs/AGENT_CLI_CONTRACT.md"],
-            skills: vec!["skills/mdm-cli-inspection"],
+            docs: vec!["docs/agents/AGENT_CLI_CONTRACT.md"],
+            skills: vec!["plugins/mdmind/skills/mdm-cli-inspection"],
         }
     };
 }

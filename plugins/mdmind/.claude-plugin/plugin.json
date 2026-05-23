@@ -5,7 +5,7 @@
   "author": {
     "name": "mdmind"
   },
-  "homepage": "https://github.com/dudash/mdmind/tree/main/skills",
+  "homepage": "https://github.com/dudash/mdmind/tree/main/plugins/mdmind/skills",
   "repository": "https://github.com/dudash/mdmind",
   "license": "Apache-2.0",
   "keywords": [

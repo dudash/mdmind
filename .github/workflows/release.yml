@@ -142,7 +142,7 @@ jobs:
           linux_sha="$(awk '/x86_64-unknown-linux-gnu/ {print $1}' "mdmind-${TAG_NAME}-checksums.txt")"
           darwin_amd64_sha="$(awk '/x86_64-apple-darwin/ {print $1}' "mdmind-${TAG_NAME}-checksums.txt")"
           darwin_arm64_sha="$(awk '/aarch64-apple-darwin/ {print $1}' "mdmind-${TAG_NAME}-checksums.txt")"
-          bash scripts/render-homebrew-formula.sh \
+          bash scripts/release/render-homebrew-formula.sh \
             --version "${VERSION}" \
             --repo "${REPOSITORY}" \
             --darwin-amd64-sha "${darwin_amd64_sha}" \

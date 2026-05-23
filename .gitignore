@@ -26,3 +26,6 @@ __pycache__/
 
 # Local mdmind runtime sidecars for bundled examples.
 examples/.*.md.mdmind-*.json
+
+# Local agent eval workspaces.
+evals/**/workspace/

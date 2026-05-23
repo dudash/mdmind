@@ -31,6 +31,21 @@ jobs:
       - name: Test
         run: cargo test --locked
 
+      - name: Check docs links
+        run: python3 scripts/docs/check-doc-links.py
+
+      - name: Grade golden skill evals
+        run: |
+          python3 evals/skill-workflows/skill_eval.py \
+            --workspace evals/skill-workflows/golden/iteration-1 \
+            --configs with_skill \
+            --grade
+
+      - name: Check plugin skill manifests
+        run: |
+          test -f plugins/mdmind/skills/mdmind-map-authoring/SKILL.md
+          test -f plugins/mdmind/skills/mdm-cli-inspection/SKILL.md
+
   build-matrix:
     name: Build ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

@@ -95,9 +95,9 @@ That installs both:
 - `mdm`
 - `mdmind`
 
-More install and release detail lives in [docs/INSTALL_AND_RELEASE.md](docs/INSTALL_AND_RELEASE.md).
+More install and release detail lives in [docs/manual/INSTALL_AND_RELEASE.md](docs/manual/INSTALL_AND_RELEASE.md).
 
-For Codex, Claude, or other agent clients, see [skills/README.md](skills/README.md).
+For Codex, Claude, or other agent clients, see [plugins/mdmind/README.md](plugins/mdmind/README.md).
 
 ## Quick Start
 
@@ -149,30 +149,28 @@ mdm examples copy all
 If you are new:
 
 - [docs/README.md](docs/README.md)
-- [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
-- [docs/TUI_WORKFLOWS.md](docs/TUI_WORKFLOWS.md)
-- [docs/USING_MDMIND_AS_OUTLINER.md](docs/USING_MDMIND_AS_OUTLINER.md)
-- [docs/AGENT_USAGE.md](docs/AGENT_USAGE.md)
+- [docs/help/USER_GUIDE.md](docs/help/USER_GUIDE.md)
+- [docs/manual/TUI_WORKFLOWS.md](docs/manual/TUI_WORKFLOWS.md)
+- [docs/manual/USING_MDMIND_AS_OUTLINER.md](docs/manual/USING_MDMIND_AS_OUTLINER.md)
+- [docs/agents/AGENT_USAGE.md](docs/agents/AGENT_USAGE.md)
 
 If you want specific features:
 
 - [spec/README.md](spec/README.md)
-- [docs/QUERY_LANGUAGE.md](docs/QUERY_LANGUAGE.md)
-- [docs/IDS_AND_DEEP_LINKS.md](docs/IDS_AND_DEEP_LINKS.md)
-- [docs/CROSS_LINKS_AND_BACKLINKS.md](docs/CROSS_LINKS_AND_BACKLINKS.md)
-- [docs/NODE_DETAILS.md](docs/NODE_DETAILS.md)
-- [docs/AGENT_SKILL_INSTALLS.md](docs/AGENT_SKILL_INSTALLS.md)
-- [docs/SKILLS_CUSTOMIZING.md](docs/SKILLS_CUSTOMIZING.md)
-- [docs/SAFETY_AND_HISTORY.md](docs/SAFETY_AND_HISTORY.md)
-- [docs/TEMPLATES.md](docs/TEMPLATES.md)
+- [docs/reference/QUERY_LANGUAGE.md](docs/reference/QUERY_LANGUAGE.md)
+- [docs/reference/IDS_AND_DEEP_LINKS.md](docs/reference/IDS_AND_DEEP_LINKS.md)
+- [docs/reference/CROSS_LINKS_AND_BACKLINKS.md](docs/reference/CROSS_LINKS_AND_BACKLINKS.md)
+- [docs/reference/NODE_DETAILS.md](docs/reference/NODE_DETAILS.md)
+- [docs/agents/SKILLS_CUSTOMIZING.md](docs/agents/SKILLS_CUSTOMIZING.md)
+- [docs/manual/SAFETY_AND_HISTORY.md](docs/manual/SAFETY_AND_HISTORY.md)
+- [docs/manual/TEMPLATES.md](docs/manual/TEMPLATES.md)
 - [examples/README.md](examples/README.md)
 
-If you want product status and roadmap shelves:
+If you want product docs:
 
 - [docs/product/README.md](docs/product/README.md)
-- [docs/product/features/finished/README.md](docs/product/features/finished/README.md)
-- [docs/product/features/inwork/README.md](docs/product/features/inwork/README.md)
-- [docs/product/features/future/README.md](docs/product/features/future/README.md)
+- [docs/product/shipped/README.md](docs/product/shipped/README.md)
+- [docs/product/prds/](docs/product/prds/)
 
 If you are working on the repo:
 

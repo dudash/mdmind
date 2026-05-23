@@ -378,74 +378,23 @@ brew install mdmind</code></pre>
             <h2>Install mdmind for your coding agents.</h2>
             <p>
               Teach agents to write native mdmind maps and inspect them with <code>mdm</code>.
-              Use <code>npx skills</code> for standalone skills, or install the plugin package
-              for Claude Code and Codex.
+              Run the skills installer and choose the agent or agents you want to use.
             </p>
           </div>
 
           <div class="downloads-grid">
             <article class="download-card">
-              <div class="eyebrow">Preview</div>
-              <h3>See the two mdmind skills</h3>
+              <div class="eyebrow">Skills CLI</div>
+              <h3>Add the mdmind skills</h3>
               <p>
                 <code>mdmind-map-authoring</code> teaches agents to write clean native maps.
                 <code>mdm-cli-inspection</code> teaches them to validate, inspect, and export existing maps.
               </p>
               <div class="copyable-command">
                 <button class="copy-button" type="button">Copy</button>
-                <pre><code>npx skills add dudash/mdmind --list</code></pre>
+                <pre><code>npx skills add dudash/mdmind</code></pre>
               </div>
-              <a class="text-link" href="https://github.com/dudash/mdmind/tree/main/skills" target="_blank" rel="noreferrer">Browse the skill pack</a>
-            </article>
-
-            <article class="download-card">
-              <div class="eyebrow">Standalone skills</div>
-              <h3>Install for this project</h3>
-              <p>Use the open skills CLI to install both mdmind skills for Claude Code and Codex.</p>
-              <div class="copyable-command">
-                <button class="copy-button" type="button">Copy</button>
-                <pre><code>npx skills add dudash/mdmind \
-  --skill mdmind-map-authoring \
-  --skill mdm-cli-inspection \
-  -a claude-code \
-  -a codex</code></pre>
-              </div>
-            </article>
-
-            <article class="download-card">
-              <div class="eyebrow">Global install</div>
-              <h3>Install for all your work</h3>
-              <p>Add <code>-g</code> when the skills should be available across your user account.</p>
-              <div class="copyable-command">
-                <button class="copy-button" type="button">Copy</button>
-                <pre><code>npx skills add dudash/mdmind \
-  --skill mdmind-map-authoring \
-  --skill mdm-cli-inspection \
-  -g \
-  -a claude-code \
-  -a codex</code></pre>
-              </div>
-            </article>
-
-            <article class="download-card">
-              <div class="eyebrow">Plugins</div>
-              <h3>Use the agent-native package</h3>
-              <p>
-                mdmind also ships a shared plugin package for Claude Code and Codex. Use it when
-                you want plugin install surfaces, namespaced skills, and bundled skill assets.
-              </p>
-              <div class="copyable-command">
-                <button class="copy-button" type="button">Copy</button>
-                <pre><code>claude plugin marketplace add dudash/mdmind --sparse .claude-plugin plugins
-claude plugin install mdmind@mdmind</code></pre>
-              </div>
-              <p>
-                <strong>Codex:</strong> run <code>codex plugin marketplace add .</code> from this
-                repo, open Plugins or <code>/plugins</code>, and enable <code>mdmind</code> from
-                the repo-local marketplace at <code>.agents/plugins/marketplace.json</code>.
-              </p>
-              <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/skills/README.md" target="_blank" rel="noreferrer">Open the skills README</a>
-              <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/docs/AGENT_SKILL_INSTALLS.md" target="_blank" rel="noreferrer">Open agent install notes</a>
+              <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/plugins/mdmind/README.md" target="_blank" rel="noreferrer">Open the skills README</a>
             </article>
           </div>
         </section>

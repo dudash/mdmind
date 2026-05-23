@@ -14,9 +14,9 @@
       "license": "Apache-2.0",
       "version": "0.4.0",
       "archive_url": "https://mdmind.io/.well-known/agent-skills/mdmind-map-authoring.tar.gz",
-      "archive_sha256": "161b7c4ebcf9ee406d081db406d4f9aaaa9739c165bfe62f200c7b6fc136044a",
+      "archive_sha256": "ea388ba6d48653197e24ccabbeadf991a2386d277700b8603213b6c5f78dddcd",
       "entrypoint": "mdmind-map-authoring/SKILL.md",
-      "homepage": "https://github.com/dudash/mdmind/tree/main/skills/mdmind-map-authoring"
+      "homepage": "https://github.com/dudash/mdmind/tree/main/plugins/mdmind/skills/mdmind-map-authoring"
     },
     {
       "id": "mdm-cli-inspection",
@@ -25,9 +25,9 @@
       "license": "Apache-2.0",
       "version": "0.4.0",
       "archive_url": "https://mdmind.io/.well-known/agent-skills/mdm-cli-inspection.tar.gz",
-      "archive_sha256": "36997f8666da878dfcace79cfee4ee5eee45efb1025690f9cb50fa2ff484640e",
+      "archive_sha256": "211405b1eb21680a6b76ac18e12e378071c3c1d29a6b98da2fae19ddd0680c6a",
       "entrypoint": "mdm-cli-inspection/SKILL.md",
-      "homepage": "https://github.com/dudash/mdmind/tree/main/skills/mdm-cli-inspection"
+      "homepage": "https://github.com/dudash/mdmind/tree/main/plugins/mdmind/skills/mdm-cli-inspection"
     }
   ]
 }

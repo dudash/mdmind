@@ -11,9 +11,8 @@ mdmind is an Apache-2.0 licensed thinking tool for structured maps that stay in 
 - [GitHub repository](https://github.com/dudash/mdmind): Source code, issues, documentation, and release workflow.
 - [Latest release](https://github.com/dudash/mdmind/releases/latest): Public binaries and release assets.
 - [Agent skills index](https://mdmind.io/.well-known/agent-skills/index.json): Machine-readable index for the mdmind Agent Skills pack.
-- [Agent skills README](https://github.com/dudash/mdmind/blob/main/skills/README.md): Human-readable installation notes for Codex, Claude, Cursor, Gemini CLI, and similar agents.
-- [Agent install notes](https://github.com/dudash/mdmind/blob/main/docs/AGENT_SKILL_INSTALLS.md): Expanded compatibility notes for agent skill directories.
-- [Agent usage snippet](https://github.com/dudash/mdmind/blob/main/docs/AGENTS_SNIPPET.md): Compact mdmind guidance for project `AGENTS.md` files.
+- [Agent skills README](https://github.com/dudash/mdmind/blob/main/plugins/mdmind/README.md): Human-readable installation notes for `npx skills add dudash/mdmind` and supported agents.
+- [Agent usage snippet](https://github.com/dudash/mdmind/blob/main/docs/agents/AGENTS_SNIPPET.md): Compact mdmind guidance for project `AGENTS.md` files.
 
 ## When to use mdmind
 

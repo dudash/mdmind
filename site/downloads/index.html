@@ -106,63 +106,23 @@ brew install mdmind</code></pre>
           <h2>Install mdmind as a skill for your agents.</h2>
           <p>
             Teach your coding agents to write native mdmind maps and inspect them with <code>mdm</code>.
-            Clone the repo once, then install the skill pack for one project or for all your work.
-            Some agents use their own paths, so check the full notes.
+            Run the skills installer and choose the agent or agents you want to use.
           </p>
         </section>
 
         <section class="downloads-grid">
           <article class="download-card">
-            <div class="eyebrow">What you get</div>
-            <h2>Grab the skill pack</h2>
+            <div class="eyebrow">Skills CLI</div>
+            <h2>Add the mdmind skills</h2>
             <p>
               <code>mdmind-map-authoring</code> teaches agents to write clean native maps.
               <code>mdm-cli-inspection</code> teaches them to validate, inspect, and export existing maps.
             </p>
             <div class="copyable-command">
               <button class="copy-button" type="button">Copy</button>
-              <pre><code>git clone https://github.com/dudash/mdmind ~/mdmind</code></pre>
+              <pre><code>npx skills add dudash/mdmind</code></pre>
             </div>
-            <a class="text-link" href="https://github.com/dudash/mdmind/tree/main/skills" target="_blank" rel="noreferrer">Browse the skill pack</a>
-          </article>
-
-          <article class="download-card">
-            <div class="eyebrow">One project</div>
-            <h2>Install for this repo</h2>
-            <p>
-              Copy the skill folders into the project Agent Skills directory so each repo can customize its own mdmind behavior.
-            </p>
-            <div class="copyable-command">
-              <button class="copy-button" type="button">Copy</button>
-              <pre><code>mkdir -p .agents/skills
-cp -R ~/mdmind/skills/mdmind-map-authoring .agents/skills/
-cp -R ~/mdmind/skills/mdm-cli-inspection .agents/skills/</code></pre>
-            </div>
-          </article>
-
-          <article class="download-card">
-            <div class="eyebrow">All your work</div>
-            <h2>Install for your user</h2>
-            <p>
-              Copy the skill folders into your user-level Agent Skills directory.
-            </p>
-            <div class="copyable-command">
-              <button class="copy-button" type="button">Copy</button>
-              <pre><code>mkdir -p ~/.agents/skills
-cp -R ~/mdmind/skills/mdmind-map-authoring ~/.agents/skills/
-cp -R ~/mdmind/skills/mdm-cli-inspection ~/.agents/skills/</code></pre>
-            </div>
-          </article>
-
-          <article class="download-card">
-            <div class="eyebrow">Need the guide?</div>
-            <h2>Full skill install notes</h2>
-            <p>
-              The repo includes a portable skills README, agent-specific install paths,
-              example prompts, customization notes, and a compact AGENTS.md snippet.
-            </p>
-            <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/skills/README.md" target="_blank" rel="noreferrer">Open the skills README</a>
-            <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/docs/AGENT_SKILL_INSTALLS.md" target="_blank" rel="noreferrer">Open agent install notes</a>
+            <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/plugins/mdmind/README.md" target="_blank" rel="noreferrer">Open the skills README</a>
           </article>
         </section>
 
@@ -177,7 +137,7 @@ cp -R ~/mdmind/skills/mdm-cli-inspection ~/.agents/skills/</code></pre>
           </div>
           <div class="hero-actions">
             <a class="button button-primary" href="https://github.com/dudash/mdmind/releases/latest" target="_blank" rel="noreferrer">Latest release</a>
-            <a class="button button-secondary" href="https://github.com/dudash/mdmind/tree/main/skills" target="_blank" rel="noreferrer">Browse skills</a>
+            <a class="button button-secondary" href="https://github.com/dudash/mdmind/tree/main/plugins/mdmind/skills" target="_blank" rel="noreferrer">Browse skills</a>
           </div>
         </section>
 

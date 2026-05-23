@@ -1,75 +1,56 @@
 # Docs Portal
 
-This is the easiest place to orient yourself in the `mdmind` docs.
+This folder is the versioned source for mdmind docs. It is organized by what a
+reader is trying to do, not by when a feature was built.
 
-Use the docs in three ways:
+## Lanes
 
-- learn how to use the product
-- understand what is shipped vs still moving
-- inspect deeper design and roadmap notes
+- [manual/](manual/): task-focused user guides. These are the best source for a future public docs site.
+- [help/](help/): source content for embedded TUI help and guide-shaped map material.
+- [reference/](reference/): exact behavior for syntax, queries, ids, relations, and other durable contracts.
+- [agents/](agents/): guidance for agent use, skills, evals, and machine-readable CLI contracts.
+- [design/](design/): product and UX design notes. These are rationale, not the user manual.
+- [product/](product/): shipped product summaries and PRDs. Linear owns active task tracking and future backlog.
 
 ## Start Here
 
-If you are new to `mdmind`:
+If you are new to mdmind:
 
-- [USER_GUIDE.md](USER_GUIDE.md)
-- [TUI_WORKFLOWS.md](TUI_WORKFLOWS.md)
-- [USING_MDMIND_AS_OUTLINER.md](USING_MDMIND_AS_OUTLINER.md)
+- [help/USER_GUIDE.md](help/USER_GUIDE.md)
+- [manual/TUI_WORKFLOWS.md](manual/TUI_WORKFLOWS.md)
+- [manual/USING_MDMIND_AS_OUTLINER.md](manual/USING_MDMIND_AS_OUTLINER.md)
 
-If you want to use `mdmind` with AI agents:
+If you want to use mdmind with AI agents:
 
-- [AGENT_USAGE.md](AGENT_USAGE.md)
-- [AGENT_CLI_CONTRACT.md](AGENT_CLI_CONTRACT.md)
-- [AGENT_TODO_MEMORY.md](AGENT_TODO_MEMORY.md)
-- [AGENT_SKILL_INSTALLS.md](AGENT_SKILL_INSTALLS.md)
-- [SKILLS_CUSTOMIZING.md](SKILLS_CUSTOMIZING.md)
-- [SKILL_EVAL_HARNESS.md](SKILL_EVAL_HARNESS.md)
-- [LLM_WIKI_MINDSPACE_STRATEGY.md](LLM_WIKI_MINDSPACE_STRATEGY.md)
+- [agents/AGENT_USAGE.md](agents/AGENT_USAGE.md)
+- [agents/AGENT_CLI_CONTRACT.md](agents/AGENT_CLI_CONTRACT.md)
+- [agents/AGENT_TODO_MEMORY.md](agents/AGENT_TODO_MEMORY.md)
+- [agents/SKILLS_CUSTOMIZING.md](agents/SKILLS_CUSTOMIZING.md)
+- [agents/SKILL_EVAL_HARNESS.md](agents/SKILL_EVAL_HARNESS.md)
 
-If you want a product-status map instead of a tutorial:
-
-- [product/README.md](product/README.md)
-
-## By Topic
-
-Core map language:
+If you want exact behavior:
 
 - [../spec/README.md](../spec/README.md)
-- [QUERY_LANGUAGE.md](QUERY_LANGUAGE.md)
-- [IDS_AND_DEEP_LINKS.md](IDS_AND_DEEP_LINKS.md)
-- [CROSS_LINKS_AND_BACKLINKS.md](CROSS_LINKS_AND_BACKLINKS.md)
-- [NODE_DETAILS.md](NODE_DETAILS.md)
-- [AGENT_USAGE.md](AGENT_USAGE.md)
-- [AGENT_CLI_CONTRACT.md](AGENT_CLI_CONTRACT.md)
-- [AGENT_TODO_MEMORY.md](AGENT_TODO_MEMORY.md)
-- [AGENT_SKILL_INSTALLS.md](AGENT_SKILL_INSTALLS.md)
-- [SKILLS_CUSTOMIZING.md](SKILLS_CUSTOMIZING.md)
-- [SKILL_EVAL_HARNESS.md](SKILL_EVAL_HARNESS.md)
+- [reference/QUERY_LANGUAGE.md](reference/QUERY_LANGUAGE.md)
+- [reference/IDS_AND_DEEP_LINKS.md](reference/IDS_AND_DEEP_LINKS.md)
+- [reference/CROSS_LINKS_AND_BACKLINKS.md](reference/CROSS_LINKS_AND_BACKLINKS.md)
+- [reference/NODE_DETAILS.md](reference/NODE_DETAILS.md)
 
-Day-to-day usage:
+If you want product direction:
 
-- [PALETTE_AND_HELP.md](PALETTE_AND_HELP.md)
-- [SAFETY_AND_HISTORY.md](SAFETY_AND_HISTORY.md)
-- [TEMPLATES.md](TEMPLATES.md)
-- [INSTALL_AND_RELEASE.md](INSTALL_AND_RELEASE.md)
+- [product/README.md](product/README.md)
+- [product/shipped/README.md](product/shipped/README.md)
+- [product/prds/](product/prds/)
+- [design/LLM_WIKI_MINDSPACE_STRATEGY.md](design/LLM_WIKI_MINDSPACE_STRATEGY.md)
 
-Real maps:
+## Boundaries
 
-- [examples/README.md](../examples/README.md)
-
-## Design And Roadmap
-
-If you care about product direction and future work:
-
-- [product/features/finished/README.md](product/features/finished/README.md)
-- [product/features/inwork/README.md](product/features/inwork/README.md)
-- [product/features/future/README.md](product/features/future/README.md)
-- [LLM_WIKI_MINDSPACE_STRATEGY.md](LLM_WIKI_MINDSPACE_STRATEGY.md)
-- [UX_DESIGN_REVIEW.md](UX_DESIGN_REVIEW.md)
-- [TERMINAL_EXPERIENCE.md](TERMINAL_EXPERIENCE.md)
+- User-facing guides belong in [manual/](manual/) unless they are specifically embedded-help source.
+- Built-in help source belongs in [help/](help/).
+- Design notes belong in [design/](design/), even when they describe a shipped feature.
+- Active implementation tasks and future prioritization belong in Linear, not in repo docs.
+- Historical planning shelves live under [product/_archive/](product/_archive/) for context only.
 
 ## Working On The Repo
 
-If you are changing code or release automation:
-
-- [DEVELOPER.md](../DEVELOPER.md)
+If you are changing code or release automation, start with [DEVELOPER.md](../DEVELOPER.md).
