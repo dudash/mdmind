@@ -120,6 +120,7 @@ payload lives in `data`:
 | `relations --json` | `relation_rows.v1` | `RelationRow[]` |
 | `validate --json` | `diagnostics.v1` | `Diagnostic[]` |
 | `commands --json` | `command_catalog.v1` | `CommandCatalog` object |
+| `changelog --json` | `changelog_entry.v1` or `changelog.v1` | `ChangelogEntry` object or `ChangelogEntry[]` |
 | `export --format json` | raw export | `ExportDocument` object |
 
 `mdm export --format json` intentionally remains raw document export because
@@ -247,9 +248,10 @@ listed as interactive in `mdm commands --json`.
 | `mdm examples list` | bundled examples | no | no | no | Human-readable list; use `mdm commands --json` for machine discovery metadata. |
 | `mdm examples path` | installed examples | no | no | no | Prints examples directory when available. |
 | `mdm examples copy <name>` | bundled examples | files | no | no | Use `all` to materialize examples; use `--force` only when intentional. |
+| `mdm changelog` | bundled changelog | no | no | no | Reads release notes for the bundled version; use `--version` or `--all` for other sections. |
 | `mdm open <target>` | map | session/location sidecars in interactive mode | no | yes by default | Agents should use `--preview` or `--json`; avoid bare `open`. |
 | `mdm check-keys` | terminal input | no | no | yes | Humans only; agents should not run it. |
-| `mdm version` | no | no | no | no | Prints `mdm <version>`. |
+| `mdm version` | no | no | only with `--check` | no | Prints `mdm <version>`; `--check --json` checks GitHub Releases for a newer build. |
 | `mdmind <target>` | map | session/location sidecars and optional edits | no | yes by default | Humans only unless `--preview` is used. |
 | `mdmind --preview <target>` | map | no | no | no | Static preview equivalent to a readable tree view. |
 | `mdmind --check-keys` | terminal input | no | no | yes | Humans only; agents should not run it. |
@@ -295,7 +297,7 @@ Envelope payload shape:
       }
     ]
   },
-  "summary": {"count": 19},
+  "summary": {"count": 20},
   "next_actions": []
 }
 ```

@@ -21,6 +21,13 @@
       - press ? to open built-in help
       - press s in KEYSAVE mode, or S to toggle AUTOSAVE and save the current map immediately
       - open Get Familiar With The TUI when you want a simple tour of the map and surrounding surfaces
+    - What's New #guide [id:guide/start/changelog]
+      - open the What's New help topic when you want to know what changed in the version you are running
+      - run `mdm changelog` to read the same notes from the CLI
+      - run `mdm changelog --version 0.8.0` for a specific release
+      - run `mdm changelog --all` when you want the longer release history
+      - use Check For Updates in the palette when you want mdmind to look for a newer release
+      - update checks are manual and need internet access
     - What a map line can hold #guide [id:guide/start/map-line]
       - a visible label for people
       - #tags for grouping and workflow markers #reference

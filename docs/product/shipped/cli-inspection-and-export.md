@@ -10,6 +10,7 @@ What it already does well:
 - export current maps or deep-linked subtrees
 - import existing outlines and rough web structure into native maps
 - seed new work from starter templates
+- read bundled changelog entries and manually check for newer GitHub releases
 
 Core commands:
 
@@ -25,6 +26,7 @@ Core commands:
 - `mdm import`
 - `mdm init`
 - `mdm examples`
+- `mdm changelog`
 - `mdm open`
 - `mdm version`
 

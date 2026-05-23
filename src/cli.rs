@@ -17,6 +17,10 @@ use crate::app::{
     AppError, create_from_template, diagnostics_for_validate, diagnostics_have_errors,
     ensure_parseable, load_document, resolve_anchor_path, select_document,
 };
+use crate::changelog::{
+    changelog_entries, changelog_entry, default_changelog_entry, render_changelog_entry,
+    render_full_changelog,
+};
 use crate::examples::{
     all as bundled_examples, discover_examples_dir, find as find_example,
     readme_contents as examples_readme_contents,
@@ -38,6 +42,7 @@ use crate::render::{
 use crate::serializer::serialize_document;
 use crate::startup::choose_startup_target;
 use crate::templates::TemplateKind;
+use crate::updates::{UpdateCheck, check_for_updates};
 use crate::validate::validate_document;
 
 #[derive(Debug, Parser)]
@@ -46,7 +51,7 @@ use crate::validate::validate_document;
     version,
     about = "Inspect and validate local markdown-like thought maps.",
     long_about = "mdm is the CLI for local-first structured maps. It reads plain-text tree files, renders them for humans, and exports machine-friendly output when you ask for --json or --plain.",
-    after_help = "Examples:\n  mdm version\n  mdm init ideas.md --template product\n  mdm init TODO.md --template todo\n  mdm import notes.opml\n  mdm import map.mm\n  mdm import article.html --preview --report\n  mdm import outline.md --from markdown -o map.md\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm refs ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
+    after_help = "Examples:\n  mdm version\n  mdm changelog\n  mdm init ideas.md --template product\n  mdm init TODO.md --template todo\n  mdm import notes.opml\n  mdm import map.mm\n  mdm import article.html --preview --report\n  mdm import outline.md --from markdown -o map.md\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm refs ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -199,6 +204,22 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
+    #[command(
+        about = "Read curated mdmind changelog entries.",
+        after_help = "Examples:\n  mdm changelog\n  mdm changelog --version 0.8.0\n  mdm changelog --all\n  mdm changelog --json"
+    )]
+    Changelog {
+        #[arg(long, help = "Show the changelog entry for a version, such as 0.8.0.")]
+        version: Option<String>,
+        #[arg(long, action = ArgAction::SetTrue, help = "Print the full changelog.")]
+        all: bool,
+        #[arg(
+            long,
+            action = ArgAction::SetTrue,
+            help = "Print an agent-readable JSON envelope."
+        )]
+        json: bool,
+    },
     #[command(about = "Open a map or deep link in the interactive navigator.")]
     Open {
         target: String,
@@ -213,8 +234,13 @@ enum Commands {
     },
     #[command(about = "Check how this terminal reports Alt+arrow keys.")]
     CheckKeys,
-    #[command(about = "Print the mdm version.")]
-    Version,
+    #[command(about = "Print the mdm version or check for newer releases.")]
+    Version {
+        #[arg(long, action = ArgAction::SetTrue, help = "Check GitHub Releases for the latest mdmind version.")]
+        check: bool,
+        #[arg(long, action = ArgAction::SetTrue, help = "Print an agent-readable JSON envelope.")]
+        json: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -368,6 +394,14 @@ impl Cli {
             }),
             Commands::Catalog { json } if *json => Some(JsonContext {
                 command: "commands",
+                target: None,
+            }),
+            Commands::Changelog { version, json, .. } if *json => Some(JsonContext {
+                command: "changelog",
+                target: version.clone(),
+            }),
+            Commands::Version { json, .. } if *json => Some(JsonContext {
+                command: "version",
                 target: None,
             }),
             Commands::Open { target, json, .. } if *json => Some(JsonContext {
@@ -606,6 +640,9 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
         ),
         Commands::Examples { command } => dispatch_examples(command),
         Commands::Catalog { json } => dispatch_commands(json),
+        Commands::Changelog { version, all, json } => {
+            dispatch_changelog(version.as_deref(), all, json)
+        }
         Commands::Open {
             target,
             preview,
@@ -620,10 +657,7 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             }
         }
         Commands::CheckKeys => run_key_diagnostics().map_err(CliError::from_app),
-        Commands::Version => {
-            println!("mdm {APP_VERSION}");
-            Ok(())
-        }
+        Commands::Version { check, json } => dispatch_version(check, json),
     }
 }
 
@@ -1063,6 +1097,126 @@ fn dispatch_commands(json: bool) -> Result<(), CliError> {
     Ok(())
 }
 
+fn dispatch_changelog(version: Option<&str>, all: bool, json: bool) -> Result<(), CliError> {
+    if all && version.is_some() {
+        return Err(CliError::usage(
+            "invalid_changelog_selection",
+            "Choose either --all or --version, not both.",
+        ));
+    }
+
+    if all {
+        let entries = changelog_entries();
+        if json {
+            print_json_envelope(
+                "changelog",
+                None,
+                "changelog.v1",
+                Some(count_summary(entries.len())),
+                Some(&entries),
+                None,
+                Vec::new(),
+            );
+        } else {
+            println!("{}", render_full_changelog());
+        }
+        return Ok(());
+    }
+
+    let entry = match version {
+        Some(version) => changelog_entry(version).ok_or_else(|| {
+            CliError::runtime(format!(
+                "No changelog entry found for version '{version}'. Try `mdm changelog --all`."
+            ))
+        })?,
+        None => default_changelog_entry(APP_VERSION).ok_or_else(|| {
+            CliError::runtime("No changelog entries are bundled with this build.")
+        })?,
+    };
+
+    if json {
+        print_json_envelope(
+            "changelog",
+            version,
+            "changelog_entry.v1",
+            Some(json!({ "version": entry.version.as_str() })),
+            Some(&entry),
+            None,
+            Vec::new(),
+        );
+    } else {
+        println!("{}", render_changelog_entry(&entry));
+    }
+    Ok(())
+}
+
+fn dispatch_version(check: bool, json: bool) -> Result<(), CliError> {
+    if !check {
+        if json {
+            let data = VersionInfo {
+                current_version: APP_VERSION.to_string(),
+            };
+            print_json_envelope(
+                "version",
+                None,
+                "version.v1",
+                Some(json!({ "version": APP_VERSION })),
+                Some(&data),
+                None,
+                Vec::new(),
+            );
+        } else {
+            println!("mdm {APP_VERSION}");
+        }
+        return Ok(());
+    }
+
+    let check = check_for_updates(APP_VERSION).map_err(|error| CliError {
+        message: Some(error.message().to_string()),
+        exit_code: 1,
+        code: "update_check_failed",
+        category: "network",
+    })?;
+
+    if json {
+        print_json_envelope(
+            "version",
+            None,
+            "update_check.v1",
+            Some(json!({
+                "current_version": check.current_version.as_str(),
+                "latest_version": check.latest_version.as_str(),
+                "update_available": check.update_available,
+            })),
+            Some(&check),
+            None,
+            Vec::new(),
+        );
+    } else {
+        println!("{}", render_update_check(&check));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+struct VersionInfo {
+    current_version: String,
+}
+
+fn render_update_check(check: &UpdateCheck) -> String {
+    if check.update_available {
+        format!(
+            "mdm {}\nNew version {} available: {}",
+            check.current_version, check.latest_version, check.release_url
+        )
+    } else {
+        format!(
+            "mdm {}\nYou are on the latest release.",
+            check.current_version
+        )
+    }
+}
+
 #[derive(Debug, Serialize)]
 struct CommandCatalog {
     version: &'static str,
@@ -1387,6 +1541,27 @@ fn command_catalog() -> CommandCatalog {
                 &["mdm commands --json"],
             ),
             command_info!(
+                "changelog",
+                "Read curated mdmind changelog entries.",
+                &["bundled_changelog"],
+                &[],
+                false,
+                false,
+                &["pretty", "json"],
+                &[],
+                &[
+                    flag_value("--version", &["version"]),
+                    flag("--all"),
+                    flag("--json"),
+                ],
+                &["changelog_entry.v1", "changelog.v1"],
+                &[
+                    "mdm changelog",
+                    "mdm changelog --version 0.8.0",
+                    "mdm changelog --json",
+                ],
+            ),
+            command_info!(
                 "open",
                 "Open a map or deep link in the interactive navigator.",
                 &["map"],
@@ -1419,16 +1594,16 @@ fn command_catalog() -> CommandCatalog {
             ),
             command_info!(
                 "version",
-                "Print the mdm version.",
+                "Print the mdm version, or check GitHub Releases for newer builds.",
                 &[],
                 &[],
+                true,
                 false,
-                false,
-                &["plain"],
+                &["plain", "json"],
                 &[],
-                &[],
-                &[],
-                &["mdm version"],
+                &[flag("--check"), flag("--json")],
+                &["version.v1", "update_check.v1"],
+                &["mdm version", "mdm version --check --json"],
             ),
         ],
     }
@@ -1847,6 +2022,7 @@ fn raw_args_json_context() -> Option<JsonContext> {
         Some("relations") => "relations",
         Some("validate") => "validate",
         Some("commands") => "commands",
+        Some("version") => "version",
         Some("open") => "open",
         _ => "mdm",
     };

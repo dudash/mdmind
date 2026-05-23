@@ -23,6 +23,7 @@ use ratatui::{Frame, Terminal};
 
 use crate::APP_VERSION;
 use crate::app::{AppError, TargetRef, ensure_parseable, load_document, resolve_anchor_path};
+use crate::changelog::{default_changelog_entry, render_changelog_entry};
 use crate::checkpoints::{
     Checkpoint, CheckpointAnchor, CheckpointViewMode, CheckpointsState, load_checkpoints_for,
     save_checkpoints_for,
@@ -47,6 +48,7 @@ use crate::query::{
 use crate::serializer::serialize_document;
 use crate::session::{load_session_for, resolve_session_focus, save_session_for};
 use crate::ui_settings::{ThemeId, UiSettings, load_ui_settings_for, save_ui_settings_for};
+use crate::updates::{UpdateCheck, check_for_updates};
 use crate::views::{SavedView, SavedViewsState, load_views_for, save_views_for};
 
 const TICK_RATE: Duration = Duration::from_millis(150);
@@ -472,6 +474,7 @@ impl PaletteItemKind {
 enum HelpTopic {
     StartHere,
     TuiTour,
+    Changelog,
     Outliner,
     Agents,
     Navigation,
@@ -494,6 +497,7 @@ impl HelpTopic {
         match self {
             Self::StartHere => "Getting Started",
             Self::TuiTour => "Get Familiar With The TUI",
+            Self::Changelog => "What's New",
             Self::Outliner => "Using mdmind As An Outliner",
             Self::Agents => "Using mdmind With Agents",
             Self::Navigation => "Navigation",
@@ -516,6 +520,7 @@ impl HelpTopic {
         match self {
             Self::StartHere => "Welcome, first steps, and a few small experiments to try next.",
             Self::TuiTour => "Learn the map, focus panels, bars, and overlays in the live TUI.",
+            Self::Changelog => "Read the latest bundled changelog entry for this build.",
             Self::Outliner => {
                 "Use mdmind as a calm, keyboard-first outliner before you think about maps."
             }
@@ -554,6 +559,9 @@ impl HelpTopic {
             Self::TuiTour => {
                 "A simple guide to the important parts of the mdmind terminal interface."
             }
+            Self::Changelog => {
+                "Current release notes, upgrade notes, and recent user-facing changes."
+            }
             Self::Outliner => {
                 "User guide for people who think in outlines, notes, plans, and writing structures."
             }
@@ -589,6 +597,9 @@ impl HelpTopic {
             }
             Self::TuiTour => {
                 "tui screen tour layout map outline focus panel side lanes context top bar status lamps keybar overlays palette search help visual map terminal interface"
+            }
+            Self::Changelog => {
+                "changelog release notes release-notes whats new what's new version current latest upgrade features fixes added changed fixed"
             }
             Self::Outliner => {
                 "outliner outline outlining rows hierarchy notes nested notes planning writing research checklist omnioutliner sections branches details minimal mode reading"
@@ -643,6 +654,9 @@ impl HelpTopic {
             }
             Self::TuiTour => {
                 "The TUI is built around the map first. The outline is where you move and edit; the surrounding surfaces explain context, state, and shortcuts without replacing the map."
+            }
+            Self::Changelog => {
+                "Use What's New when you want a quick, readable summary of what changed in the version you are running. It is meant to answer the practical question: what can I do now that I could not do before?"
             }
             Self::Outliner => {
                 "You can use mdmind as an outliner long before you care about visual mind maps. The tree is the real working surface, and features like details, focused views, minimal mode, and search all support that outline-first workflow."
@@ -709,6 +723,12 @@ impl HelpTopic {
                 "The path line is your breadcrumb. It shows where the focused branch lives in the map, which matters more as the tree gets deeper.",
                 "The bottom status tells you what just happened and what context is active. The keybar is a reminder strip for common actions; minimal mode hides it when you want a quieter surface.",
                 "Overlays are temporary work surfaces. Search narrows the map, the palette jumps to intent, help answers questions, and the visual map gives a second lens on the current working set.",
+            ],
+            Self::Changelog => &[
+                "Use this topic when you want to know what changed in the version you are running.",
+                "The same content is available from the CLI with `mdm changelog`. Use `mdm changelog --version 0.8.0` for a specific release or `mdm changelog --json` when an agent needs structured release information.",
+                "Use Check For Updates from the palette when you want mdmind to look for a newer GitHub release. It is manual, needs internet access, and stays quiet when you do not ask for it.",
+                "For a longer product memory, use `mdm changelog --all` and skim by version. Each release is grouped around features, fixes, commands, and other notes that matter to people using mdmind.",
             ],
             Self::Outliner => &[
                 "The simplest way to think about mdmind is as a structured outliner with better navigation, filtering, and long-term memory. One line is one row in the outline. Children create hierarchy. If you are used to nested notes, this should feel natural. The TUI just makes moving through that outline feel fast.",
@@ -809,6 +829,26 @@ impl HelpTopic {
                 ("/", "Open the search overlay"),
                 ("?", "Open or close help"),
                 ("m", "Open the spatial canvas"),
+            ],
+            Self::Changelog => &[
+                ("mdm changelog", "Print notes for the bundled app version"),
+                (
+                    "mdm changelog --version X.Y.Z",
+                    "Print release notes for a specific version",
+                ),
+                (
+                    "mdm changelog --json",
+                    "Print structured changelog data for agents and scripts",
+                ),
+                (
+                    "mdm version --check",
+                    "Check GitHub Releases for a newer build",
+                ),
+                (": what's new", "Open this topic from the command palette"),
+                (
+                    ": check updates",
+                    "Run the manual update check from the TUI",
+                ),
             ],
             Self::Outliner => &[
                 ("↑ / ↓", "Move through outline rows"),
@@ -1056,6 +1096,11 @@ impl HelpTopic {
                 "The top lamps are a quick instrument panel: view and filter first, surface settings next, save and modified state last.",
                 "Overlays are temporary. Esc usually brings you back to the main map surface.",
             ],
+            Self::Changelog => &[
+                "Start with Features when you want the product story, then skim Fixed and Closed Issues when you are checking whether a specific pain point improved.",
+                "Use New Commands when you want to know what changed in the CLI surface.",
+                "Follow issue links when a release note points to a specific GitHub issue; those usually explain the original user need in more detail.",
+            ],
             Self::Outliner => &[
                 "If you mostly think in outlines, ignore ids, relations, and the mindmap at first. The core outliner loop is already strong without them.",
                 "Node details are the feature that makes mdmind feel less like a terse tree and more like a practical outlining tool for writing, research, and planning.",
@@ -1155,6 +1200,7 @@ impl HelpTopic {
             Self::TableView => Some("Model Row @provider:openai @aa_rank:01 @source:aa-lmarena"),
             Self::Ids => Some("API Design #backend [id:product/api-design]"),
             Self::Relations => Some("Launch Readiness [[rel:blocked-by->product/api-design]]"),
+            Self::Changelog => Some("mdm changelog --version 0.8.0"),
             _ => None,
         }
     }
@@ -1163,27 +1209,30 @@ impl HelpTopic {
         match self {
             Self::StartHere => 0,
             Self::TuiTour => 1,
-            Self::Outliner => 2,
-            Self::Agents => 3,
-            Self::Navigation => 4,
-            Self::Editing => 5,
-            Self::Details => 6,
-            Self::Search => 7,
-            Self::Views => 8,
-            Self::Palette => 9,
-            Self::Safety => 10,
-            Self::Syntax => 11,
-            Self::Ids => 12,
-            Self::Relations => 13,
-            Self::Themes => 14,
-            Self::Mindmap => 15,
-            Self::TableView => 16,
+            Self::Changelog => 2,
+            Self::Outliner => 3,
+            Self::Agents => 4,
+            Self::Navigation => 5,
+            Self::Editing => 6,
+            Self::Details => 7,
+            Self::Search => 8,
+            Self::Views => 9,
+            Self::Palette => 10,
+            Self::Safety => 11,
+            Self::Syntax => 12,
+            Self::Ids => 13,
+            Self::Relations => 14,
+            Self::Themes => 15,
+            Self::Mindmap => 16,
+            Self::TableView => 17,
         }
     }
 
     fn track_label(self) -> &'static str {
         match self {
-            Self::StartHere | Self::TuiTour | Self::Outliner | Self::Agents => "Basics",
+            Self::StartHere | Self::TuiTour | Self::Changelog | Self::Outliner | Self::Agents => {
+                "Basics"
+            }
             Self::Navigation
             | Self::Editing
             | Self::Details
@@ -1245,6 +1294,7 @@ enum PaletteAction {
     RestoreLatestCheckpoint,
     ClearFilter,
     CycleViewMode,
+    CheckForUpdates,
     ShowHelp,
 }
 
@@ -2217,6 +2267,7 @@ struct TuiApp {
     mindmap: Option<MindmapOverlayState>,
     spatial_canvas: Option<SpatialCanvasState>,
     help: Option<HelpOverlayState>,
+    update_check: Option<UpdateCheck>,
     palette_preview_base: Option<UiSettings>,
     quit_armed: bool,
     delete_armed: bool,
@@ -2298,6 +2349,7 @@ impl TuiApp {
             mindmap: None,
             spatial_canvas: None,
             help: None,
+            update_check: None,
             palette_preview_base: None,
             quit_armed: false,
             delete_armed: false,
@@ -4423,6 +4475,32 @@ impl TuiApp {
         self.set_status(StatusTone::Info, message);
     }
 
+    fn check_for_updates(&mut self) {
+        self.set_status(StatusTone::Info, "Checking GitHub Releases for updates...");
+        match check_for_updates(APP_VERSION) {
+            Ok(check) => {
+                if check.update_available {
+                    self.set_status(
+                        StatusTone::Success,
+                        format!("New mdmind version {} is available.", check.latest_version),
+                    );
+                } else {
+                    self.set_status(
+                        StatusTone::Success,
+                        format!("mdmind {} is the latest release.", check.current_version),
+                    );
+                }
+                self.update_check = Some(check);
+            }
+            Err(error) => {
+                self.set_status(
+                    StatusTone::Warning,
+                    format!("Could not check for updates: {}", error.message()),
+                );
+            }
+        }
+    }
+
     fn cycle_view_mode(&mut self, forward: bool) {
         let has_filter = self.filter.is_some();
         let next = if forward {
@@ -4659,6 +4737,9 @@ impl TuiApp {
                 }
                 PaletteAction::CycleViewMode => {
                     self.cycle_view_mode(true);
+                }
+                PaletteAction::CheckForUpdates => {
+                    self.check_for_updates();
                 }
                 PaletteAction::ShowHelp => {
                     self.open_help(None);
@@ -5042,6 +5123,7 @@ impl TuiApp {
                     topic,
                     HelpTopic::StartHere
                         | HelpTopic::TuiTour
+                        | HelpTopic::Changelog
                         | HelpTopic::Outliner
                         | HelpTopic::Details
                         | HelpTopic::Search
@@ -5232,6 +5314,12 @@ impl TuiApp {
                 "Clear the active query filter",
                 "clear filter query search",
                 PaletteAction::ClearFilter,
+            ),
+            (
+                "Check For Updates",
+                "Check GitHub Releases for a newer mdmind version",
+                "check updates update version latest release github upgrade new version",
+                PaletteAction::CheckForUpdates,
             ),
             (
                 "Show Help",
@@ -5784,6 +5872,7 @@ impl TuiApp {
         let mut topics = [
             HelpTopic::StartHere,
             HelpTopic::TuiTour,
+            HelpTopic::Changelog,
             HelpTopic::Outliner,
             HelpTopic::Agents,
             HelpTopic::Navigation,
@@ -9057,42 +9146,57 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
         ])
         .split(inner);
 
-    frame.render_widget(
-        Paragraph::new(vec![Line::from(vec![
-            Span::styled(
-                if app.ui_settings.ascii_accents {
-                    "/\\/\\  Searchable Built-In Help"
-                } else {
-                    "Searchable Built-In Help"
-                },
-                Style::default()
-                    .fg(PALETTE.text)
-                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
-            ),
-            Span::raw("  "),
-            Span::styled(
-                format!("v{APP_VERSION}"),
-                Style::default()
-                    .fg(PALETTE.accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  "),
-            Span::styled(
-                if minimal {
-                    "Guides and quick answers."
-                } else {
-                    "Search guides and quick answers in place."
-                },
-                Style::default().fg(PALETTE.muted),
-            ),
-            Span::raw("  "),
-            Span::styled(
-                format!("View: {}", app.view_mode.label()),
-                Style::default().fg(PALETTE.sky),
-            ),
-        ])]),
-        sections[0],
-    );
+    let mut header_spans = vec![
+        Span::styled(
+            if app.ui_settings.ascii_accents {
+                "/\\/\\  Searchable Built-In Help"
+            } else {
+                "Searchable Built-In Help"
+            },
+            Style::default()
+                .fg(PALETTE.text)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            format!("v{APP_VERSION}"),
+            Style::default()
+                .fg(PALETTE.accent)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ];
+    if let Some(check) = app
+        .update_check
+        .as_ref()
+        .filter(|check| check.update_available)
+    {
+        header_spans.push(Span::raw("  "));
+        header_spans.push(Span::styled(
+            format!("New version {} available", check.latest_version),
+            Style::default()
+                .fg(PALETTE.background)
+                .bg(PALETTE.accent)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+    header_spans.extend([
+        Span::raw("  "),
+        Span::styled(
+            if minimal {
+                "Guides and quick answers."
+            } else {
+                "Search guides and quick answers in place."
+            },
+            Style::default().fg(PALETTE.muted),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            format!("View: {}", app.view_mode.label()),
+            Style::default().fg(PALETTE.sky),
+        ),
+    ]);
+
+    frame.render_widget(Paragraph::new(vec![Line::from(header_spans)]), sections[0]);
 
     let input_block = Block::default()
         .title(styled_title(
@@ -9224,6 +9328,18 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
             columns[0],
             &mut state,
         );
+        let topics_visible_height = usize::from(columns[0].height.saturating_sub(2));
+        if help_topics_have_more_below(&topics, selected_index, topics_visible_height) {
+            render_more_below_indicator(
+                frame,
+                columns[0].inner(Margin {
+                    horizontal: 2,
+                    vertical: 1,
+                }),
+                "more topics",
+                PALETTE,
+            );
+        }
     }
 
     let preview_lines = if let Some(topic) = topics.get(help.selected).copied() {
@@ -9289,7 +9405,6 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, help: &HelpO
             PALETTE,
         );
     }
-
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             key_hint("type", "filter"),
@@ -11440,6 +11555,9 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
         }
         HelpTopic::TuiTour => {
             "start with the outline; use the surrounding panels and bars as context".to_string()
+        }
+        HelpTopic::Changelog => {
+            "run `mdm changelog --all` when you want the full release history".to_string()
         }
         HelpTopic::Outliner => {
             if app.ui_settings.minimal_mode {
@@ -13711,6 +13829,9 @@ fn help_preview_lines(app: &TuiApp, topic: HelpTopic) -> Vec<Line<'static>> {
     if topic == HelpTopic::TuiTour {
         return help_tui_tour_lines(app, palette);
     }
+    if topic == HelpTopic::Changelog {
+        return help_changelog_lines(app, palette);
+    }
     if topic == HelpTopic::Agents {
         return help_agents_lines(app, palette);
     }
@@ -13950,6 +14071,83 @@ fn help_tui_tour_lines(app: &TuiApp, palette: Palette) -> Vec<Line<'static>> {
     lines
 }
 
+fn help_changelog_lines(app: &TuiApp, palette: Palette) -> Vec<Line<'static>> {
+    let mut lines = vec![Line::from(Span::styled(
+        "See what changed in this version without leaving your map. For older releases or scriptable output, use the mdm changelog command from your shell.",
+        Style::default()
+            .fg(palette.text)
+            .add_modifier(Modifier::ITALIC),
+    ))];
+    lines.push(Line::from(""));
+
+    match default_changelog_entry(APP_VERSION) {
+        Some(entry) => {
+            for line in render_changelog_entry(&entry).lines() {
+                lines.push(changelog_help_line(line, palette));
+            }
+        }
+        None => lines.push(Line::from(Span::styled(
+            "No changelog entry is bundled with this build.",
+            Style::default().fg(palette.warn),
+        ))),
+    }
+
+    lines.push(Line::from(""));
+    lines.push(help_section_heading("Useful Commands", palette.sky));
+    for (command, description) in HelpTopic::Changelog.command_reference() {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{command:<32}"),
+                Style::default()
+                    .fg(palette.sky)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(*description, Style::default().fg(palette.text)),
+        ]));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Right now ", Style::default().fg(palette.muted)),
+        Span::styled(
+            help_context_line(app, HelpTopic::Changelog),
+            Style::default().fg(palette.warn),
+        ),
+    ]));
+    lines
+}
+
+fn changelog_help_line(line: &str, palette: Palette) -> Line<'static> {
+    let trimmed = line.trim();
+    if trimmed.starts_with("## ") {
+        Line::from(Span::styled(
+            trimmed.to_string(),
+            Style::default()
+                .fg(palette.accent)
+                .add_modifier(Modifier::BOLD),
+        ))
+    } else if trimmed.starts_with("### ") {
+        Line::from(Span::styled(
+            trimmed.trim_start_matches("### ").to_string(),
+            Style::default()
+                .fg(palette.sky)
+                .add_modifier(Modifier::BOLD),
+        ))
+    } else if trimmed.starts_with("- ") {
+        Line::from(vec![
+            Span::styled("• ", Style::default().fg(palette.warn)),
+            Span::styled(
+                trimmed.trim_start_matches("- ").to_string(),
+                Style::default().fg(palette.text),
+            ),
+        ])
+    } else {
+        Line::from(Span::styled(
+            trimmed.to_string(),
+            Style::default().fg(palette.text),
+        ))
+    }
+}
+
 fn help_agents_lines(app: &TuiApp, palette: Palette) -> Vec<Line<'static>> {
     let mut lines = vec![Line::from(Span::styled(
         "Use mdmind when an agent should produce a map a human can keep shaping: plans, research, outlines, decisions, TODOs, and handoffs.",
@@ -14065,6 +14263,59 @@ fn wrapped_line_height(line: &Line<'_>, width: usize) -> usize {
         .map(|segment| segment.chars().count().max(1).div_ceil(width))
         .sum::<usize>()
         .max(1)
+}
+
+fn help_topics_have_more_below(
+    topics: &[HelpTopic],
+    selected_index: usize,
+    visible_height: usize,
+) -> bool {
+    selected_index + 1 < topics.len()
+        && help_topics_rendered_height(topics, selected_index) > visible_height
+}
+
+fn help_topics_rendered_height(topics: &[HelpTopic], selected_index: usize) -> usize {
+    topics
+        .iter()
+        .enumerate()
+        .map(|(index, topic)| {
+            let current_track = topic.track_label();
+            let previous_track = index
+                .checked_sub(1)
+                .and_then(|prev| topics.get(prev))
+                .map(|prev| prev.track_label());
+            let mut height = 1;
+            if index > 0 && previous_track != Some(current_track) {
+                height += 1;
+            }
+            if previous_track != Some(current_track) {
+                height += 1;
+            }
+            if index == selected_index {
+                height += 1;
+            }
+            height
+        })
+        .sum()
+}
+
+fn render_more_below_indicator(frame: &mut Frame, area: Rect, label: &str, palette: Palette) {
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+
+    let marker = if ascii_accents_enabled() { "v" } else { "↓" };
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            format!(" {marker} {label} "),
+            Style::default()
+                .fg(palette.background)
+                .bg(palette.sky)
+                .add_modifier(Modifier::BOLD),
+        )))
+        .alignment(Alignment::Center),
+        Rect::new(area.x, area.y + area.height - 1, area.width, 1),
+    );
 }
 
 fn render_preview_scrollbar(
@@ -15360,6 +15611,33 @@ mod tests {
     }
 
     #[test]
+    fn command_palette_surfaces_manual_update_check() {
+        let map_path = temp_map_path("palette-update-check.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let item = app
+            .palette_items("check updates")
+            .into_iter()
+            .find(|item| item.title == "Check For Updates")
+            .expect("manual update check should be discoverable");
+
+        assert!(matches!(
+            item.target,
+            PaletteTarget::Action(PaletteAction::CheckForUpdates)
+        ));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
     fn command_palette_can_open_a_saved_view() {
         let map_path = temp_map_path("palette-view.md");
         let document = sample_document();
@@ -15738,6 +16016,63 @@ mod tests {
     }
 
     #[test]
+    fn changelog_help_copy_is_user_facing() {
+        let map_path = temp_map_path("help-changelog-copy.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let rendered = help_preview_lines(&app, HelpTopic::Changelog)
+            .iter()
+            .map(Line::to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(rendered.contains("See what changed in this version"));
+        assert!(!rendered.contains("GitHub release body"));
+        assert!(!rendered.contains("before tagging"));
+        assert!(!rendered.contains("commit messages"));
+        assert!(!rendered.contains("before the tag"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn help_topics_report_when_more_rows_are_below() {
+        let map_path = temp_map_path("help-more-topics.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let topics = app.help_topics("");
+
+        assert!(help_topics_have_more_below(&topics, 0, 4));
+        assert!(!help_topics_have_more_below(
+            &topics,
+            topics.len().saturating_sub(1),
+            4
+        ));
+        assert!(!help_topics_have_more_below(
+            &topics,
+            0,
+            help_topics_rendered_height(&topics, 0)
+        ));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
     fn searchable_help_indexes_body_text_for_key_value_queries() {
         let map_path = temp_map_path("help-key-value.md");
         let document = sample_document();
@@ -15807,10 +16142,10 @@ mod tests {
         let topics = app.help_topics("");
         assert_eq!(topics.first().copied(), Some(HelpTopic::StartHere));
         assert_eq!(topics.get(1).copied(), Some(HelpTopic::TuiTour));
-        assert_eq!(topics.get(2).copied(), Some(HelpTopic::Outliner));
-        assert_eq!(topics.get(3).copied(), Some(HelpTopic::Agents));
-        assert_eq!(topics.get(4).copied(), Some(HelpTopic::Navigation));
-        assert_eq!(topics.get(5).copied(), Some(HelpTopic::Editing));
+        assert_eq!(topics.get(2).copied(), Some(HelpTopic::Changelog));
+        assert_eq!(topics.get(3).copied(), Some(HelpTopic::Outliner));
+        assert_eq!(topics.get(4).copied(), Some(HelpTopic::Agents));
+        assert_eq!(topics.get(5).copied(), Some(HelpTopic::Navigation));
         assert!(
             topics.iter().position(|topic| *topic == HelpTopic::Palette)
                 < topics.iter().position(|topic| *topic == HelpTopic::Themes),

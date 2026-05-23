@@ -30,6 +30,7 @@ If you want to use mdmind with AI agents:
 
 If you want exact behavior:
 
+- [../CHANGELOG.md](../CHANGELOG.md)
 - [../spec/README.md](../spec/README.md)
 - [reference/QUERY_LANGUAGE.md](reference/QUERY_LANGUAGE.md)
 - [reference/IDS_AND_DEEP_LINKS.md](reference/IDS_AND_DEEP_LINKS.md)
@@ -47,6 +48,7 @@ If you want product direction:
 
 - User-facing guides belong in [manual/](manual/) unless they are specifically embedded-help source.
 - Built-in help source belongs in [help/](help/).
+- Release notes belong in [../CHANGELOG.md](../CHANGELOG.md); active release tasks still belong in Linear.
 - Design notes belong in [design/](design/), even when they describe a shipped feature.
 - Active implementation tasks and future prioritization belong in Linear, not in repo docs.
 - Historical planning shelves live under [product/_archive/](product/_archive/) for context only.

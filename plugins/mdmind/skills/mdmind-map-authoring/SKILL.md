@@ -4,7 +4,7 @@ description: "Create or revise native mdmind maps: plain-text Markdown outlines,
 license: Apache-2.0
 metadata:
   author: mdmind
-  version: "0.7.0"
+  version: "0.8.0"
 ---
 
 # mdmind Map Authoring

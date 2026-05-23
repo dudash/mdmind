@@ -4,7 +4,7 @@ description: Inspect, validate, query, audit, deep-link, list external refs, or 
 license: Apache-2.0
 metadata:
   author: mdmind
-  version: "0.7.0"
+  version: "0.8.0"
 ---
 
 # mdm CLI Inspection

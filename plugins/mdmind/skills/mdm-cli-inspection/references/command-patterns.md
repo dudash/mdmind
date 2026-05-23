@@ -13,6 +13,33 @@ mdm commands --json
 The command catalog returns an mdm response envelope. Read command metadata from
 `data.commands`.
 
+## Read Release Notes
+
+Use:
+
+```bash
+mdm changelog
+mdm changelog --version 0.8.0 --json
+```
+
+Use `changelog` when the user asks what changed in mdmind itself. The default
+entry follows the bundled app version; `--version` selects a specific released
+version.
+
+## Check The Installed Version
+
+Use:
+
+```bash
+mdm version
+mdm version --json
+mdm version --check --json
+```
+
+Use `version --check` only when the user wants a live update check and network
+access is appropriate. Plain `mdm version` and `mdm version --json` do not need
+network access.
+
 ## Validate First
 
 Use:

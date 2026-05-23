@@ -96,6 +96,10 @@ That installs both:
 - `mdmind`
 
 More install and release detail lives in [docs/manual/INSTALL_AND_RELEASE.md](docs/manual/INSTALL_AND_RELEASE.md).
+Release notes live in [CHANGELOG.md](CHANGELOG.md) and can be read locally with
+`mdm changelog`.
+To check GitHub Releases for a newer build when you have network access, run
+`mdm version --check`.
 
 For Codex, Claude, or other agent clients, see [plugins/mdmind/README.md](plugins/mdmind/README.md).
 

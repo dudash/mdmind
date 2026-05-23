@@ -52,11 +52,58 @@ Expected tap shape:
 
 Current release flow:
 
-1. Prepare or tag a release.
-2. Build platform archives.
-3. Attach archives to the GitHub release.
-4. Generate checksums and a Homebrew formula from the release assets.
-5. Optionally publish the formula into a tap repo.
+1. Curate the release entry in [CHANGELOG.md](../../CHANGELOG.md).
+2. Prepare or tag a release.
+3. Validate that `mdm changelog --version X.Y.Z` can render the target entry.
+4. Build platform archives.
+5. Attach archives to the GitHub release.
+6. Generate checksums and a Homebrew formula from the release assets.
+7. Optionally publish the formula into a tap repo.
+
+## Changelog
+
+`CHANGELOG.md` is the durable source for user-facing release notes. Keep it
+curated and organized around user-visible change, not every commit.
+
+Recommended sections:
+
+- `Features`
+- `New Commands`
+- `Changed`
+- `Fixed`
+- `Closed Issues`
+- `Docs`
+- `Upgrade Notes`
+- `Additional Notes`
+
+Use `Closed Issues` when a release resolves a public GitHub issue that helps
+users understand the change. Prefer a short link like
+`[#1](https://github.com/dudash/mdmind/issues/1)` plus the user-facing outcome,
+not a raw issue dump.
+
+The CLI and TUI read the same bundled file:
+
+```bash
+mdm changelog
+mdm changelog --version 0.8.0
+mdm changelog --all
+mdm changelog --json
+```
+
+When you only want to know whether a newer build exists, use the manual update
+check:
+
+```bash
+mdm version --check
+```
+
+That command checks GitHub Releases and needs network access. The TUI exposes
+the same check through the command palette as `Check For Updates`.
+
+By default, `mdm changelog` shows the section matching the bundled app version.
+Before running the release workflow, move relevant draft notes into the target
+`## [X.Y.Z] - YYYY-MM-DD` section. The workflow fails if that target version
+cannot be rendered by `mdm changelog --version X.Y.Z`.
 
 ## Validate Installer Metadata
 

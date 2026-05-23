@@ -1,6 +1,7 @@
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod app;
+pub mod changelog;
 pub mod checkpoints;
 pub mod cli;
 pub mod editor;
@@ -19,5 +20,6 @@ pub mod session;
 pub mod startup;
 pub mod templates;
 pub mod ui_settings;
+pub mod updates;
 pub mod validate;
 pub mod views;

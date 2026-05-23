@@ -69,6 +69,14 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Validate changelog entry
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          cargo run --bin mdm -- changelog --version "${VERSION}" > /tmp/mdmind-release-notes.md
+          test -s /tmp/mdmind-release-notes.md
+
       - name: Update crate version
         shell: bash
         env:
@@ -123,12 +131,29 @@ jobs:
     needs: prepare-release
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag_name }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Render release notes from changelog
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: cargo run --bin mdm -- changelog --version "${VERSION}" > mdmind-release-notes.md
+
       - name: Create release entry
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare-release.outputs.tag_name }}
           name: ${{ needs.prepare-release.outputs.tag_name }}
-          generate_release_notes: true
+          body_path: mdmind-release-notes.md
 
   build-release:
     name: Build ${{ matrix.target }}

@@ -209,6 +209,7 @@ fn commands_json_lists_agent_command_catalog() {
         "examples path",
         "examples copy",
         "commands",
+        "changelog",
         "open",
         "check-keys",
         "version",
@@ -243,6 +244,47 @@ fn commands_json_lists_agent_command_catalog() {
             .unwrap()
             .contains(&"session_sidecars".into())
     );
+}
+
+#[test]
+fn changelog_prints_latest_curated_entry() {
+    let output = run_mdm(&["changelog"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains(&format!("## [{}]", env!("CARGO_PKG_VERSION"))));
+    assert!(stdout.contains("###"));
+}
+
+#[test]
+fn changelog_can_select_legacy_release() {
+    let output = run_mdm(&["changelog", "--version", "0.7.0"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("## [0.7.0] - 2026-05-13"));
+    assert!(stdout.contains("Metadata Table View"));
+}
+
+#[test]
+fn changelog_can_select_080_release_notes() {
+    let output = run_mdm(&["changelog", "--version", "0.8.0"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("## [0.8.0] - 2026-05-23"));
+    assert!(stdout.contains("mdm changelog"));
+}
+
+#[test]
+fn changelog_json_uses_a_success_envelope() {
+    let output = run_mdm(&["changelog", "--version", "v0.7.0", "--json"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "changelog");
+    assert_eq!(value["format"], "changelog_entry.v1");
+    assert_eq!(value["target"], "v0.7.0");
+    assert_eq!(value["data"]["version"], "0.7.0");
 }
 
 #[test]
@@ -1101,6 +1143,19 @@ fn version_command_prints_the_cli_version() {
         stdout(&output),
         format!("mdm {}\n", env!("CARGO_PKG_VERSION"))
     );
+}
+
+#[test]
+fn version_json_prints_the_cli_version_without_network() {
+    let output = run_mdm(&["version", "--json"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let value: serde_json::Value =
+        serde_json::from_str(&stdout(&output)).expect("version json should parse");
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "version");
+    assert_eq!(value["format"], "version.v1");
+    assert_eq!(value["data"]["current_version"], env!("CARGO_PKG_VERSION"));
 }
 
 #[test]
