@@ -187,14 +187,12 @@ pub fn parse_markdown(markdown: &str) -> MarkdownDocument {
                         text: String::new(),
                     });
                 }
-                Tag::Paragraph => {
-                    if table_cell.is_none() && current.is_none() {
-                        current = Some(if quote_depth > 0 {
-                            CurrentBlock::BlockQuote(String::new())
-                        } else {
-                            CurrentBlock::Paragraph(String::new())
-                        });
-                    }
+                Tag::Paragraph if table_cell.is_none() && current.is_none() => {
+                    current = Some(if quote_depth > 0 {
+                        CurrentBlock::BlockQuote(String::new())
+                    } else {
+                        CurrentBlock::Paragraph(String::new())
+                    });
                 }
                 Tag::List(start) => {
                     lists.push(ListState {
