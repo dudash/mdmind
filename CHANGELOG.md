@@ -6,6 +6,46 @@ Future entries should be curated before release. Older entries are a best-effort
 backfill from local tags, product docs, and commit history, so they summarize
 the release shape rather than every internal commit.
 
+## [0.9.0] - 2026-05-25
+
+### Features
+
+- **Ordinary Markdown is now a first-class read-only path**: opening a README,
+  changelog, agent report, or notes file in `mdmind` shows a document view
+  instead of treating the file like a broken map.
+- The Markdown reader supports scrolling, rendered/raw toggling, search with
+  highlighted matches, and clear edit-key guidance so users can inspect nearby
+  docs without accidentally rewriting them.
+- `mdmind` now classifies `.md` files more carefully: valid mdmind maps still
+  open as maps, ordinary Markdown opens as a document, and near-miss maps show
+  recovery guidance instead of silently falling through.
+- Markdown files can be imported directly from the read-only TUI into a sibling
+  `<stem>-mind.md` map, leaving the original unchanged and opening the imported
+  map immediately.
+- Imported Markdown maps now include a timestamped `#lossy-summary` review node
+  with source, preservation counts, omitted blank-line counts, and a reminder
+  that Markdown formatting may have been simplified.
+- `mdm render` gives the CLI a dedicated pretty Markdown renderer for ordinary
+  `.md` files.
+
+### Changed
+
+- `mdm changelog` now defaults to pretty terminal rendering, while
+  `mdm changelog --plain` preserves raw Markdown output for scripts and release
+  workflows.
+- Markdown import is safer around README-style docs: link-only bullets get
+  visible node labels, and fenced code blocks stay literal detail text instead
+  of being interpreted as real map structure.
+- Import filename collisions in the TUI now use a simpler prompt: type a new
+  name or press Enter to overwrite the default `<stem>-mind.md`.
+
+### Fixed
+
+- Fixed validation errors from imported Markdown lists whose items were only
+  Markdown references.
+- Fixed fenced mdmind examples inside Markdown documents becoming real child
+  nodes during import.
+
 ## [0.8.0] - 2026-05-23
 
 ### Features
