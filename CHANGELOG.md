@@ -6,6 +6,30 @@ Future entries should be curated before release. Older entries are a best-effort
 backfill from local tags, product docs, and commit history, so they summarize
 the release shape rather than every internal commit.
 
+## [0.9.0] - 2026-05-25
+
+### Features
+
+- **Ordinary Markdown is now first-class in mdmind**: READMEs, changelogs,
+  agent reports, and notes open as read-only documents instead of broken maps,
+  while native mdmind maps still open as maps.
+  - The Markdown reader includes rendered/raw views, scrolling, search
+    highlights, and clear read-only guidance.
+  - Markdown files can be imported from the TUI into a sibling `<stem>-mind.md`
+    map with a timestamped `#lossy-summary` for review.
+
+### New Commands
+
+- `mdm view-markdown <target>` opens ordinary Markdown files from the CLI.
+
+### Changed Commands
+
+- `mdm changelog` now defaults to pretty terminal rendering; use
+  `mdm changelog --plain` for raw Markdown.
+- `mdmind <file.md>` and `mdmind --preview` now render ordinary Markdown while
+  keeping native maps on the map path. `mdm view` remains map-oriented and
+  points ordinary Markdown users to `mdm view-markdown`.
+
 ## [0.8.0] - 2026-05-23
 
 ### Features

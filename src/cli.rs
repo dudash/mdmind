@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 #[cfg(test)]
 use std::collections::BTreeSet;
+use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -8,14 +9,15 @@ use std::process::ExitCode;
 use clap::CommandFactory;
 use clap::builder::PossibleValuesParser;
 use clap::error::ErrorKind;
-use clap::{ArgAction, Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 use serde_json::json;
 
 use crate::APP_VERSION;
 use crate::app::{
-    AppError, create_from_template, diagnostics_for_validate, diagnostics_have_errors,
-    ensure_parseable, load_document, resolve_anchor_path, select_document,
+    AppError, ClassifiedTarget, OpenTargetMode, classify_open_target, create_from_template,
+    diagnostics_for_validate, diagnostics_have_errors, ensure_parseable, load_document,
+    near_miss_guidance, resolve_anchor_path, select_document,
 };
 use crate::changelog::{
     changelog_entries, changelog_entry, default_changelog_entry, render_changelog_entry,
@@ -27,7 +29,8 @@ use crate::examples::{
 };
 use crate::export::export_document;
 use crate::importer::import_document;
-use crate::interactive::{run_interactive, run_key_diagnostics};
+use crate::interactive::{run_interactive_with_mode, run_key_diagnostics};
+use crate::markdown_render::{ColorMode, RenderOptions, RenderTarget, render_markdown};
 use crate::model::{Document, ExternalRefKind, Node, Severity, TaskState};
 use crate::query::{
     filter_document, find_matches, link_entries, metadata_rows, reference_entries,
@@ -51,7 +54,7 @@ use crate::validate::validate_document;
     version,
     about = "Inspect and validate local markdown-like thought maps.",
     long_about = "mdm is the CLI for local-first structured maps. It reads plain-text tree files, renders them for humans, and exports machine-friendly output when you ask for --json or --plain.",
-    after_help = "Examples:\n  mdm version\n  mdm changelog\n  mdm init ideas.md --template product\n  mdm init TODO.md --template todo\n  mdm import notes.opml\n  mdm import map.mm\n  mdm import article.html --preview --report\n  mdm import outline.md --from markdown -o map.md\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm refs ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
+    after_help = "Examples:\n  mdm version\n  mdm changelog\n  mdm view-markdown README.md\n  mdm init ideas.md --template product\n  mdm init TODO.md --template todo\n  mdm import notes.opml\n  mdm import map.mm\n  mdm import article.html --preview --report\n  mdm import outline.md --from markdown -o map.md\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm refs ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -67,6 +70,25 @@ enum Commands {
         json: bool,
         #[arg(long)]
         max_depth: Option<usize>,
+    },
+    #[command(
+        about = "View an ordinary Markdown file in the terminal.",
+        after_help = "Examples:\n  mdm view-markdown README.md\n  mdm view-markdown CHANGELOG.md --width 100\n  mdm view-markdown README.md --plain"
+    )]
+    ViewMarkdown {
+        target: PathBuf,
+        #[arg(long, action = ArgAction::SetTrue, help = "Show formatted Markdown output.")]
+        pretty: bool,
+        #[arg(long, action = ArgAction::SetTrue, help = "Print the raw Markdown source unchanged.")]
+        plain: bool,
+        #[arg(
+            long,
+            default_value_t = 88,
+            help = "Preferred wrap width for pretty output."
+        )]
+        width: usize,
+        #[arg(long, action = ArgAction::SetTrue, help = "Disable color output.")]
+        no_color: bool,
     },
     #[command(about = "Search labels, tags, metadata, and ids.")]
     Find {
@@ -206,13 +228,17 @@ enum Commands {
     },
     #[command(
         about = "Read curated mdmind changelog entries.",
-        after_help = "Examples:\n  mdm changelog\n  mdm changelog --version 0.8.0\n  mdm changelog --all\n  mdm changelog --json"
+        after_help = "Examples:\n  mdm changelog\n  mdm changelog --version 0.8.0\n  mdm changelog --plain\n  mdm changelog --all\n  mdm changelog --json"
     )]
     Changelog {
         #[arg(long, help = "Show the changelog entry for a version, such as 0.8.0.")]
         version: Option<String>,
         #[arg(long, action = ArgAction::SetTrue, help = "Print the full changelog.")]
         all: bool,
+        #[arg(long, action = ArgAction::SetTrue, help = "Render terminal-friendly Markdown output explicitly.")]
+        pretty: bool,
+        #[arg(long, action = ArgAction::SetTrue, help = "Print raw Markdown output.")]
+        plain: bool,
         #[arg(
             long,
             action = ArgAction::SetTrue,
@@ -267,6 +293,12 @@ enum ExampleCommands {
 )]
 struct TuiPreviewCli {
     target: Option<String>,
+    #[arg(
+        long = "as",
+        value_enum,
+        help = "Force how the target opens: map or markdown."
+    )]
+    open_as: Option<TuiOpenAs>,
     #[arg(long)]
     preview: bool,
     #[arg(long)]
@@ -278,6 +310,22 @@ struct TuiPreviewCli {
     check_keys: bool,
     #[arg(long)]
     max_depth: Option<usize>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum TuiOpenAs {
+    Map,
+    Markdown,
+}
+
+impl From<Option<TuiOpenAs>> for OpenTargetMode {
+    fn from(value: Option<TuiOpenAs>) -> Self {
+        match value {
+            Some(TuiOpenAs::Map) => Self::Map,
+            Some(TuiOpenAs::Markdown) => Self::Markdown,
+            None => Self::Auto,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -420,6 +468,13 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             json,
             max_depth,
         } => render_view_like("view", &target, json, max_depth),
+        Commands::ViewMarkdown {
+            target,
+            pretty,
+            plain,
+            width,
+            no_color,
+        } => dispatch_view_markdown(&target, pretty, plain, width, no_color),
         Commands::Find {
             target,
             query,
@@ -640,9 +695,13 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
         ),
         Commands::Examples { command } => dispatch_examples(command),
         Commands::Catalog { json } => dispatch_commands(json),
-        Commands::Changelog { version, all, json } => {
-            dispatch_changelog(version.as_deref(), all, json)
-        }
+        Commands::Changelog {
+            version,
+            all,
+            pretty,
+            plain,
+            json,
+        } => dispatch_changelog(version.as_deref(), all, pretty, plain, json),
         Commands::Open {
             target,
             preview,
@@ -653,7 +712,8 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             if preview || json {
                 render_view_like("open", &target, json, max_depth)
             } else {
-                run_interactive(&target, autosave).map_err(CliError::from_app)
+                run_interactive_with_mode(&target, autosave, OpenTargetMode::Auto)
+                    .map_err(CliError::from_app)
             }
         }
         Commands::CheckKeys => run_key_diagnostics().map_err(CliError::from_app),
@@ -1097,11 +1157,59 @@ fn dispatch_commands(json: bool) -> Result<(), CliError> {
     Ok(())
 }
 
-fn dispatch_changelog(version: Option<&str>, all: bool, json: bool) -> Result<(), CliError> {
+fn dispatch_view_markdown(
+    target: &std::path::Path,
+    pretty: bool,
+    plain: bool,
+    width: usize,
+    no_color: bool,
+) -> Result<(), CliError> {
+    if pretty && plain {
+        return Err(CliError::usage(
+            "invalid_output_mode",
+            "Choose either --pretty or --plain, not both.",
+        ));
+    }
+
+    let source = fs::read_to_string(target).map_err(|error| {
+        CliError::runtime(format!("Could not read '{}': {error}", target.display()))
+    })?;
+
+    if plain {
+        print!("{source}");
+        return Ok(());
+    }
+
+    let rendered = render_markdown(
+        &source,
+        markdown_render_options(width, no_color, RenderTarget::CliAnsi),
+    );
+    println!("{rendered}");
+    Ok(())
+}
+
+fn dispatch_changelog(
+    version: Option<&str>,
+    all: bool,
+    pretty: bool,
+    plain: bool,
+    json: bool,
+) -> Result<(), CliError> {
     if all && version.is_some() {
         return Err(CliError::usage(
             "invalid_changelog_selection",
             "Choose either --all or --version, not both.",
+        ));
+    }
+    if [json, pretty, plain]
+        .into_iter()
+        .filter(|enabled| *enabled)
+        .count()
+        > 1
+    {
+        return Err(CliError::usage(
+            "invalid_output_mode",
+            "Choose only one of --json, --pretty, or --plain.",
         ));
     }
 
@@ -1117,8 +1225,16 @@ fn dispatch_changelog(version: Option<&str>, all: bool, json: bool) -> Result<()
                 None,
                 Vec::new(),
             );
-        } else {
+        } else if plain {
             println!("{}", render_full_changelog());
+        } else {
+            println!(
+                "{}",
+                render_markdown(
+                    &render_full_changelog(),
+                    markdown_render_options(88, false, RenderTarget::CliAnsi)
+                )
+            );
         }
         return Ok(());
     }
@@ -1144,10 +1260,30 @@ fn dispatch_changelog(version: Option<&str>, all: bool, json: bool) -> Result<()
             None,
             Vec::new(),
         );
-    } else {
+    } else if plain {
         println!("{}", render_changelog_entry(&entry));
+    } else {
+        println!(
+            "{}",
+            render_markdown(
+                &render_changelog_entry(&entry),
+                markdown_render_options(88, false, RenderTarget::CliAnsi)
+            )
+        );
     }
     Ok(())
+}
+
+fn markdown_render_options(width: usize, no_color: bool, target: RenderTarget) -> RenderOptions {
+    RenderOptions {
+        width,
+        color: if no_color {
+            ColorMode::Never
+        } else {
+            ColorMode::Auto
+        },
+        target,
+    }
 }
 
 fn dispatch_version(check: bool, json: bool) -> Result<(), CliError> {
@@ -1301,6 +1437,27 @@ fn command_catalog() -> CommandCatalog {
                 &[flag("--json"), flag_value("--max-depth", &["usize"])],
                 &[],
                 &["mdm view ideas.md", "mdm view ideas.md#product/mvp --json"],
+            ),
+            command_info!(
+                "view-markdown",
+                "View an ordinary Markdown file in the terminal.",
+                &["markdown"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain"],
+                &[arg("target", true)],
+                &[
+                    flag("--pretty"),
+                    flag("--plain"),
+                    flag_value("--width", &["usize"]),
+                    flag("--no-color"),
+                ],
+                &[],
+                &[
+                    "mdm view-markdown README.md",
+                    "mdm view-markdown README.md --plain",
+                ],
             ),
             command_info!(
                 "find",
@@ -1547,17 +1704,20 @@ fn command_catalog() -> CommandCatalog {
                 &[],
                 false,
                 false,
-                &["pretty", "json"],
+                &["pretty", "plain", "json"],
                 &[],
                 &[
                     flag_value("--version", &["version"]),
                     flag("--all"),
+                    flag("--pretty"),
+                    flag("--plain"),
                     flag("--json"),
                 ],
                 &["changelog_entry.v1", "changelog.v1"],
                 &[
                     "mdm changelog",
                     "mdm changelog --version 0.8.0",
+                    "mdm changelog --plain",
                     "mdm changelog --json",
                 ],
             ),
@@ -1707,10 +1867,45 @@ fn dispatch_tui_preview(cli: TuiPreviewCli) -> Result<(), CliError> {
         }
     };
 
+    let open_mode = OpenTargetMode::from(cli.open_as);
     if cli.preview {
-        render_view_like("mdmind", &target, false, cli.max_depth)
+        render_mdmind_preview(&target, open_mode, cli.max_depth)
     } else {
-        run_interactive(&target, cli.autosave).map_err(CliError::from_app)
+        run_interactive_with_mode(&target, cli.autosave, open_mode).map_err(CliError::from_app)
+    }
+}
+
+fn render_mdmind_preview(
+    target: &str,
+    open_mode: OpenTargetMode,
+    max_depth: Option<usize>,
+) -> Result<(), CliError> {
+    match classify_open_target(target, open_mode).map_err(CliError::from_app)? {
+        ClassifiedTarget::NativeMap(loaded) => {
+            ensure_parseable(&loaded).map_err(CliError::from_app)?;
+            let document = select_document(&loaded).map_err(CliError::from_app)?;
+            println!("{}", render_tree(&document, max_depth));
+            Ok(())
+        }
+        ClassifiedTarget::OrdinaryMarkdown { source, .. } => {
+            println!(
+                "{}",
+                render_markdown(
+                    &source,
+                    markdown_render_options(88, false, RenderTarget::CliAnsi)
+                )
+            );
+            Ok(())
+        }
+        ClassifiedTarget::NearMissMap {
+            target,
+            diagnostics,
+            score,
+        } => Err(CliError::runtime(near_miss_guidance(
+            &target,
+            &diagnostics,
+            score,
+        ))),
     }
 }
 
@@ -1720,7 +1915,32 @@ fn render_view_like(
     json: bool,
     max_depth: Option<usize>,
 ) -> Result<(), CliError> {
-    let loaded = load_document(target).map_err(CliError::from_app)?;
+    let loaded = if command == "view" && !json {
+        match classify_open_target(target, OpenTargetMode::Auto).map_err(CliError::from_app)? {
+            ClassifiedTarget::NativeMap(loaded) => loaded,
+            ClassifiedTarget::OrdinaryMarkdown { target, .. } => {
+                return Err(CliError::runtime(format!(
+                    "{} is ordinary Markdown, not a native mdmind map.\n\nTo read it:\n  mdm view-markdown {}\n\nTo convert an outline:\n  mdm import {} --from markdown --preview",
+                    target.path.display(),
+                    target.path.display(),
+                    target.path.display()
+                )));
+            }
+            ClassifiedTarget::NearMissMap {
+                target,
+                diagnostics,
+                score,
+            } => {
+                return Err(CliError::runtime(near_miss_guidance(
+                    &target,
+                    &diagnostics,
+                    score,
+                )));
+            }
+        }
+    } else {
+        load_document(target).map_err(CliError::from_app)?
+    };
     let document = select_document(&loaded).map_err(CliError::from_app)?;
     if json {
         let exported = document.export();

@@ -235,6 +235,7 @@ listed as interactive in `mdm commands --json`.
 | Command | Reads | Writes | Network | Interactive | Agent-safe usage |
 | --- | --- | --- | --- | --- | --- |
 | `mdm view <target>` | map | no | no | no | Use for readable context; add `--json` for structured export-shaped data. |
+| `mdm view-markdown <target>` | Markdown | no | no | no | Use for ordinary Markdown files; `--plain` preserves raw source, while the default/`--pretty` output is human-readable terminal rendering. |
 | `mdm find <target> <query>` | map | no | no | no | Use `--plain` for quick scans and `--json` for matches with lines, breadcrumbs, tags, and metadata. |
 | `mdm tags <target>` | map | no | no | no | Use `--json` for counts or `--plain` for vocabulary scans. |
 | `mdm kv <target>` | map | no | no | no | Use `--keys a,b` to narrow audits; use `--json` for rows. |
@@ -248,12 +249,14 @@ listed as interactive in `mdm commands --json`.
 | `mdm examples list` | bundled examples | no | no | no | Human-readable list; use `mdm commands --json` for machine discovery metadata. |
 | `mdm examples path` | installed examples | no | no | no | Prints examples directory when available. |
 | `mdm examples copy <name>` | bundled examples | files | no | no | Use `all` to materialize examples; use `--force` only when intentional. |
-| `mdm changelog` | bundled changelog | no | no | no | Reads release notes for the bundled version; use `--version` or `--all` for other sections. |
+| `mdm changelog` | bundled changelog | no | no | no | Reads pretty release notes for the bundled version; use `--version` or `--all` for other sections, `--plain` for raw Markdown, and `--json` for scripts. |
 | `mdm open <target>` | map | session/location sidecars in interactive mode | no | yes by default | Agents should use `--preview` or `--json`; avoid bare `open`. |
 | `mdm check-keys` | terminal input | no | no | yes | Humans only; agents should not run it. |
 | `mdm version` | no | no | only with `--check` | no | Prints `mdm <version>`; `--check --json` checks GitHub Releases for a newer build. |
-| `mdmind <target>` | map | session/location sidecars and optional edits | no | yes by default | Humans only unless `--preview` is used. |
-| `mdmind --preview <target>` | map | no | no | no | Static preview equivalent to a readable tree view. |
+| `mdmind <target>` | map or Markdown | map sidecars only when a native map opens; ordinary Markdown can write and open `<stem>-mind.md` when the human presses `i` | no | yes by default | Humans only unless `--preview` is used; ordinary Markdown opens read-only. |
+| `mdmind --preview <target>` | map or Markdown | no | no | no | Static preview equivalent to a readable tree view for maps or rendered Markdown for ordinary Markdown. |
+| `mdmind --as markdown <target>` | Markdown | no | no | no with `--preview`, yes otherwise | Forces read-only Markdown routing for ambiguous or broken files. |
+| `mdmind --as map <target>` | map | map sidecars only in interactive mode | no | no with `--preview`, yes otherwise | Forces strict native map parsing and reports parser errors for ordinary Markdown. |
 | `mdmind --check-keys` | terminal input | no | no | yes | Humans only; agents should not run it. |
 
 ## Command Discovery Target

@@ -10,6 +10,7 @@ pub mod export;
 pub mod importer;
 pub mod interactive;
 pub mod locations;
+pub mod markdown_render;
 pub mod mindmap;
 pub mod model;
 pub mod parser;
