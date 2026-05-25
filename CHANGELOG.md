@@ -25,17 +25,34 @@ the release shape rather than every internal commit.
 - Imported Markdown maps now include a timestamped `#lossy-summary` review node
   with source, preservation counts, omitted blank-line counts, and a reminder
   that Markdown formatting may have been simplified.
-- `mdm render` gives the CLI a dedicated pretty Markdown renderer for ordinary
-  `.md` files.
 
-### Changed
+### New Commands
+
+- `mdm render <target>` gives the CLI a dedicated pretty Markdown renderer for
+  ordinary `.md` files, with `--plain`, width, and color controls for scripts
+  and terminal output.
+
+### Changed Commands
 
 - `mdm changelog` now defaults to pretty terminal rendering, while
   `mdm changelog --plain` preserves raw Markdown output for scripts and release
-  workflows.
-- Markdown import is safer around README-style docs: link-only bullets get
-  visible node labels, and fenced code blocks stay literal detail text instead
-  of being interpreted as real map structure.
+  workflows. JSON output remains structured for automation.
+- `mdmind <file.md>` now classifies Markdown-like files before opening: valid
+  mdmind maps open as maps, ordinary Markdown opens as a read-only document, and
+  near-miss maps show recovery guidance.
+- `mdmind --as markdown <target>` and `mdmind --as map <target>` let users
+  force the new Markdown/document path or strict native-map parsing when the
+  automatic classification is not what they want.
+- `mdmind --preview <ordinary.md>` now renders ordinary Markdown for non-TTY
+  checks instead of treating every `.md` target as a native map preview.
+- `mdm view <ordinary.md>` now redirects to Markdown rendering, while native maps
+  still use the map tree view.
+- `mdm import <source.md> --from markdown` is safer around README-style docs:
+  link-only bullets get visible node labels, and fenced code blocks stay literal
+  detail text instead of being interpreted as real map structure.
+
+### Changed
+
 - Import filename collisions in the TUI now use a simpler prompt: type a new
   name or press Enter to overwrite the default `<stem>-mind.md`.
 
