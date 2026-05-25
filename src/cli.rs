@@ -54,7 +54,7 @@ use crate::validate::validate_document;
     version,
     about = "Inspect and validate local markdown-like thought maps.",
     long_about = "mdm is the CLI for local-first structured maps. It reads plain-text tree files, renders them for humans, and exports machine-friendly output when you ask for --json or --plain.",
-    after_help = "Examples:\n  mdm version\n  mdm changelog\n  mdm render README.md\n  mdm init ideas.md --template product\n  mdm init TODO.md --template todo\n  mdm import notes.opml\n  mdm import map.mm\n  mdm import article.html --preview --report\n  mdm import outline.md --from markdown -o map.md\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm refs ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
+    after_help = "Examples:\n  mdm version\n  mdm changelog\n  mdm view-markdown README.md\n  mdm init ideas.md --template product\n  mdm init TODO.md --template todo\n  mdm import notes.opml\n  mdm import map.mm\n  mdm import article.html --preview --report\n  mdm import outline.md --from markdown -o map.md\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm refs ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -72,12 +72,12 @@ enum Commands {
         max_depth: Option<usize>,
     },
     #[command(
-        about = "Render an ordinary Markdown file for terminal reading.",
-        after_help = "Examples:\n  mdm render README.md\n  mdm render CHANGELOG.md --width 100\n  mdm render README.md --plain"
+        about = "View an ordinary Markdown file in the terminal.",
+        after_help = "Examples:\n  mdm view-markdown README.md\n  mdm view-markdown CHANGELOG.md --width 100\n  mdm view-markdown README.md --plain"
     )]
-    Render {
+    ViewMarkdown {
         target: PathBuf,
-        #[arg(long, action = ArgAction::SetTrue, help = "Render terminal-friendly Markdown output.")]
+        #[arg(long, action = ArgAction::SetTrue, help = "Show formatted Markdown output.")]
         pretty: bool,
         #[arg(long, action = ArgAction::SetTrue, help = "Print the raw Markdown source unchanged.")]
         plain: bool,
@@ -468,13 +468,13 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             json,
             max_depth,
         } => render_view_like("view", &target, json, max_depth),
-        Commands::Render {
+        Commands::ViewMarkdown {
             target,
             pretty,
             plain,
             width,
             no_color,
-        } => dispatch_render_markdown(&target, pretty, plain, width, no_color),
+        } => dispatch_view_markdown(&target, pretty, plain, width, no_color),
         Commands::Find {
             target,
             query,
@@ -1157,7 +1157,7 @@ fn dispatch_commands(json: bool) -> Result<(), CliError> {
     Ok(())
 }
 
-fn dispatch_render_markdown(
+fn dispatch_view_markdown(
     target: &std::path::Path,
     pretty: bool,
     plain: bool,
@@ -1439,8 +1439,8 @@ fn command_catalog() -> CommandCatalog {
                 &["mdm view ideas.md", "mdm view ideas.md#product/mvp --json"],
             ),
             command_info!(
-                "render",
-                "Render an ordinary Markdown file for terminal reading.",
+                "view-markdown",
+                "View an ordinary Markdown file in the terminal.",
                 &["markdown"],
                 &[],
                 false,
@@ -1454,7 +1454,10 @@ fn command_catalog() -> CommandCatalog {
                     flag("--no-color"),
                 ],
                 &[],
-                &["mdm render README.md", "mdm render README.md --plain"],
+                &[
+                    "mdm view-markdown README.md",
+                    "mdm view-markdown README.md --plain",
+                ],
             ),
             command_info!(
                 "find",
@@ -1917,7 +1920,7 @@ fn render_view_like(
             ClassifiedTarget::NativeMap(loaded) => loaded,
             ClassifiedTarget::OrdinaryMarkdown { target, .. } => {
                 return Err(CliError::runtime(format!(
-                    "{} is ordinary Markdown, not a native mdmind map.\n\nTo read it:\n  mdm render {}\n\nTo convert an outline:\n  mdm import {} --from markdown --preview",
+                    "{} is ordinary Markdown, not a native mdmind map.\n\nTo read it:\n  mdm view-markdown {}\n\nTo convert an outline:\n  mdm import {} --from markdown --preview",
                     target.path.display(),
                     target.path.display(),
                     target.path.display()

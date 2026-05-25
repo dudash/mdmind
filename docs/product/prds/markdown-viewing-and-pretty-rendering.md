@@ -17,7 +17,7 @@ The user-facing behavior should feel simple:
 ```bash
 mdmind README.md
 mdmind CHANGELOG.md
-mdm render README.md
+mdm view-markdown README.md
 mdm changelog
 ```
 
@@ -101,7 +101,7 @@ Users should be able to run:
 mdmind README.md
 mdmind CHANGELOG.md
 mdmind docs/agent-report.md
-mdm render README.md
+mdm view-markdown README.md
 mdm changelog --pretty
 ```
 
@@ -335,12 +335,12 @@ Acceptance:
 - raw/script output remains available through `--plain` and `--json`;
 - `mdm changelog --json` remains unchanged.
 
-### Story 2: Render Any Markdown File From CLI
+### Story 2: View Any Markdown File From CLI
 
 As a user, I want:
 
 ```bash
-mdm render README.md
+mdm view-markdown README.md
 ```
 
 to pretty-print Markdown in the terminal.
@@ -450,16 +450,16 @@ Implementation recommendation:
 3. Keep `--plain` and `--json` as the stable script paths.
 4. Respect `NO_COLOR` and avoid ANSI when stdout is not a TTY.
 
-#### `mdm render`
+#### `mdm view-markdown`
 
 Add:
 
 ```bash
-mdm render <file.md>
-mdm render <file.md> --pretty
-mdm render <file.md> --plain
-mdm render <file.md> --width 100
-mdm render <file.md> --no-color
+mdm view-markdown <file.md>
+mdm view-markdown <file.md> --pretty
+mdm view-markdown <file.md> --plain
+mdm view-markdown <file.md> --width 100
+mdm view-markdown <file.md> --no-color
 ```
 
 Do not overload `mdm view`.
@@ -476,7 +476,7 @@ on ordinary Markdown, return:
 README.md is ordinary Markdown, not a native mdmind map.
 
 To read it:
-  mdm render README.md
+  mdm view-markdown README.md
 
 To convert an outline:
   mdm import README.md --from markdown --preview
@@ -849,7 +849,7 @@ Default width:
 - allow override:
 
 ```bash
-mdm render README.md --width 120
+mdm view-markdown README.md --width 120
 ```
 
 ### 13.3 Exit Codes
@@ -1061,7 +1061,7 @@ Supports:
 Ship:
 
 ```bash
-mdm render <file.md>
+mdm view-markdown <file.md>
 mdm changelog --pretty
 mdm changelog --plain
 ```
@@ -1125,8 +1125,8 @@ This should be the last milestone, not the first. Get direct file open right bef
 - `mdmind --as markdown broken-map.md` opens Markdown view.
 - `mdmind --as map README.md` attempts strict map parse and fails clearly.
 - pressing `i` in Markdown view imports to `README-mind.md`, adds a `#lossy-summary`, opens the imported map, and leaves `README.md` unchanged.
-- `mdm render README.md` pretty-prints Markdown.
-- `mdm render README.md --plain` prints raw Markdown.
+- `mdm view-markdown README.md` pretty-prints Markdown.
+- `mdm view-markdown README.md --plain` prints raw Markdown.
 - `mdm changelog --json` remains unchanged.
 - `mdm changelog --pretty` renders terminal-friendly Markdown.
 
@@ -1197,7 +1197,7 @@ If `mdm view` starts rendering ordinary Markdown, map users and scripts may get 
 
 Mitigation:
 
-- add `mdm render`;
+- add `mdm view-markdown`;
 - keep `mdm view` map-native;
 - show a helpful redirect when `mdm view` receives ordinary Markdown.
 
@@ -1293,7 +1293,7 @@ The final user-facing story should be:
 Implementation priority:
 
 1. shared renderer;
-2. `mdm render`;
+2. `mdm view-markdown`;
 3. `mdm changelog --pretty`;
 4. `mdmind README.md` read-only view;
 5. near-miss protection;

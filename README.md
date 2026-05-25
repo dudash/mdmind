@@ -146,10 +146,10 @@ mdm find roadmap.md "#todo"
 mdm links roadmap.md
 ```
 
-Render an ordinary Markdown file from the CLI:
+View an ordinary Markdown file from the CLI:
 
 ```bash
-mdm render README.md
+mdm view-markdown README.md
 ```
 
 Copy bundled example maps onto your machine:

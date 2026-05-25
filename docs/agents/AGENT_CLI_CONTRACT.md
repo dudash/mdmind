@@ -235,7 +235,7 @@ listed as interactive in `mdm commands --json`.
 | Command | Reads | Writes | Network | Interactive | Agent-safe usage |
 | --- | --- | --- | --- | --- | --- |
 | `mdm view <target>` | map | no | no | no | Use for readable context; add `--json` for structured export-shaped data. |
-| `mdm render <target>` | Markdown | no | no | no | Use for ordinary Markdown files; `--plain` preserves raw source, while the default/`--pretty` output is human-readable terminal rendering. |
+| `mdm view-markdown <target>` | Markdown | no | no | no | Use for ordinary Markdown files; `--plain` preserves raw source, while the default/`--pretty` output is human-readable terminal rendering. |
 | `mdm find <target> <query>` | map | no | no | no | Use `--plain` for quick scans and `--json` for matches with lines, breadcrumbs, tags, and metadata. |
 | `mdm tags <target>` | map | no | no | no | Use `--json` for counts or `--plain` for vocabulary scans. |
 | `mdm kv <target>` | map | no | no | no | Use `--keys a,b` to narrow audits; use `--json` for rows. |

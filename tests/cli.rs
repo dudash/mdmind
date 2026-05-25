@@ -90,7 +90,7 @@ fn view_supports_label_path_fallback_when_no_id_exists() {
 }
 
 #[test]
-fn view_redirects_ordinary_markdown_to_render() {
+fn view_redirects_ordinary_markdown_to_view_markdown() {
     let markdown_path = temp_file("README-view.md");
     std::fs::write(&markdown_path, "# Project\n\nNormal Markdown prose.\n")
         .expect("markdown fixture should be writable");
@@ -99,7 +99,7 @@ fn view_redirects_ordinary_markdown_to_render() {
     assert_eq!(output.status.code(), Some(1));
     let stderr = stderr(&output);
     assert!(stderr.contains("ordinary Markdown"));
-    assert!(stderr.contains("mdm render"));
+    assert!(stderr.contains("mdm view-markdown"));
     assert!(stderr.contains("mdm import"));
     assert!(!stderr.contains("The map contains parser errors"));
 
@@ -218,7 +218,7 @@ fn commands_json_lists_agent_command_catalog() {
 
     for expected in [
         "view",
-        "render",
+        "view-markdown",
         "find",
         "tags",
         "kv",
@@ -335,7 +335,7 @@ fn changelog_json_uses_a_success_envelope() {
 }
 
 #[test]
-fn render_pretty_prints_ordinary_markdown() {
+fn view_markdown_pretty_prints_ordinary_markdown() {
     let markdown_path = temp_file("ordinary.md");
     std::fs::write(
         &markdown_path,
@@ -343,7 +343,12 @@ fn render_pretty_prints_ordinary_markdown() {
     )
     .expect("markdown fixture should be writable");
 
-    let output = run_mdm(&["render", markdown_path.to_str().unwrap(), "--width", "48"]);
+    let output = run_mdm(&[
+        "view-markdown",
+        markdown_path.to_str().unwrap(),
+        "--width",
+        "48",
+    ]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     let stdout = stdout(&output);
     assert!(stdout.contains("╭─ metadata\n│ title: Project Notes\n╰─"));
@@ -358,12 +363,12 @@ fn render_pretty_prints_ordinary_markdown() {
 }
 
 #[test]
-fn render_plain_prints_raw_markdown() {
+fn view_markdown_plain_prints_raw_markdown() {
     let markdown_path = temp_file("ordinary-plain.md");
     let source = "# Project Notes\n\n- Raw\n";
     std::fs::write(&markdown_path, source).expect("markdown fixture should be writable");
 
-    let output = run_mdm(&["render", markdown_path.to_str().unwrap(), "--plain"]);
+    let output = run_mdm(&["view-markdown", markdown_path.to_str().unwrap(), "--plain"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     assert_eq!(stdout(&output), source);
 

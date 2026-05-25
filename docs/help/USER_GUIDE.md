@@ -249,10 +249,10 @@
       - mdm tags examples/novel-research-writing-map.md --plain
       - mdm links examples/lantern-studio-map.md --plain
       - mdm refs examples/lantern-studio-map.md --plain
-      - mdm render README.md
+      - mdm view-markdown README.md
     - How to think about the output #guide [id:guide/cli/output]
       - use find when you want matching work items or branches in context
-      - use render when you want to read an ordinary Markdown file without treating it as a map
+      - use view-markdown when you want to read an ordinary Markdown file without treating it as a map
       - use kv when you want to audit structured fields like owner, status, region, or priority
       - use tags when you want a quick summary of a map's vocabulary
       - use links when you want stable ids for deep-linking into view, open, or export

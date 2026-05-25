@@ -20,15 +20,15 @@ the release shape rather than every internal commit.
 
 ### New Commands
 
-- `mdm render <target>` pretty-prints ordinary Markdown files from the CLI.
+- `mdm view-markdown <target>` opens ordinary Markdown files from the CLI.
 
 ### Changed Commands
 
 - `mdm changelog` now defaults to pretty terminal rendering; use
   `mdm changelog --plain` for raw Markdown.
-- `mdmind <file.md>`, `mdmind --preview`, and `mdm view` now route ordinary
-  Markdown through the Markdown renderer while keeping native maps on the map
-  path.
+- `mdmind <file.md>` and `mdmind --preview` now render ordinary Markdown while
+  keeping native maps on the map path. `mdm view` remains map-oriented and
+  points ordinary Markdown users to `mdm view-markdown`.
 
 ## [0.8.0] - 2026-05-23
 
