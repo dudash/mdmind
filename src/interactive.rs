@@ -5,7 +5,7 @@ use std::fs;
 use std::io::{self, IsTerminal, Stdout, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crossterm::cursor::{Hide, Show};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -22,17 +22,22 @@ use ratatui::widgets::{
 use ratatui::{Frame, Terminal};
 
 use crate::APP_VERSION;
-use crate::app::{AppError, TargetRef, ensure_parseable, load_document, resolve_anchor_path};
+use crate::app::{
+    AppError, ClassifiedTarget, OpenTargetMode, TargetRef, classify_open_target, ensure_parseable,
+    load_document, near_miss_guidance, resolve_anchor_path,
+};
 use crate::changelog::{default_changelog_entry, render_changelog_entry};
 use crate::checkpoints::{
     Checkpoint, CheckpointAnchor, CheckpointViewMode, CheckpointsState, load_checkpoints_for,
     save_checkpoints_for,
 };
 use crate::editor::{Editor, EditorState, default_focus_path, find_path_by_id, get_node};
+use crate::importer::{import_document, markdown_code_fence_closes, parse_markdown_code_fence};
 use crate::locations::{
     FrequentLocation, LocationMemoryAnchor, LocationMemoryState, load_locations_for,
     save_locations_for,
 };
+use crate::markdown_render::{ColorMode, RenderOptions, RenderTarget, render_markdown};
 use crate::mindmap::{
     BoundaryEdge, Camera as MindmapCamera, MindmapWidget, Scene as MindmapScene,
     Theme as MindmapTheme, default_export_path, export_png,
@@ -6872,14 +6877,532 @@ impl TuiApp {
     }
 }
 
+#[derive(Debug, Clone)]
+struct MarkdownViewerState {
+    path: PathBuf,
+    source: String,
+    title: String,
+    raw_title: String,
+    import_enabled: bool,
+    import_prompt: Option<MarkdownImportPrompt>,
+    open_after_import: Option<PathBuf>,
+    rendered_lines: Vec<String>,
+    width: usize,
+    scroll: usize,
+    raw: bool,
+    query_mode: bool,
+    query: String,
+    matches: Vec<usize>,
+    selected_match: usize,
+    status: StatusMessage,
+}
+
+#[derive(Debug, Clone)]
+struct MarkdownImportPrompt {
+    existing_path: PathBuf,
+    draft_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MarkdownLoopExit {
+    Quit,
+    OpenMap(PathBuf),
+}
+
+impl MarkdownViewerState {
+    fn new(path: PathBuf, source: String) -> Self {
+        Self::with_titles(path, source, "Markdown", "Markdown source", true)
+    }
+
+    fn recovery(path: PathBuf, source: String) -> Self {
+        let mut viewer =
+            Self::with_titles(path, source, "Map recovery", "Map recovery source", false);
+        viewer.status = StatusMessage {
+            tone: StatusTone::Warning,
+            text:
+                "This file was not opened as ordinary Markdown. Review the safe next actions below."
+                    .to_string(),
+        };
+        viewer
+    }
+
+    fn with_titles(
+        path: PathBuf,
+        source: String,
+        title: impl Into<String>,
+        raw_title: impl Into<String>,
+        import_enabled: bool,
+    ) -> Self {
+        let mut viewer = Self {
+            path,
+            source,
+            title: title.into(),
+            raw_title: raw_title.into(),
+            import_enabled,
+            import_prompt: None,
+            open_after_import: None,
+            rendered_lines: Vec::new(),
+            width: 0,
+            scroll: 0,
+            raw: false,
+            query_mode: false,
+            query: String::new(),
+            matches: Vec::new(),
+            selected_match: 0,
+            status: StatusMessage {
+                tone: StatusTone::Info,
+                text: if import_enabled {
+                    "Read-only Markdown. ↑↓ scroll, / search, r raw/rendered, i import to a map, q quit."
+                } else {
+                    "Read-only recovery view. ↑↓ scroll, / search, r raw/rendered, q quit."
+                }
+                    .to_string(),
+            },
+        };
+        viewer.refresh(88);
+        viewer
+    }
+
+    fn refresh(&mut self, width: usize) {
+        let width = width.max(32);
+        if self.width == width && !self.rendered_lines.is_empty() {
+            return;
+        }
+        self.width = width;
+        self.rendered_lines = render_markdown(
+            &self.source,
+            RenderOptions {
+                width,
+                color: ColorMode::Never,
+                target: RenderTarget::Plain,
+            },
+        )
+        .lines()
+        .map(str::to_string)
+        .collect();
+        self.rebuild_matches();
+    }
+
+    fn visible_lines(&self) -> Vec<String> {
+        if self.raw {
+            self.source.lines().map(str::to_string).collect()
+        } else {
+            self.rendered_lines.clone()
+        }
+    }
+
+    fn line_count(&self) -> usize {
+        if self.raw {
+            self.source.lines().count().max(1)
+        } else {
+            self.rendered_lines.len().max(1)
+        }
+    }
+
+    fn max_scroll(&self, viewport_height: usize) -> usize {
+        self.line_count().saturating_sub(viewport_height.max(1))
+    }
+
+    fn clamp_scroll(&mut self, viewport_height: usize) {
+        self.scroll = self.scroll.min(self.max_scroll(viewport_height));
+    }
+
+    fn import_output_path(&self) -> PathBuf {
+        default_markdown_import_output_path(&self.path)
+    }
+
+    fn import_output_label(&self) -> String {
+        self.import_output_path()
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| self.import_output_path().display().to_string())
+    }
+
+    fn import_hint(&self) -> String {
+        if self.import_enabled {
+            format!(
+                "i imports to {} (original unchanged)",
+                self.import_output_label()
+            )
+        } else {
+            "Review recovery steps below; original unchanged".to_string()
+        }
+    }
+
+    fn import_markdown_to_map(&mut self) {
+        if !self.import_enabled {
+            self.status = StatusMessage {
+                tone: StatusTone::Warning,
+                text: "Recovery view is read-only. Use the suggested commands below when ready."
+                    .to_string(),
+            };
+            return;
+        }
+
+        let output_path = self.import_output_path();
+        if output_path.exists() {
+            self.open_import_collision_prompt(output_path);
+            return;
+        }
+
+        self.write_import_and_queue_open(&output_path, false);
+    }
+
+    fn open_import_collision_prompt(&mut self, existing_path: PathBuf) {
+        let draft_name = existing_path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| existing_path.display().to_string());
+        self.import_prompt = Some(MarkdownImportPrompt {
+            existing_path: existing_path.clone(),
+            draft_name,
+        });
+        self.status = StatusMessage {
+            tone: StatusTone::Warning,
+            text: format!(
+                "{} exists. Type a new name or press Enter to overwrite.",
+                existing_path.display()
+            ),
+        };
+    }
+
+    fn write_import_and_queue_open(&mut self, output_path: &Path, overwrite: bool) {
+        match self.write_markdown_import(output_path, overwrite) {
+            Ok(node_count) => {
+                self.status = StatusMessage {
+                    tone: StatusTone::Success,
+                    text: format!(
+                        "Imported {node_count} node(s) to {}. Original unchanged.",
+                        output_path.display()
+                    ),
+                };
+                self.import_prompt = None;
+                self.open_after_import = Some(output_path.to_path_buf());
+            }
+            Err(error) => {
+                self.status = StatusMessage {
+                    tone: StatusTone::Error,
+                    text: error.message().to_string(),
+                };
+            }
+        }
+    }
+
+    fn write_markdown_import(
+        &self,
+        output_path: &Path,
+        overwrite: bool,
+    ) -> Result<usize, AppError> {
+        if output_path.exists() && !overwrite {
+            return Err(AppError::new(format!(
+                "{} already exists. Choose a different name or overwrite explicitly.",
+                output_path.display()
+            )));
+        }
+
+        let mut document = import_document(&self.source, "markdown").map_err(AppError::new)?;
+        append_lossy_import_summary(&mut document, &self.path, &self.source);
+        let node_count = count_nodes(&document.nodes);
+        let serialized = serialize_document(&document);
+        if let Some(parent) = output_path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent).map_err(|error| {
+                AppError::new(format!(
+                    "Could not create parent directory '{}': {error}",
+                    parent.display()
+                ))
+            })?;
+        }
+        fs::write(output_path, serialized).map_err(|error| {
+            AppError::new(format!(
+                "Could not write imported map to '{}': {error}",
+                output_path.display()
+            ))
+        })?;
+        Ok(node_count)
+    }
+
+    fn handle_key(&mut self, key: KeyEvent, viewport_height: usize) -> Result<bool, AppError> {
+        if key.kind != KeyEventKind::Press {
+            return Ok(true);
+        }
+
+        if self.import_prompt.is_some() {
+            return Ok(self.handle_import_prompt_key(key));
+        }
+
+        if self.query_mode {
+            return Ok(self.handle_query_key(key));
+        }
+
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => return Ok(false),
+            KeyCode::Up | KeyCode::Char('k') => self.scroll = self.scroll.saturating_sub(1),
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.scroll = (self.scroll + 1).min(self.max_scroll(viewport_height))
+            }
+            KeyCode::PageUp => self.scroll = self.scroll.saturating_sub(viewport_height.max(1)),
+            KeyCode::PageDown | KeyCode::Char(' ') => {
+                self.scroll =
+                    (self.scroll + viewport_height.max(1)).min(self.max_scroll(viewport_height))
+            }
+            KeyCode::Home | KeyCode::Char('g') => self.scroll = 0,
+            KeyCode::End | KeyCode::Char('G') => self.scroll = self.max_scroll(viewport_height),
+            KeyCode::Char('/') => {
+                self.query_mode = true;
+                self.status = StatusMessage {
+                    tone: StatusTone::Info,
+                    text: "Search Markdown. Enter jumps, Esc closes search.".to_string(),
+                };
+            }
+            KeyCode::Char('n') => self.jump_match(1),
+            KeyCode::Char('N') => self.jump_match(-1),
+            KeyCode::Char('r') => {
+                self.raw = !self.raw;
+                self.rebuild_matches();
+                self.scroll = 0;
+                self.status = StatusMessage {
+                    tone: StatusTone::Info,
+                    text: if self.raw {
+                        "Raw Markdown view. Press r to return to rendered view.".to_string()
+                    } else {
+                        "Rendered Markdown view. Press r to inspect raw Markdown.".to_string()
+                    },
+                };
+            }
+            KeyCode::Char('i') => {
+                self.import_markdown_to_map();
+            }
+            KeyCode::Char('a')
+            | KeyCode::Char('A')
+            | KeyCode::Char('e')
+            | KeyCode::Char('d')
+            | KeyCode::Char('t')
+            | KeyCode::Char('T')
+            | KeyCode::Char('x')
+            | KeyCode::Char('s')
+            | KeyCode::Char('S') => {
+                self.status = StatusMessage {
+                    tone: StatusTone::Warning,
+                    text: format!(
+                        "This is read-only Markdown. Press i to import to {}.",
+                        self.import_output_label()
+                    ),
+                };
+            }
+            _ => {}
+        }
+        self.clamp_scroll(viewport_height);
+        Ok(true)
+    }
+
+    fn handle_import_prompt_key(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            KeyCode::Esc => {
+                self.import_prompt = None;
+                self.status = StatusMessage {
+                    tone: StatusTone::Info,
+                    text: "Import cancelled. Original Markdown unchanged.".to_string(),
+                };
+            }
+            KeyCode::Enter => {
+                if let Some(prompt) = self.import_prompt.clone() {
+                    let output_path = self.import_output_path_from_draft(&prompt.draft_name);
+                    let overwrite = output_path == prompt.existing_path;
+                    if output_path.exists() && !overwrite {
+                        self.status = StatusMessage {
+                            tone: StatusTone::Warning,
+                            text: format!(
+                                "{} already exists. Type another name or use the default to overwrite {}.",
+                                output_path.display(),
+                                prompt.existing_path.display()
+                            ),
+                        };
+                    } else {
+                        self.write_import_and_queue_open(&output_path, overwrite);
+                    }
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(prompt) = self.import_prompt.as_mut() {
+                    prompt.draft_name.pop();
+                }
+            }
+            KeyCode::Char(character)
+                if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT =>
+            {
+                if let Some(prompt) = self.import_prompt.as_mut() {
+                    prompt.draft_name.push(character);
+                }
+            }
+            _ => {}
+        }
+        true
+    }
+
+    fn import_prompt_status_text(&self, prompt: &MarkdownImportPrompt) -> String {
+        let existing_label = prompt
+            .existing_path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| prompt.existing_path.display().to_string());
+        let output_path = self.import_output_path_from_draft(&prompt.draft_name);
+        let output_label = if prompt.draft_name.trim().is_empty() {
+            existing_label.clone()
+        } else {
+            prompt.draft_name.trim().to_string()
+        };
+
+        if output_path == prompt.existing_path {
+            format!(
+                "{existing_label} exists. Type a new name or press Enter to overwrite: {output_label}. Esc cancels."
+            )
+        } else if output_path.exists() {
+            format!("{output_label} also exists. Type another name or Esc cancels.")
+        } else {
+            format!(
+                "{existing_label} exists. Press Enter to import to: {output_label}. Esc cancels."
+            )
+        }
+    }
+
+    fn import_output_path_from_draft(&self, draft_name: &str) -> PathBuf {
+        let trimmed = draft_name.trim();
+        let candidate = if trimmed.is_empty() {
+            self.import_output_label()
+        } else {
+            trimmed.to_string()
+        };
+        let mut path = PathBuf::from(candidate);
+        if path.extension().is_none() {
+            path.set_extension("md");
+        }
+        if path.is_absolute() {
+            path
+        } else {
+            self.path
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .map(|parent| parent.join(path.clone()))
+                .unwrap_or(path)
+        }
+    }
+
+    fn handle_query_key(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            KeyCode::Esc => {
+                self.query_mode = false;
+                self.status = StatusMessage {
+                    tone: StatusTone::Info,
+                    text: "Closed Markdown search.".to_string(),
+                };
+            }
+            KeyCode::Enter => {
+                self.query_mode = false;
+                self.rebuild_matches();
+                self.jump_match(0);
+            }
+            KeyCode::Backspace => {
+                self.query.pop();
+                self.rebuild_matches();
+            }
+            KeyCode::Char(character)
+                if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT =>
+            {
+                self.query.push(character);
+                self.rebuild_matches();
+            }
+            _ => {}
+        }
+        true
+    }
+
+    fn rebuild_matches(&mut self) {
+        self.matches.clear();
+        let query = self.query.trim().to_ascii_lowercase();
+        if query.is_empty() {
+            self.selected_match = 0;
+            return;
+        }
+        for (index, line) in self.visible_lines().iter().enumerate() {
+            if markdown_line_matches_query(line, &query) {
+                self.matches.push(index);
+            }
+        }
+        self.selected_match = self
+            .selected_match
+            .min(self.matches.len().saturating_sub(1));
+    }
+
+    fn jump_match(&mut self, direction: isize) {
+        if self.query.trim().is_empty() {
+            self.status = StatusMessage {
+                tone: StatusTone::Warning,
+                text: "No Markdown search query yet. Press / to search.".to_string(),
+            };
+            return;
+        }
+        if self.matches.is_empty() {
+            self.status = StatusMessage {
+                tone: StatusTone::Warning,
+                text: format!("No matches for '{}'.", self.query.trim()),
+            };
+            return;
+        }
+        if direction < 0 {
+            self.selected_match = self
+                .selected_match
+                .checked_sub(1)
+                .unwrap_or_else(|| self.matches.len() - 1);
+        } else if direction > 0 {
+            self.selected_match = (self.selected_match + 1) % self.matches.len();
+        }
+        self.scroll = self.matches[self.selected_match];
+        self.status = StatusMessage {
+            tone: StatusTone::Success,
+            text: format!(
+                "Match {} of {} for '{}'.",
+                self.selected_match + 1,
+                self.matches.len(),
+                self.query.trim()
+            ),
+        };
+    }
+}
+
 pub fn run_interactive(target: &str, autosave: bool) -> Result<(), AppError> {
+    run_interactive_with_mode(target, autosave, OpenTargetMode::Auto)
+}
+
+pub fn run_interactive_with_mode(
+    target: &str,
+    autosave: bool,
+    mode: OpenTargetMode,
+) -> Result<(), AppError> {
+    match classify_open_target(target, mode)? {
+        ClassifiedTarget::NativeMap(loaded) => run_map_interactive(loaded, autosave),
+        ClassifiedTarget::OrdinaryMarkdown { target, source } => {
+            run_markdown_interactive(target.path, source, autosave)
+        }
+        ClassifiedTarget::NearMissMap {
+            target,
+            diagnostics,
+            score,
+        } => {
+            let guidance = near_miss_guidance(&target, &diagnostics, score);
+            run_recovery_interactive(target.path, guidance)
+        }
+    }
+}
+
+fn run_map_interactive(loaded: crate::app::LoadedDocument, autosave: bool) -> Result<(), AppError> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(AppError::new(
             "mdmind needs an interactive terminal. Use `--preview` for a static view.",
         ));
     }
 
-    let loaded = load_document(target)?;
     ensure_parseable(&loaded)?;
     let focus_path = resolve_initial_focus(&loaded.target, &loaded.document)?;
     let warning = if loaded.validation_diagnostics.is_empty() {
@@ -6915,6 +7438,69 @@ pub fn run_interactive(target: &str, autosave: bool) -> Result<(), AppError> {
     let result = run_event_loop(&mut terminal, &mut app);
     restore_terminal(&mut terminal)?;
     result
+}
+
+fn run_markdown_interactive(path: PathBuf, source: String, autosave: bool) -> Result<(), AppError> {
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Err(AppError::new(
+            "mdmind needs an interactive terminal. Use `--preview` for a static view.",
+        ));
+    }
+
+    let mut viewer = MarkdownViewerState::new(path, source);
+    let mut terminal = setup_terminal()?;
+    let result = run_markdown_event_loop(&mut terminal, &mut viewer);
+    restore_terminal(&mut terminal)?;
+    match result? {
+        MarkdownLoopExit::Quit => Ok(()),
+        MarkdownLoopExit::OpenMap(path) => {
+            let target = path.to_string_lossy().into_owned();
+            run_interactive_with_mode(&target, autosave, OpenTargetMode::Map)
+        }
+    }
+}
+
+fn run_recovery_interactive(path: PathBuf, guidance: String) -> Result<(), AppError> {
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Err(AppError::new(guidance));
+    }
+
+    let mut viewer = MarkdownViewerState::recovery(path, guidance);
+    let mut terminal = setup_terminal()?;
+    let result = run_markdown_event_loop(&mut terminal, &mut viewer);
+    restore_terminal(&mut terminal)?;
+    result.map(|_| ())
+}
+
+fn run_markdown_event_loop(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    viewer: &mut MarkdownViewerState,
+) -> Result<MarkdownLoopExit, AppError> {
+    loop {
+        terminal
+            .draw(|frame| render_markdown_viewer(frame, viewer))
+            .map_err(|error| AppError::new(format!("Could not draw Markdown view: {error}")))?;
+
+        if !event::poll(TICK_RATE)
+            .map_err(|error| AppError::new(format!("Could not poll terminal events: {error}")))?
+        {
+            continue;
+        }
+
+        if let Event::Key(key) = event::read()
+            .map_err(|error| AppError::new(format!("Could not read input: {error}")))?
+        {
+            let (_, rows) = size()
+                .map_err(|error| AppError::new(format!("Could not read terminal size: {error}")))?;
+            let viewport = rows.saturating_sub(8).max(1) as usize;
+            if !viewer.handle_key(key, viewport)? {
+                return Ok(MarkdownLoopExit::Quit);
+            }
+            if let Some(path) = viewer.open_after_import.take() {
+                return Ok(MarkdownLoopExit::OpenMap(path));
+            }
+        }
+    }
 }
 
 pub fn run_key_diagnostics() -> Result<(), AppError> {
@@ -7041,6 +7627,131 @@ fn run_event_loop(
     Ok(())
 }
 
+fn default_markdown_import_output_path(source_path: &Path) -> PathBuf {
+    let stem = source_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| !stem.is_empty())
+        .unwrap_or("imported");
+    let file_name = format!("{stem}-mind.md");
+    match source_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        Some(parent) => parent.join(file_name),
+        None => PathBuf::from(file_name),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MarkdownImportPreservation {
+    non_empty_source_lines: usize,
+    omitted_blank_lines: usize,
+    dropped_text_lines: usize,
+}
+
+fn analyze_markdown_import_preservation(source: &str) -> MarkdownImportPreservation {
+    let mut non_empty_source_lines = 0;
+    let mut omitted_blank_lines = 0;
+    let mut code_fence = None;
+
+    for line in source.lines() {
+        if let Some(fence) = code_fence {
+            if line.trim().is_empty() {
+                // Blank lines inside fenced code are preserved as empty detail lines.
+            } else {
+                non_empty_source_lines += 1;
+            }
+            if markdown_code_fence_closes(line, fence) {
+                code_fence = None;
+            }
+            continue;
+        }
+
+        if line.trim().is_empty() {
+            omitted_blank_lines += 1;
+        } else {
+            non_empty_source_lines += 1;
+            if let Some(fence) = parse_markdown_code_fence(line) {
+                code_fence = Some(fence);
+            }
+        }
+    }
+
+    MarkdownImportPreservation {
+        non_empty_source_lines,
+        omitted_blank_lines,
+        dropped_text_lines: 0,
+    }
+}
+
+fn append_lossy_import_summary(document: &mut Document, source_path: &Path, source: &str) {
+    let preservation = analyze_markdown_import_preservation(source);
+    let preservation_line = if preservation.dropped_text_lines == 0 {
+        format!(
+            "Preservation: {} non-empty source line(s) imported; no non-empty text lines were dropped.",
+            preservation.non_empty_source_lines
+        )
+    } else {
+        format!(
+            "Preservation warning: {} non-empty source line(s) may not be represented in this map.",
+            preservation.dropped_text_lines
+        )
+    };
+    let mut summary = parse_node_fragment("Lossy Import Summary #lossy-summary @source:markdown")
+        .expect("static import summary should parse");
+    summary.detail = vec![
+        imported_at_detail_line(SystemTime::now()),
+        format!("Converted from {}.", source_path.display()),
+        "Original Markdown was left unchanged.".to_string(),
+        preservation_line,
+        format!(
+            "Blank line(s) omitted from the map: {}.",
+            preservation.omitted_blank_lines
+        ),
+        "Markdown formatting may be simplified into outline nodes and detail lines.".to_string(),
+        "Review this map before replacing the source document.".to_string(),
+    ];
+    document.nodes.push(summary);
+}
+
+fn imported_at_detail_line(timestamp: SystemTime) -> String {
+    let seconds = timestamp
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    let days = (seconds / 86_400) as i64;
+    let seconds_of_day = seconds % 86_400;
+    let hour = seconds_of_day / 3_600;
+    let minute = (seconds_of_day % 3_600) / 60;
+    let second = seconds_of_day % 60;
+    let (year, month, day) = utc_date_from_unix_days(days);
+
+    format!("Imported at: {year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z.")
+}
+
+fn utc_date_from_unix_days(days_since_epoch: i64) -> (i32, u32, u32) {
+    let shifted_days = days_since_epoch + 719_468;
+    let era = if shifted_days >= 0 {
+        shifted_days
+    } else {
+        shifted_days - 146_096
+    } / 146_097;
+    let day_of_era = shifted_days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let mut year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_phase = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_phase + 2) / 5 + 1;
+    let month = month_phase + if month_phase < 10 { 3 } else { -9 };
+    if month <= 2 {
+        year += 1;
+    }
+
+    (year as i32, month as u32, day as u32)
+}
+
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>, AppError> {
     enable_raw_mode()
         .map_err(|error| AppError::new(format!("Could not enable raw mode: {error}")))?;
@@ -7060,6 +7771,236 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result
     terminal
         .show_cursor()
         .map_err(|error| AppError::new(format!("Could not restore the cursor: {error}")))
+}
+
+fn render_markdown_viewer(frame: &mut Frame, viewer: &mut MarkdownViewerState) {
+    let area = frame.area();
+    let palette = ThemeId::Workbench.theme();
+    frame.render_widget(
+        Block::default().style(Style::default().bg(palette.background)),
+        area,
+    );
+
+    let outer = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(4),
+            Constraint::Min(3),
+            Constraint::Length(3),
+            Constraint::Length(1),
+        ])
+        .split(area);
+
+    let file_name = viewer
+        .path
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| viewer.path.display().to_string());
+    let mode = if viewer.raw { "raw" } else { "rendered" };
+    let import_hint = viewer.import_hint();
+    let title = if viewer.raw {
+        format!(" {} · read-only ", viewer.raw_title)
+    } else {
+        format!(" {} · read-only ", viewer.title)
+    };
+    let header = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(palette.border))
+        .style(Style::default().fg(palette.text).bg(palette.background))
+        .title(styled_title(title, palette.accent));
+    frame.render_widget(header, outer[0]);
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(vec![
+                Span::styled(
+                    file_name,
+                    Style::default()
+                        .fg(palette.selection_text)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(" · "),
+                Span::styled(mode, Style::default().fg(palette.metadata)),
+                Span::raw(" · "),
+                Span::styled(
+                    "mdmind is for map/tree/outline Markdown",
+                    Style::default().fg(palette.muted),
+                ),
+            ]),
+            Line::from(vec![Span::styled(
+                import_hint,
+                Style::default().fg(palette.metadata),
+            )]),
+        ]),
+        outer[0].inner(Margin {
+            horizontal: 2,
+            vertical: 1,
+        }),
+    );
+
+    let body_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(palette.border))
+        .style(Style::default().fg(palette.text).bg(palette.background))
+        .title(styled_title(" Document ", palette.accent));
+    let body_inner = body_block.inner(outer[1]);
+    frame.render_widget(body_block, outer[1]);
+    viewer.refresh(body_inner.width.saturating_sub(2) as usize);
+    viewer.clamp_scroll(body_inner.height as usize);
+    let lines = viewer.visible_lines();
+    let visible = lines
+        .iter()
+        .enumerate()
+        .skip(viewer.scroll)
+        .take(body_inner.height as usize)
+        .map(|(line_index, line)| {
+            let selected = viewer
+                .matches
+                .get(viewer.selected_match)
+                .is_some_and(|match_index| *match_index == line_index);
+            render_markdown_reader_line(line, &viewer.query, selected, palette)
+        })
+        .collect::<Vec<_>>();
+    frame.render_widget(
+        Paragraph::new(visible).wrap(Wrap { trim: false }),
+        body_inner,
+    );
+
+    let status_color = match viewer.status.tone {
+        StatusTone::Info => palette.muted,
+        StatusTone::Success => palette.accent,
+        StatusTone::Warning => palette.warn,
+        StatusTone::Error => palette.danger,
+    };
+    let status_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(palette.border))
+        .style(Style::default().bg(palette.background))
+        .title(styled_title(" Status ", status_color));
+    let status_inner = status_block.inner(outer[2]);
+    frame.render_widget(status_block, outer[2]);
+    let status_text = if viewer.query_mode {
+        format!("Search: {}", viewer.query)
+    } else if let Some(prompt) = &viewer.import_prompt {
+        viewer.import_prompt_status_text(prompt)
+    } else {
+        viewer.status.text.clone()
+    };
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            status_text,
+            Style::default().fg(status_color),
+        ))),
+        status_inner,
+    );
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("↑↓", Style::default().fg(palette.accent)),
+            Span::raw(" scroll  "),
+            Span::styled("/", Style::default().fg(palette.accent)),
+            Span::raw(" search  "),
+            Span::styled("n/N", Style::default().fg(palette.accent)),
+            Span::raw(" matches  "),
+            Span::styled("r", Style::default().fg(palette.accent)),
+            Span::raw(" raw/rendered  "),
+            Span::styled("i", Style::default().fg(palette.accent)),
+            Span::raw(" import map  "),
+            Span::styled("q", Style::default().fg(palette.accent)),
+            Span::raw(" quit"),
+        ]))
+        .style(Style::default().fg(palette.muted).bg(palette.background)),
+        outer[3],
+    );
+}
+
+fn markdown_query_terms(query: &str) -> Vec<String> {
+    query
+        .split_whitespace()
+        .map(|term| term.to_ascii_lowercase())
+        .filter(|term| !term.is_empty())
+        .collect()
+}
+
+fn markdown_line_matches_query(line: &str, query: &str) -> bool {
+    let terms = markdown_query_terms(query);
+    if terms.is_empty() {
+        return false;
+    }
+    let lower = line.to_ascii_lowercase();
+    terms.iter().all(|term| lower.contains(term))
+}
+
+fn markdown_highlight_ranges(line: &str, query: &str) -> Vec<(usize, usize)> {
+    let terms = markdown_query_terms(query);
+    if terms.is_empty() {
+        return Vec::new();
+    }
+
+    let lower = line.to_ascii_lowercase();
+    let mut ranges = Vec::new();
+    for term in terms {
+        let mut offset = 0;
+        while let Some(relative_start) = lower[offset..].find(&term) {
+            let start = offset + relative_start;
+            let end = start + term.len();
+            ranges.push((start, end));
+            offset = end;
+        }
+    }
+
+    ranges.sort_unstable_by_key(|(start, end)| (*start, *end));
+    let mut merged: Vec<(usize, usize)> = Vec::new();
+    for (start, end) in ranges {
+        if let Some((_, last_end)) = merged.last_mut()
+            && start <= *last_end
+        {
+            *last_end = (*last_end).max(end);
+            continue;
+        }
+        merged.push((start, end));
+    }
+    merged
+}
+
+fn render_markdown_reader_line(
+    line: &str,
+    query: &str,
+    selected_match_line: bool,
+    palette: Palette,
+) -> Line<'static> {
+    let ranges = markdown_highlight_ranges(line, query);
+    if ranges.is_empty() {
+        return Line::from(Span::raw(line.to_string()));
+    }
+
+    let highlight_color = if selected_match_line {
+        palette.warn
+    } else {
+        palette.accent
+    };
+    let highlight_style = Style::default()
+        .fg(palette.background)
+        .bg(highlight_color)
+        .add_modifier(Modifier::BOLD);
+    let normal_style = if selected_match_line {
+        Style::default().fg(palette.text).bg(palette.surface)
+    } else {
+        Style::default()
+    };
+
+    let mut spans = Vec::new();
+    let mut cursor = 0;
+    for (start, end) in ranges {
+        if cursor < start {
+            spans.push(Span::styled(line[cursor..start].to_string(), normal_style));
+        }
+        spans.push(Span::styled(line[start..end].to_string(), highlight_style));
+        cursor = end;
+    }
+    if cursor < line.len() {
+        spans.push(Span::styled(line[cursor..].to_string(), normal_style));
+    }
+    Line::from(spans)
 }
 
 #[allow(non_snake_case)]
@@ -13609,8 +14550,9 @@ fn collect_match_paths_from_nodes(
     }
 }
 
-fn styled_title(title: &'static str, color: Color) -> Line<'static> {
+fn styled_title(title: impl Into<String>, color: Color) -> Line<'static> {
     let palette = active_palette();
+    let title = title.into();
     Line::from(Span::styled(
         if minimal_mode_enabled() {
             format!(" {title} ")
@@ -14779,6 +15721,7 @@ fn multiline_view(value: &str, cursor: usize, width: usize, height: usize) -> Te
 mod tests {
     use super::*;
     use crate::parser::parse_document;
+    use crate::validate::validate_document;
     use std::collections::HashMap;
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -14826,6 +15769,286 @@ mod tests {
         if locations_path.exists() {
             std::fs::remove_file(locations_path).ok();
         }
+    }
+
+    #[test]
+    fn markdown_viewer_scrolls_and_toggles_raw_mode_without_mutation() {
+        let source = "# Notes\n\nFirst paragraph.\n\nSecond paragraph.\n\nThird paragraph.\n";
+        let mut viewer = MarkdownViewerState::new(PathBuf::from("README.md"), source.to_string());
+
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE), 2)
+            .expect("space should page down");
+        assert!(viewer.scroll > 0);
+
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE), 2)
+            .expect("g should jump to top");
+        assert_eq!(viewer.scroll, 0);
+
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Char('G'), KeyModifiers::NONE), 2)
+            .expect("G should jump to bottom");
+        assert_eq!(viewer.scroll, viewer.max_scroll(2));
+
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE), 2)
+            .expect("r should toggle raw mode");
+        assert!(viewer.raw);
+        assert_eq!(viewer.source, source);
+    }
+
+    #[test]
+    fn markdown_viewer_search_and_edit_keys_teach_the_reader_mode() {
+        let mut viewer = MarkdownViewerState::new(
+            PathBuf::from("agent-report.md"),
+            "# Agent Report\n\nFind this line.\n\nFind that line.\n".to_string(),
+        );
+
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE), 4)
+            .expect("slash should enter search mode");
+        for character in "find".chars() {
+            viewer
+                .handle_key(
+                    KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE),
+                    4,
+                )
+                .expect("query characters should be accepted");
+        }
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), 4)
+            .expect("enter should commit search");
+        assert!(!viewer.query_mode);
+        assert_eq!(viewer.matches.len(), 2);
+        assert!(viewer.status.text.contains("Match 1 of 2"));
+
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE), 4)
+            .expect("edit keys should be handled");
+        assert_eq!(viewer.status.tone, StatusTone::Warning);
+        assert!(viewer.status.text.contains("read-only Markdown"));
+        assert!(viewer.status.text.contains("agent-report-mind.md"));
+    }
+
+    #[test]
+    fn markdown_reader_highlights_search_terms_case_insensitively() {
+        assert!(markdown_line_matches_query(
+            "Find this line and that line",
+            "find line"
+        ));
+        assert!(!markdown_line_matches_query("Find this line", "missing"));
+
+        assert_eq!(
+            markdown_highlight_ranges("Find this find.", "find"),
+            vec![(0, 4), (10, 14)]
+        );
+        assert_eq!(
+            markdown_highlight_ranges("Find this line.", "find line"),
+            vec![(0, 4), (10, 14)]
+        );
+    }
+
+    #[test]
+    fn markdown_import_summary_formats_import_timestamp_as_utc() {
+        let timestamp = UNIX_EPOCH + Duration::from_secs(1_779_638_709);
+        assert_eq!(
+            imported_at_detail_line(timestamp),
+            "Imported at: 2026-05-24T16:05:09Z."
+        );
+    }
+
+    #[test]
+    fn markdown_import_preservation_counts_blank_lines_inside_code_as_preserved() {
+        let preservation =
+            analyze_markdown_import_preservation("# Notes\n\n```md\n- literal code\n\n```\n\n");
+
+        assert_eq!(preservation.non_empty_source_lines, 4);
+        assert_eq!(preservation.omitted_blank_lines, 2);
+        assert_eq!(preservation.dropped_text_lines, 0);
+    }
+
+    #[test]
+    fn markdown_viewer_i_imports_to_sibling_mind_file_without_touching_original() {
+        let source_path = temp_map_path("README.md");
+        let output_path = default_markdown_import_output_path(&source_path);
+        let source = "# Imported Project [id:imported]\n\nOpening detail.\n\n- [ ] First task #todo @status:active\n\n## Read Next\n\n- [docs/README.md](docs/README.md)\n";
+        std::fs::write(&source_path, source).expect("source markdown should be writable");
+
+        let mut viewer = MarkdownViewerState::new(source_path.clone(), source.to_string());
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE), 4)
+            .expect("import key should be handled");
+
+        assert_eq!(viewer.status.tone, StatusTone::Success);
+        assert!(viewer.status.text.contains("Original unchanged"));
+        assert_eq!(
+            std::fs::read_to_string(&source_path).expect("source should remain readable"),
+            source
+        );
+        let imported =
+            std::fs::read_to_string(&output_path).expect("imported map should be written");
+        assert!(imported.contains("- Imported Project [id:imported]"));
+        assert!(imported.contains("  | Opening detail."));
+        assert!(imported.contains("  - [ ] First task #todo @status:active"));
+        assert!(imported.contains("    - docs/README.md [docs/README.md](docs/README.md)"));
+        assert!(imported.contains("- Lossy Import Summary #lossy-summary @source:markdown"));
+        assert!(imported.contains("  | Imported at: "));
+        assert!(imported.contains("  | Original Markdown was left unchanged."));
+        assert!(imported.contains("  | Preservation: 5 non-empty source line(s) imported; no non-empty text lines were dropped."));
+        assert!(imported.contains("  | Blank line(s) omitted from the map: 4."));
+        let parsed = parse_document(&imported);
+        assert!(
+            parsed.diagnostics.is_empty(),
+            "imported map should parse cleanly: {:?}\n{}",
+            parsed.diagnostics,
+            imported
+        );
+        assert!(
+            validate_document(&parsed.document).is_empty(),
+            "imported map should validate cleanly"
+        );
+        assert_eq!(viewer.open_after_import.as_ref(), Some(&output_path));
+
+        std::fs::remove_file(source_path).ok();
+        std::fs::remove_file(output_path).ok();
+    }
+
+    #[test]
+    fn markdown_viewer_i_prompts_when_import_file_exists() {
+        let source_path = temp_map_path("notes.md");
+        let output_path = default_markdown_import_output_path(&source_path);
+        let source = "# Notes\n\n- Keep me\n";
+        std::fs::write(&source_path, source).expect("source markdown should be writable");
+        std::fs::write(&output_path, "sentinel").expect("existing import should be writable");
+
+        let mut viewer = MarkdownViewerState::new(source_path.clone(), source.to_string());
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE), 4)
+            .expect("import key should be handled");
+
+        assert_eq!(viewer.status.tone, StatusTone::Warning);
+        assert!(viewer.status.text.contains("exists"));
+        let prompt = viewer
+            .import_prompt
+            .as_ref()
+            .expect("collision should open import prompt");
+        assert_eq!(prompt.existing_path, output_path);
+        let expected_name = output_path
+            .file_name()
+            .expect("output should have a file name")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(prompt.draft_name, expected_name);
+        assert_eq!(
+            viewer.import_prompt_status_text(prompt),
+            format!(
+                "{expected_name} exists. Type a new name or press Enter to overwrite: {expected_name}. Esc cancels."
+            )
+        );
+        assert!(viewer.open_after_import.is_none());
+        assert_eq!(
+            std::fs::read_to_string(&output_path).expect("existing file should remain readable"),
+            "sentinel"
+        );
+
+        std::fs::remove_file(source_path).ok();
+        std::fs::remove_file(output_path).ok();
+    }
+
+    #[test]
+    fn markdown_import_prompt_enter_overwrites_default_existing_import() {
+        let source_path = temp_map_path("notes.md");
+        let output_path = default_markdown_import_output_path(&source_path);
+        let source = "# Notes\n\n- Keep me\n";
+        std::fs::write(&source_path, source).expect("source markdown should be writable");
+        std::fs::write(&output_path, "sentinel").expect("existing import should be writable");
+
+        let mut viewer = MarkdownViewerState::new(source_path.clone(), source.to_string());
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE), 4)
+            .expect("import key should be handled");
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), 4)
+            .expect("enter should overwrite the default import name");
+
+        assert_eq!(viewer.status.tone, StatusTone::Success);
+        assert_eq!(viewer.open_after_import.as_ref(), Some(&output_path));
+        let overwritten =
+            std::fs::read_to_string(&output_path).expect("existing import should be overwritten");
+        assert!(overwritten.contains("- Notes"));
+        assert!(overwritten.contains("- Lossy Import Summary #lossy-summary @source:markdown"));
+        assert_ne!(overwritten, "sentinel");
+
+        std::fs::remove_file(source_path).ok();
+        std::fs::remove_file(output_path).ok();
+    }
+
+    #[test]
+    fn markdown_import_prompt_editing_name_writes_new_import() {
+        let source_path = temp_map_path("notes.md");
+        let output_path = default_markdown_import_output_path(&source_path);
+        let alternate_path = source_path.with_file_name("custom-import.md");
+        let source = "# Notes\n\n- Replace sentinel\n";
+        std::fs::write(&source_path, source).expect("source markdown should be writable");
+        std::fs::write(&output_path, "sentinel").expect("existing import should be writable");
+
+        let mut viewer = MarkdownViewerState::new(source_path.clone(), source.to_string());
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE), 4)
+            .expect("import key should be handled");
+        let draft_len = viewer
+            .import_prompt
+            .as_ref()
+            .expect("collision should open import prompt")
+            .draft_name
+            .len();
+        for _ in 0..draft_len {
+            viewer
+                .handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE), 4)
+                .expect("backspace should edit draft name");
+        }
+        for character in "custom-import.md".chars() {
+            viewer
+                .handle_key(
+                    KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE),
+                    4,
+                )
+                .expect("typing should edit draft name");
+        }
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), 4)
+            .expect("enter should write edited import name");
+
+        assert_eq!(viewer.status.tone, StatusTone::Success);
+        assert_eq!(viewer.open_after_import.as_ref(), Some(&alternate_path));
+        assert_eq!(
+            std::fs::read_to_string(&output_path).expect("existing file should remain readable"),
+            "sentinel"
+        );
+        let alternate =
+            std::fs::read_to_string(&alternate_path).expect("alternate import should be written");
+        assert!(alternate.contains("- Notes"));
+        assert!(alternate.contains("  - Replace sentinel"));
+
+        std::fs::remove_file(source_path).ok();
+        std::fs::remove_file(output_path).ok();
+        std::fs::remove_file(alternate_path).ok();
+    }
+
+    #[test]
+    fn recovery_view_i_does_not_import_guidance_text() {
+        let source_path = temp_map_path("broken.md");
+        let output_path = default_markdown_import_output_path(&source_path);
+        let mut viewer =
+            MarkdownViewerState::recovery(source_path.clone(), "Recovery guidance".to_string());
+
+        viewer
+            .handle_key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE), 4)
+            .expect("import key should be handled");
+
+        assert_eq!(viewer.status.tone, StatusTone::Warning);
+        assert!(!output_path.exists());
     }
 
     #[test]

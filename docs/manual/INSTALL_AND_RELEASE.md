@@ -87,8 +87,14 @@ The CLI and TUI read the same bundled file:
 mdm changelog
 mdm changelog --version 0.8.0
 mdm changelog --all
+mdm changelog --pretty
+mdm changelog --plain
 mdm changelog --json
 ```
+
+The default mode renders pretty terminal output. Use `--plain` when you need
+raw Markdown, and use `--json` when another tool needs structured changelog
+data.
 
 When you only want to know whether a newer build exists, use the manual update
 check:

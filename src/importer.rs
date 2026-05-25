@@ -278,10 +278,26 @@ fn import_markdown(source: &str) -> Result<Document, String> {
     let mut roots = Vec::new();
     let mut stack: Vec<StackNode> = Vec::new();
     let mut current_heading_level = None;
+    let mut code_fence = None;
 
     for (index, raw_line) in source.lines().enumerate() {
         let line = index + 1;
+        if let Some(fence) = code_fence {
+            let detail_target = ensure_markdown_detail_target(&mut stack, &mut roots);
+            detail_target.detail.push(raw_line.to_string());
+            if markdown_code_fence_closes(raw_line, fence) {
+                code_fence = None;
+            }
+            continue;
+        }
+
         if raw_line.trim().is_empty() {
+            continue;
+        }
+        if let Some(fence) = parse_markdown_code_fence(raw_line) {
+            let detail_target = ensure_markdown_detail_target(&mut stack, &mut roots);
+            detail_target.detail.push(raw_line.to_string());
+            code_fence = Some(fence);
             continue;
         }
         if raw_line.contains('\t') {
@@ -339,6 +355,12 @@ fn import_markdown(source: &str) -> Result<Document, String> {
 struct StackNode {
     level: usize,
     node: Node,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MarkdownCodeFence {
+    marker: char,
+    length: usize,
 }
 
 fn append_stack_node(next: StackNode, stack: &mut Vec<StackNode>, roots: &mut Vec<Node>) {
@@ -807,20 +829,85 @@ fn parse_markdown_bullet(line: &str) -> Option<(usize, &str)> {
     None
 }
 
+pub(crate) fn parse_markdown_code_fence(line: &str) -> Option<MarkdownCodeFence> {
+    let indent = count_leading_spaces(line);
+    if indent > 3 {
+        return None;
+    }
+    let trimmed = &line[indent..];
+    let marker = trimmed.chars().next()?;
+    if !matches!(marker, '`' | '~') {
+        return None;
+    }
+    let length = trimmed.chars().take_while(|ch| *ch == marker).count();
+    (length >= 3).then_some(MarkdownCodeFence { marker, length })
+}
+
+pub(crate) fn markdown_code_fence_closes(line: &str, fence: MarkdownCodeFence) -> bool {
+    let indent = count_leading_spaces(line);
+    if indent > 3 {
+        return false;
+    }
+    let trimmed = &line[indent..];
+    let length = trimmed.chars().take_while(|ch| *ch == fence.marker).count();
+
+    length >= fence.length && trimmed[length..].trim().is_empty()
+}
+
+fn count_leading_spaces(line: &str) -> usize {
+    line.as_bytes()
+        .iter()
+        .take_while(|byte| **byte == b' ')
+        .count()
+}
+
 fn node_from_markdown_label(label: &str, line: usize) -> Result<Node, String> {
     if label.trim().is_empty() {
         return Err(format!(
             "Markdown import found an empty heading or bullet near line {line}."
         ));
     }
-    parse_node_fragment(label).map_err(|diagnostics| {
+    let mut node = parse_node_fragment(label).map_err(|diagnostics| {
         let messages = diagnostics
             .iter()
             .map(|diagnostic| diagnostic.message.as_str())
             .collect::<Vec<_>>()
             .join("; ");
         format!("Markdown import could not parse node syntax near line {line}: {messages}")
-    })
+    })?;
+
+    if node.text.trim().is_empty() {
+        node.text = markdown_import_visible_text_fallback(&node, label);
+    }
+
+    Ok(node)
+}
+
+fn markdown_import_visible_text_fallback(node: &Node, label: &str) -> String {
+    let reference_labels = node
+        .references
+        .iter()
+        .map(|reference| reference.label.trim())
+        .filter(|label| !label.is_empty())
+        .collect::<Vec<_>>();
+
+    for candidate in [reference_labels.join(", "), label.trim().to_string()] {
+        if candidate_is_visible_node_text(&candidate) {
+            return candidate;
+        }
+    }
+
+    "Imported Markdown Item".to_string()
+}
+
+fn candidate_is_visible_node_text(candidate: &str) -> bool {
+    if candidate.trim().is_empty() {
+        return false;
+    }
+
+    parse_node_fragment(candidate)
+        .map(|node| !node.text.trim().is_empty())
+        .unwrap_or(false)
 }
 
 fn plain_node(text: &str, line: usize) -> Node {
@@ -1398,6 +1485,73 @@ mod tests {
             "serialized import should parse cleanly: {:?}\n{}",
             parsed.diagnostics,
             serialized
+        );
+    }
+
+    #[test]
+    fn imports_link_only_markdown_bullets_with_visible_reference_labels() {
+        let source =
+            "## Read Next\n\n- [docs/README.md](docs/README.md)\n- ![logo](docs/assets/logo.png)\n";
+
+        let document = import_document(source, "markdown").expect("markdown should import");
+        let read_next = &document.nodes[0];
+        assert_eq!(read_next.text, "Read Next");
+        assert_eq!(read_next.children[0].text, "docs/README.md");
+        assert_eq!(read_next.children[0].references[0].label, "docs/README.md");
+        assert_eq!(read_next.children[0].references[0].target, "docs/README.md");
+        assert_eq!(read_next.children[1].text, "logo");
+        assert_eq!(
+            read_next.children[1].references[0].kind,
+            ExternalRefKind::Image
+        );
+
+        let serialized = serialize_document(&document);
+        let parsed = parse_document(&serialized);
+        assert!(
+            parsed.diagnostics.is_empty(),
+            "serialized import should parse cleanly: {:?}\n{}",
+            parsed.diagnostics,
+            serialized
+        );
+        assert!(
+            validate_document(&parsed.document).is_empty(),
+            "serialized import should validate cleanly: {serialized}"
+        );
+    }
+
+    #[test]
+    fn imports_fenced_markdown_code_as_literal_detail() {
+        let source = "# Guide\n\nExample:\n\n```md\n- Not a map child\n  - Still code\n\n## Not a heading\n```\n\n- Real child\n";
+
+        let document = import_document(source, "markdown").expect("markdown should import");
+        let root = &document.nodes[0];
+        assert_eq!(root.text, "Guide");
+        assert_eq!(
+            root.detail,
+            vec![
+                "Example:".to_string(),
+                "```md".to_string(),
+                "- Not a map child".to_string(),
+                "  - Still code".to_string(),
+                String::new(),
+                "## Not a heading".to_string(),
+                "```".to_string(),
+            ]
+        );
+        assert_eq!(root.children.len(), 1);
+        assert_eq!(root.children[0].text, "Real child");
+
+        let serialized = serialize_document(&document);
+        let parsed = parse_document(&serialized);
+        assert!(
+            parsed.diagnostics.is_empty(),
+            "serialized import should parse cleanly: {:?}\n{}",
+            parsed.diagnostics,
+            serialized
+        );
+        assert!(
+            validate_document(&parsed.document).is_empty(),
+            "serialized import should validate cleanly: {serialized}"
         );
     }
 

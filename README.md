@@ -15,7 +15,7 @@
 
 It gives you two interfaces over the same file:
 
-- `mdm`: a CLI for viewing, searching, validating, exporting, and copying examples
+- `mdm`: a CLI for viewing maps, rendering Markdown, searching, validating, exporting, and copying examples
 - `mdmind`: a full-screen TUI for navigating, filtering, editing, and reshaping maps
 
 Large idea trees stay calm, searchable, and safe to edit with a keyboard.
@@ -97,7 +97,7 @@ That installs both:
 
 More install and release detail lives in [docs/manual/INSTALL_AND_RELEASE.md](docs/manual/INSTALL_AND_RELEASE.md).
 Release notes live in [CHANGELOG.md](CHANGELOG.md) and can be read locally with
-`mdm changelog`.
+`mdm changelog`; use `mdm changelog --plain` when you need raw Markdown.
 To check GitHub Releases for a newer build when you have network access, run
 `mdm version --check`.
 
@@ -125,12 +125,31 @@ Open the TUI:
 mdmind roadmap.md
 ```
 
+Open an ordinary Markdown file as a read-only document:
+
+```bash
+mdmind README.md
+mdmind --as markdown README.md
+```
+
+Inside that Markdown view, press `i` to import a native map beside the source as
+`README-mind.md`; the original Markdown stays unchanged, the imported map opens
+immediately, and the map includes a `#lossy-summary` section that names the
+source, calls out formatting loss, and reports whether non-empty text lines were
+dropped.
+
 Inspect a map from the CLI:
 
 ```bash
 mdm view roadmap.md
 mdm find roadmap.md "#todo"
 mdm links roadmap.md
+```
+
+Render an ordinary Markdown file from the CLI:
+
+```bash
+mdm render README.md
 ```
 
 Copy bundled example maps onto your machine:

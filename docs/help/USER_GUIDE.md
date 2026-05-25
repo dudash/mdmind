@@ -7,6 +7,7 @@
     - What mdmind is #guide [id:guide/start/what-is]
       - mdmind is a local-first mind mapping tool for structured thinking in plain text
       - the same map file works in both the mdm CLI and the mdmind TUI
+      - ordinary Markdown files open in a read-only document view instead of being treated as maps
       - the goal is keyboard-first thinking, not whiteboard-style diagramming
     - First five minutes #recipe [id:guide/start/first-five]
       - you do not need ids, relations, exports, or visual map modes on day one
@@ -20,10 +21,13 @@
       - press : to open the command palette
       - press ? to open built-in help
       - press s in KEYSAVE mode, or S to toggle AUTOSAVE and save the current map immediately
+      - open README.md when you want to read ordinary Markdown without importing it
+      - press i in a Markdown document view to import and open a sibling map like README-mind.md while leaving the original unchanged
       - open Get Familiar With The TUI when you want a simple tour of the map and surrounding surfaces
     - What's New #guide [id:guide/start/changelog]
       - open the What's New help topic when you want to know what changed in the version you are running
-      - run `mdm changelog` to read the same notes from the CLI
+      - run `mdm changelog` to read formatted notes from the CLI
+      - run `mdm changelog --plain` when you need raw Markdown
       - run `mdm changelog --version 0.8.0` for a specific release
       - run `mdm changelog --all` when you want the longer release history
       - use Check For Updates in the palette when you want mdmind to look for a newer release
@@ -245,13 +249,18 @@
       - mdm tags examples/novel-research-writing-map.md --plain
       - mdm links examples/lantern-studio-map.md --plain
       - mdm refs examples/lantern-studio-map.md --plain
+      - mdm render README.md
     - How to think about the output #guide [id:guide/cli/output]
       - use find when you want matching work items or branches in context
+      - use render when you want to read an ordinary Markdown file without treating it as a map
       - use kv when you want to audit structured fields like owner, status, region, or priority
       - use tags when you want a quick summary of a map's vocabulary
       - use links when you want stable ids for deep-linking into view, open, or export
     - CLI tips #tip [id:guide/cli/tips]
       - add --plain when you want grep-friendly output
+      - use mdmind --as markdown file.md to force the read-only Markdown view
+      - press i in that view to write and open file-mind.md without replacing file.md
+      - use mdmind --as map file.md to force strict native map parsing
       - use deep links after links output to inspect one branch with mdm view map.md#branch/id
       - the example maps are intentionally tagged and annotated so they double as CLI query demos
   - View Modes #guide @section:views [id:guide/views]

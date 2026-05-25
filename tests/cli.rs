@@ -20,6 +20,13 @@ fn run_mdm(args: &[&str]) -> std::process::Output {
         .expect("mdm command should run")
 }
 
+fn run_mdmind(args: &[&str]) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_mdmind"))
+        .args(args)
+        .output()
+        .expect("mdmind command should run")
+}
+
 fn temp_file(name: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -80,6 +87,23 @@ fn view_supports_label_path_fallback_when_no_id_exists() {
     let stdout = stdout(&output);
     assert!(stdout.contains("Prompt Library #prompt @owner:jason [id:prompts/library]"));
     assert!(!stdout.contains("Product Idea #idea [id:product]"));
+}
+
+#[test]
+fn view_redirects_ordinary_markdown_to_render() {
+    let markdown_path = temp_file("README-view.md");
+    std::fs::write(&markdown_path, "# Project\n\nNormal Markdown prose.\n")
+        .expect("markdown fixture should be writable");
+
+    let output = run_mdm(&["view", markdown_path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = stderr(&output);
+    assert!(stderr.contains("ordinary Markdown"));
+    assert!(stderr.contains("mdm render"));
+    assert!(stderr.contains("mdm import"));
+    assert!(!stderr.contains("The map contains parser errors"));
+
+    std::fs::remove_file(markdown_path).ok();
 }
 
 #[test]
@@ -194,6 +218,7 @@ fn commands_json_lists_agent_command_catalog() {
 
     for expected in [
         "view",
+        "render",
         "find",
         "tags",
         "kv",
@@ -251,8 +276,9 @@ fn changelog_prints_latest_curated_entry() {
     let output = run_mdm(&["changelog"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     let stdout = stdout(&output);
-    assert!(stdout.contains(&format!("## [{}]", env!("CARGO_PKG_VERSION"))));
-    assert!(stdout.contains("###"));
+    assert!(stdout.contains(&format!("[{}]", env!("CARGO_PKG_VERSION"))));
+    assert!(!stdout.contains(&format!("## [{}]", env!("CARGO_PKG_VERSION"))));
+    assert!(stdout.contains("Features"));
 }
 
 #[test]
@@ -260,7 +286,8 @@ fn changelog_can_select_legacy_release() {
     let output = run_mdm(&["changelog", "--version", "0.7.0"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     let stdout = stdout(&output);
-    assert!(stdout.contains("## [0.7.0] - 2026-05-13"));
+    assert!(stdout.contains("[0.7.0] - 2026-05-13"));
+    assert!(!stdout.contains("## [0.7.0]"));
     assert!(stdout.contains("Metadata Table View"));
 }
 
@@ -269,8 +296,28 @@ fn changelog_can_select_080_release_notes() {
     let output = run_mdm(&["changelog", "--version", "0.8.0"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     let stdout = stdout(&output);
-    assert!(stdout.contains("## [0.8.0] - 2026-05-23"));
+    assert!(stdout.contains("[0.8.0] - 2026-05-23"));
+    assert!(!stdout.contains("## [0.8.0]"));
     assert!(stdout.contains("mdm changelog"));
+}
+
+#[test]
+fn changelog_pretty_renders_markdown_for_humans() {
+    let output = run_mdm(&["changelog", "--version", "0.8.0", "--pretty"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("[0.8.0] - 2026-05-23"));
+    assert!(stdout.contains("Features"));
+    assert!(!stdout.contains("## [0.8.0]"));
+}
+
+#[test]
+fn changelog_plain_preserves_raw_markdown() {
+    let output = run_mdm(&["changelog", "--version", "0.8.0", "--plain"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("## [0.8.0] - 2026-05-23"));
+    assert!(stdout.contains("### Features"));
 }
 
 #[test]
@@ -285,6 +332,42 @@ fn changelog_json_uses_a_success_envelope() {
     assert_eq!(value["format"], "changelog_entry.v1");
     assert_eq!(value["target"], "v0.7.0");
     assert_eq!(value["data"]["version"], "0.7.0");
+}
+
+#[test]
+fn render_pretty_prints_ordinary_markdown() {
+    let markdown_path = temp_file("ordinary.md");
+    std::fs::write(
+        &markdown_path,
+        "---\ntitle: Project Notes\n---\n\n# Project Notes\n\nA [brief](docs/brief.md) with context.\n\n- [x] Drafted\n- Review\n\n| Area | Status |\n| --- | --- |\n| CLI | Done |\n\n```rust\nlet ready = true;\n```\n",
+    )
+    .expect("markdown fixture should be writable");
+
+    let output = run_mdm(&["render", markdown_path.to_str().unwrap(), "--width", "48"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("╭─ metadata\n│ title: Project Notes\n╰─"));
+    assert!(stdout.contains("Project Notes\n━━━━━━━━━━━━━"));
+    assert!(stdout.contains("A brief (docs/brief.md) with context."));
+    assert!(stdout.contains("☑ Drafted"));
+    assert!(stdout.contains("│ Area │ Status │"));
+    assert!(stdout.contains("╭─ code · rust"));
+    assert!(stdout.contains("│ let ready = true;"));
+
+    std::fs::remove_file(markdown_path).ok();
+}
+
+#[test]
+fn render_plain_prints_raw_markdown() {
+    let markdown_path = temp_file("ordinary-plain.md");
+    let source = "# Project Notes\n\n- Raw\n";
+    std::fs::write(&markdown_path, source).expect("markdown fixture should be writable");
+
+    let output = run_mdm(&["render", markdown_path.to_str().unwrap(), "--plain"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output), source);
+
+    std::fs::remove_file(markdown_path).ok();
 }
 
 #[test]
@@ -1084,34 +1167,97 @@ fn init_supports_the_todo_template() {
 
 #[test]
 fn mdmind_binary_falls_back_to_preview() {
-    let output = Command::new(env!("CARGO_BIN_EXE_mdmind"))
-        .args([
-            fixture("sample.md"),
-            String::from("--preview"),
-            String::from("--max-depth"),
-            String::from("1"),
-        ])
-        .output()
-        .expect("mdmind command should run");
+    let output = run_mdmind(&[&fixture("sample.md"), "--preview", "--max-depth", "1"]);
     assert!(output.status.success());
     assert!(stdout(&output).contains("MVP Scope"));
 }
 
 #[test]
+fn mdmind_preview_renders_ordinary_markdown() {
+    let markdown_path = temp_file("README.md");
+    std::fs::write(
+        &markdown_path,
+        "# Project Notes\n\nA normal Markdown document.\n\n```rust\nlet ready = true;\n```\n",
+    )
+    .expect("markdown fixture should be writable");
+
+    let output = run_mdmind(&["--preview", markdown_path.to_str().unwrap()]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("Project Notes"));
+    assert!(stdout.contains("╭─ code · rust"));
+    assert!(!stdout.contains("The map contains parser errors"));
+    assert!(!sidecar_path(&markdown_path, "session").exists());
+    assert!(!sidecar_path(&markdown_path, "ui").exists());
+    assert!(!sidecar_path(&markdown_path, "checkpoints").exists());
+
+    std::fs::remove_file(markdown_path).ok();
+}
+
+#[test]
+fn mdmind_preview_force_map_rejects_readme_markdown() {
+    let markdown_path = temp_file("README-force-map.md");
+    std::fs::write(
+        &markdown_path,
+        "# Project Notes\n\nA normal Markdown document.\n",
+    )
+    .expect("markdown fixture should be writable");
+
+    let output = run_mdmind(&["--as", "map", "--preview", markdown_path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("The map contains parser errors"));
+
+    std::fs::remove_file(markdown_path).ok();
+}
+
+#[test]
+fn mdmind_preview_near_miss_map_shows_recovery_guidance() {
+    let map_path = temp_file("broken-map.md");
+    std::fs::write(&map_path, "- Roadmap [id:roadmap]\n  Missing dash\n")
+        .expect("map fixture should be writable");
+
+    let output = run_mdmind(&["--preview", map_path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    let error_output = stderr(&output);
+    assert!(error_output.contains("damaged mdmind map"));
+    assert!(error_output.contains("mdm validate"));
+    assert!(error_output.contains("mdmind --as markdown"));
+
+    let forced = run_mdmind(&["--as", "markdown", "--preview", map_path.to_str().unwrap()]);
+    assert!(forced.status.success(), "stderr: {}", stderr(&forced));
+    assert!(stdout(&forced).contains("Roadmap [id:roadmap]"));
+
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
+fn mdmind_near_miss_map_prints_recovery_guidance_without_a_tty() {
+    let map_path = temp_file("broken-map-non-tty.md");
+    std::fs::write(&map_path, "- Roadmap [id:roadmap]\n  Missing dash\n")
+        .expect("map fixture should be writable");
+
+    let output = run_mdmind(&[map_path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    let error_output = stderr(&output);
+    assert!(error_output.contains("damaged mdmind map"));
+    assert!(error_output.contains("Recommended:"));
+    assert!(error_output.contains("mdm validate"));
+    assert!(error_output.contains("mdm import"));
+    assert!(!error_output.contains("interactive terminal"));
+
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
 fn mdmind_preview_without_a_target_returns_a_runtime_error() {
-    let output = Command::new(env!("CARGO_BIN_EXE_mdmind"))
-        .arg("--preview")
-        .output()
-        .expect("mdmind command should run");
+    let output = run_mdmind(&["--preview"]);
     assert_eq!(output.status.code(), Some(1));
     assert!(stderr(&output).contains("`mdmind --preview` needs a target path."));
 }
 
 #[test]
 fn mdmind_without_a_target_requires_an_interactive_terminal_for_startup() {
-    let output = Command::new(env!("CARGO_BIN_EXE_mdmind"))
-        .output()
-        .expect("mdmind command should run");
+    let output = run_mdmind(&[]);
     assert_eq!(output.status.code(), Some(1));
     assert!(stderr(&output).contains(
         "No target was provided. Run `mdmind path/to/map.md`, or start `mdmind` in an interactive terminal to create one."
@@ -1120,12 +1266,20 @@ fn mdmind_without_a_target_requires_an_interactive_terminal_for_startup() {
 
 #[test]
 fn mdmind_key_diagnostics_requires_an_interactive_terminal() {
-    let output = Command::new(env!("CARGO_BIN_EXE_mdmind"))
-        .arg("--check-keys")
-        .output()
-        .expect("mdmind command should run");
+    let output = run_mdmind(&["--check-keys"]);
     assert_eq!(output.status.code(), Some(1));
     assert!(stderr(&output).contains("Key diagnostics need an interactive terminal."));
+}
+
+fn sidecar_path(map_path: &Path, suffix: &str) -> PathBuf {
+    let file_name = map_path
+        .file_name()
+        .expect("fixture should have a file name")
+        .to_string_lossy();
+    map_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(format!(".{file_name}.mdmind-{suffix}.json"))
 }
 
 #[test]

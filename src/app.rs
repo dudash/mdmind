@@ -1,11 +1,16 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::checkpoints::checkpoints_path_for;
 use crate::editor::get_node;
+use crate::locations::locations_path_for;
 use crate::model::{Diagnostic, Document, Node, Severity, has_errors};
 use crate::parser::parse_document;
+use crate::session::session_path_for;
 use crate::templates::TemplateKind;
+use crate::ui_settings::ui_settings_path_for;
 use crate::validate::validate_document_with_base_path;
+use crate::views::views_path_for;
 
 #[derive(Debug, Clone)]
 pub struct TargetRef {
@@ -19,6 +24,27 @@ pub struct LoadedDocument {
     pub document: Document,
     pub parser_diagnostics: Vec<Diagnostic>,
     pub validation_diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenTargetMode {
+    Auto,
+    Map,
+    Markdown,
+}
+
+#[derive(Debug, Clone)]
+pub enum ClassifiedTarget {
+    NativeMap(LoadedDocument),
+    OrdinaryMarkdown {
+        target: TargetRef,
+        source: String,
+    },
+    NearMissMap {
+        target: TargetRef,
+        diagnostics: Vec<Diagnostic>,
+        score: i32,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -80,6 +106,199 @@ pub fn load_document(target: &str) -> Result<LoadedDocument, AppError> {
         document: parsed.document,
         parser_diagnostics: parsed.diagnostics,
         validation_diagnostics,
+    })
+}
+
+pub fn classify_open_target(
+    raw_target: &str,
+    mode: OpenTargetMode,
+) -> Result<ClassifiedTarget, AppError> {
+    let target = parse_target(raw_target);
+    let source = fs::read_to_string(&target.path).map_err(|error| {
+        AppError::new(format!(
+            "Could not read '{}': {error}",
+            target.path.display()
+        ))
+    })?;
+
+    if mode == OpenTargetMode::Markdown {
+        return Ok(ClassifiedTarget::OrdinaryMarkdown { target, source });
+    }
+
+    let parsed = parse_document(&source);
+    let validation_base_path = target
+        .path
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty());
+    let validation_diagnostics =
+        validate_document_with_base_path(&parsed.document, validation_base_path);
+    let loaded = LoadedDocument {
+        target: target.clone(),
+        document: parsed.document,
+        parser_diagnostics: parsed.diagnostics,
+        validation_diagnostics,
+    };
+
+    if mode == OpenTargetMode::Map || !has_errors(&loaded.parser_diagnostics) {
+        return Ok(ClassifiedTarget::NativeMap(loaded));
+    }
+
+    let score = mdmind_intent_score(&source, &target.path);
+    if score >= 5 {
+        Ok(ClassifiedTarget::NearMissMap {
+            target,
+            diagnostics: loaded.parser_diagnostics,
+            score,
+        })
+    } else {
+        Ok(ClassifiedTarget::OrdinaryMarkdown { target, source })
+    }
+}
+
+pub fn near_miss_guidance(target: &TargetRef, diagnostics: &[Diagnostic], score: i32) -> String {
+    let first_error = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.severity == Severity::Error)
+        .map(|diagnostic| {
+            format!(
+                " First issue: line {}: {}",
+                diagnostic.line, diagnostic.message
+            )
+        })
+        .unwrap_or_default();
+
+    format!(
+        "This looks like a damaged mdmind map, so mdmind did not open it as ordinary Markdown.\n\nRecommended:\n  mdm validate {path}\n\nOther options:\n  mdmind --as markdown {path}\n  mdm import {path} --from markdown --preview --report\n\n{first_error}\nClassifier score: {score}",
+        path = target.path.display(),
+        first_error = first_error.trim()
+    )
+}
+
+fn mdmind_intent_score(source: &str, path: &Path) -> i32 {
+    let mut score = 0;
+    let signal_source = source_without_fenced_code(source);
+    if signal_source.contains("[id:") {
+        score += 5;
+    }
+    if signal_source.contains("[[rel:") {
+        score += 5;
+    }
+    if signal_source.contains("[[") {
+        score += 3;
+    }
+    if has_known_sidecar(path) {
+        score += 4;
+    }
+
+    let mut metadata_lines = 0;
+    let mut tag_lines = 0;
+    let mut task_outline_lines = 0;
+    for line in signal_source.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('|') {
+            score += 3;
+        }
+        if trimmed.starts_with("- ") && trimmed.contains('@') && trimmed.contains(':') {
+            metadata_lines += 1;
+        }
+        if trimmed.starts_with("- ") && trimmed.matches('#').count() >= 2 {
+            tag_lines += 1;
+        }
+        if line.starts_with("  ")
+            && (trimmed.starts_with("- [ ]")
+                || trimmed.starts_with("- [x]")
+                || trimmed.starts_with("- [X]"))
+        {
+            task_outline_lines += 1;
+        }
+    }
+    if metadata_lines >= 2 {
+        score += 2;
+    }
+    if task_outline_lines >= 2 {
+        score += 2;
+    }
+    if tag_lines >= 2 {
+        score += 1;
+    }
+
+    if starts_like_markdown_document(source) {
+        score -= 12;
+    }
+    if source.contains("\n```") {
+        score -= 2;
+    }
+    if source.contains("\n|") && source.contains("\n| ---") {
+        score -= 2;
+    }
+    if source.starts_with("---\n") {
+        score -= 2;
+    }
+
+    score
+}
+
+fn source_without_fenced_code(source: &str) -> String {
+    let mut stripped = String::new();
+    let mut fence_marker: Option<&'static str> = None;
+    for line in source.lines() {
+        let trimmed = line.trim_start();
+        let line_fence = if trimmed.starts_with("```") {
+            Some("```")
+        } else if trimmed.starts_with("~~~") {
+            Some("~~~")
+        } else {
+            None
+        };
+        if let Some(line_fence) = line_fence {
+            if fence_marker == Some(line_fence) {
+                fence_marker = None;
+            } else if fence_marker.is_none() {
+                fence_marker = Some(line_fence);
+            }
+            continue;
+        }
+        if fence_marker.is_none() {
+            stripped.push_str(line);
+            stripped.push('\n');
+        }
+    }
+    stripped
+}
+
+fn has_known_sidecar(path: &Path) -> bool {
+    [
+        session_path_for(path),
+        ui_settings_path_for(path),
+        checkpoints_path_for(path),
+        views_path_for(path),
+        locations_path_for(path),
+    ]
+    .into_iter()
+    .filter_map(Result::ok)
+    .any(|path| path.exists())
+}
+
+fn starts_like_markdown_document(source: &str) -> bool {
+    let mut meaningful = source
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('<'));
+    let Some(first) = meaningful.next() else {
+        return false;
+    };
+    let Some(second) = meaningful.next() else {
+        return first.starts_with('#');
+    };
+    if first.starts_with('#') && !second.starts_with("- ") {
+        return true;
+    }
+
+    source.lines().map(str::trim_start).any(|line| {
+        line.starts_with("# ")
+            || line.starts_with("## ")
+            || line.starts_with("### ")
+            || line.starts_with("#### ")
     })
 }
 
@@ -304,9 +523,18 @@ fn breadcrumb_for_path(document: &Document, path: &[usize]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn parse(source: &str) -> Document {
         parse_document(source).document
+    }
+
+    fn temp_path(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("mdmind-classify-{nonce}-{name}"))
     }
 
     #[test]
@@ -345,5 +573,93 @@ mod tests {
             .expect_err("duplicate label path should be ambiguous");
         assert!(error.message().contains("ambiguous as a label path"));
         assert!(error.message().contains("Product Idea / Tasks"));
+    }
+
+    #[test]
+    fn classify_open_target_routes_readme_markdown_to_document_view() {
+        let path = temp_path("README.md");
+        fs::write(
+            &path,
+            "# Project\n\nNormal prose.\n\n~~~text\n- Map [id:map] [[rel:mentions->other]]\n~~~\n",
+        )
+        .expect("fixture should be writable");
+
+        let classified = classify_open_target(path.to_str().unwrap(), OpenTargetMode::Auto)
+            .expect("classification should succeed");
+        assert!(matches!(
+            classified,
+            ClassifiedTarget::OrdinaryMarkdown { .. }
+        ));
+        assert!(
+            !session_path_for(&path)
+                .expect("session path should resolve")
+                .exists()
+        );
+
+        fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn classify_open_target_routes_markdown_checklists_to_document_view() {
+        let path = temp_path("checklist.md");
+        fs::write(
+            &path,
+            "# Launch Checklist\n\n- [ ] Write docs\n- [x] Ship build\n\nNotes for the release crew.\n",
+        )
+        .expect("fixture should be writable");
+
+        let classified = classify_open_target(path.to_str().unwrap(), OpenTargetMode::Auto)
+            .expect("classification should succeed");
+        assert!(matches!(
+            classified,
+            ClassifiedTarget::OrdinaryMarkdown { .. }
+        ));
+
+        fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn classify_open_target_keeps_valid_maps_native() {
+        let path = temp_path("roadmap.md");
+        fs::write(&path, "- Roadmap\n  - Ship reader [id:reader]\n")
+            .expect("fixture should be writable");
+
+        let classified = classify_open_target(path.to_str().unwrap(), OpenTargetMode::Auto)
+            .expect("classification should succeed");
+        assert!(matches!(classified, ClassifiedTarget::NativeMap(_)));
+
+        fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn classify_open_target_protects_near_miss_maps() {
+        let path = temp_path("broken-map.md");
+        fs::write(&path, "- Roadmap [id:roadmap]\n  Missing dash\n")
+            .expect("fixture should be writable");
+
+        let classified = classify_open_target(path.to_str().unwrap(), OpenTargetMode::Auto)
+            .expect("classification should succeed");
+        assert!(matches!(classified, ClassifiedTarget::NearMissMap { .. }));
+
+        let forced = classify_open_target(path.to_str().unwrap(), OpenTargetMode::Markdown)
+            .expect("forced markdown should succeed");
+        assert!(matches!(forced, ClassifiedTarget::OrdinaryMarkdown { .. }));
+
+        fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn classify_open_target_force_map_attempts_strict_map_parse() {
+        let path = temp_path("README-map.md");
+        fs::write(&path, "# Project\n\nNormal prose.\n").expect("fixture should be writable");
+
+        let classified = classify_open_target(path.to_str().unwrap(), OpenTargetMode::Map)
+            .expect("forced map classification should load");
+        let ClassifiedTarget::NativeMap(loaded) = classified else {
+            panic!("forced map should return native map load");
+        };
+        assert!(has_errors(&loaded.parser_diagnostics));
+
+        fs::remove_file(path).ok();
     }
 }
