@@ -13,10 +13,10 @@ the release shape rather than every internal commit.
 - **Ordinary Markdown is now first-class in mdmind**: READMEs, changelogs,
   agent reports, and notes open as read-only documents instead of broken maps,
   while native mdmind maps still open as maps.
-- The Markdown reader includes rendered/raw views, scrolling, search highlights,
-  and clear read-only guidance.
-- Markdown files can be imported from the TUI into a sibling `<stem>-mind.md`
-  map with a timestamped `#lossy-summary` for review.
+  - The Markdown reader includes rendered/raw views, scrolling, search
+    highlights, and clear read-only guidance.
+  - Markdown files can be imported from the TUI into a sibling `<stem>-mind.md`
+    map with a timestamped `#lossy-summary` for review.
 
 ### New Commands
 
@@ -29,11 +29,6 @@ the release shape rather than every internal commit.
 - `mdmind <file.md>`, `mdmind --preview`, and `mdm view` now route ordinary
   Markdown through the Markdown renderer while keeping native maps on the map
   path.
-
-### Fixed
-
-- Markdown import now handles link-only bullets and fenced code blocks without
-  producing invalid or misleading map structure.
 
 ## [0.8.0] - 2026-05-23
 
