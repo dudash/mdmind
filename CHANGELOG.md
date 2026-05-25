@@ -10,58 +10,30 @@ the release shape rather than every internal commit.
 
 ### Features
 
-- **Ordinary Markdown is now a first-class read-only path**: opening a README,
-  changelog, agent report, or notes file in `mdmind` shows a document view
-  instead of treating the file like a broken map.
-- The Markdown reader supports scrolling, rendered/raw toggling, search with
-  highlighted matches, and clear edit-key guidance so users can inspect nearby
-  docs without accidentally rewriting them.
-- `mdmind` now classifies `.md` files more carefully: valid mdmind maps still
-  open as maps, ordinary Markdown opens as a document, and near-miss maps show
-  recovery guidance instead of silently falling through.
-- Markdown files can be imported directly from the read-only TUI into a sibling
-  `<stem>-mind.md` map, leaving the original unchanged and opening the imported
-  map immediately.
-- Imported Markdown maps now include a timestamped `#lossy-summary` review node
-  with source, preservation counts, omitted blank-line counts, and a reminder
-  that Markdown formatting may have been simplified.
+- **Ordinary Markdown is now first-class in mdmind**: READMEs, changelogs,
+  agent reports, and notes open as read-only documents instead of broken maps,
+  while native mdmind maps still open as maps.
+- The Markdown reader includes rendered/raw views, scrolling, search highlights,
+  and clear read-only guidance.
+- Markdown files can be imported from the TUI into a sibling `<stem>-mind.md`
+  map with a timestamped `#lossy-summary` for review.
 
 ### New Commands
 
-- `mdm render <target>` gives the CLI a dedicated pretty Markdown renderer for
-  ordinary `.md` files, with `--plain`, width, and color controls for scripts
-  and terminal output.
+- `mdm render <target>` pretty-prints ordinary Markdown files from the CLI.
 
 ### Changed Commands
 
-- `mdm changelog` now defaults to pretty terminal rendering, while
-  `mdm changelog --plain` preserves raw Markdown output for scripts and release
-  workflows. JSON output remains structured for automation.
-- `mdmind <file.md>` now classifies Markdown-like files before opening: valid
-  mdmind maps open as maps, ordinary Markdown opens as a read-only document, and
-  near-miss maps show recovery guidance.
-- `mdmind --as markdown <target>` and `mdmind --as map <target>` let users
-  force the new Markdown/document path or strict native-map parsing when the
-  automatic classification is not what they want.
-- `mdmind --preview <ordinary.md>` now renders ordinary Markdown for non-TTY
-  checks instead of treating every `.md` target as a native map preview.
-- `mdm view <ordinary.md>` now redirects to Markdown rendering, while native maps
-  still use the map tree view.
-- `mdm import <source.md> --from markdown` is safer around README-style docs:
-  link-only bullets get visible node labels, and fenced code blocks stay literal
-  detail text instead of being interpreted as real map structure.
-
-### Changed
-
-- Import filename collisions in the TUI now use a simpler prompt: type a new
-  name or press Enter to overwrite the default `<stem>-mind.md`.
+- `mdm changelog` now defaults to pretty terminal rendering; use
+  `mdm changelog --plain` for raw Markdown.
+- `mdmind <file.md>`, `mdmind --preview`, and `mdm view` now route ordinary
+  Markdown through the Markdown renderer while keeping native maps on the map
+  path.
 
 ### Fixed
 
-- Fixed validation errors from imported Markdown lists whose items were only
-  Markdown references.
-- Fixed fenced mdmind examples inside Markdown documents becoming real child
-  nodes during import.
+- Markdown import now handles link-only bullets and fenced code blocks without
+  producing invalid or misleading map structure.
 
 ## [0.8.0] - 2026-05-23
 
