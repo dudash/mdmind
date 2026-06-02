@@ -4,6 +4,7 @@ Design notes capture product thinking, implementation rationale, and historical
 context. They are not the user manual and they are not the active task backlog.
 
 - [COMMAND_PALETTE.md](COMMAND_PALETTE.md)
+- [AI_ASSISTED_MAP_UI_FLOWS.md](AI_ASSISTED_MAP_UI_FLOWS.md)
 - [TERMINAL_EXPERIENCE.md](TERMINAL_EXPERIENCE.md)
 - [FOCUSED_VIEWS.md](FOCUSED_VIEWS.md)
 - [SPATIAL_CANVAS.md](SPATIAL_CANVAS.md)

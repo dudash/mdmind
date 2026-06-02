@@ -1,11 +1,17 @@
 use std::cell::Cell;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, IsTerminal, Stdout, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+    mpsc::{self, Receiver, TryRecvError},
+};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crossterm::cursor::{Hide, Show};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -22,6 +28,15 @@ use ratatui::widgets::{
 use ratatui::{Frame, Terminal};
 
 use crate::APP_VERSION;
+use crate::ai::{
+    AiAdapterType, AiProfile, AiProfilesConfig, AiSuggestedChange, AiSuggestion,
+    AiSuggestionSource, AiSuggestionTarget, CODEX_LOCAL_QUICK_ADD_ID, NVIDIA_NIM_LOCAL_SECRET_ID,
+    NVIDIA_NIM_QUICK_ADD_ID, ai_profile_is_codex_local_bridge, ai_profiles_path,
+    conversational_only_contract, load_ai_profiles_from_path, local_ai_secret_ref,
+    map_assistant_system_prompt, quick_add_profile, reviewable_map_suggestion_contract,
+    save_ai_profiles_to_path, save_local_ai_secret, send_ai_chat_streaming_cancellable,
+    split_reviewable_map_suggestions_with_warning,
+};
 use crate::app::{
     AppError, ClassifiedTarget, OpenTargetMode, TargetRef, classify_open_target, ensure_parseable,
     load_document, near_miss_guidance, resolve_anchor_path,
@@ -179,6 +194,7 @@ struct StatusModel {
     focus_id: Option<String>,
     filter_summary: Option<String>,
     scope_label: String,
+    ai_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -241,6 +257,8 @@ enum PromptMode {
     Edit,
     EditDetail,
     AttachFile,
+    AiAskCurrentBranch,
+    NvidiaNimApiKey,
     SaveView,
     SaveCheckpoint,
     OpenId,
@@ -255,6 +273,8 @@ impl PromptMode {
             Self::Edit => "Edit Node",
             Self::EditDetail => "Edit Details",
             Self::AttachFile => "Attach File",
+            Self::AiAskCurrentBranch => "AI Chat",
+            Self::NvidiaNimApiKey => "NVIDIA NIM API Key",
             Self::SaveView => "Save Filter View",
             Self::SaveCheckpoint => "Save Checkpoint",
             Self::OpenId => "Jump To Id",
@@ -267,11 +287,21 @@ impl PromptMode {
             Self::SaveCheckpoint => "Name a local snapshot of the current map state.",
             Self::OpenId => "Type a node id, then press Enter.",
             Self::AttachFile => "Type a local path or URL. mdmind stores it as a Markdown link.",
+            Self::AiAskCurrentBranch => {
+                "Send a message about the selected branch. The response streams back into AI Chat."
+            }
+            Self::NvidiaNimApiKey => {
+                "Paste an API key from https://build.nvidia.com/settings/api-keys."
+            }
             Self::EditDetail => {
                 "Write longer notes for the selected node. Enter adds lines. Ctrl+S saves."
             }
             _ => "Use full node syntax: Label #tag @key:value [id:path/to/node] [[target]]",
         }
+    }
+
+    fn is_secret(self) -> bool {
+        matches!(self, Self::NvidiaNimApiKey)
     }
 }
 
@@ -482,6 +512,7 @@ enum HelpTopic {
     Changelog,
     Outliner,
     Agents,
+    Ai,
     Navigation,
     Editing,
     Details,
@@ -505,6 +536,7 @@ impl HelpTopic {
             Self::Changelog => "What's New",
             Self::Outliner => "Using mdmind As An Outliner",
             Self::Agents => "Using mdmind With Agents",
+            Self::Ai => "AI Assistance",
             Self::Navigation => "Navigation",
             Self::Editing => "Editing",
             Self::Details => "Node Details",
@@ -532,6 +564,7 @@ impl HelpTopic {
             Self::Agents => {
                 "Use mdmind with agent skills, TODO maps, and shared branch decomposition."
             }
+            Self::Ai => "Set up optional AI providers and chat about the selected branch.",
             Self::Navigation => "Move through the tree, jump quickly, and open major overlays.",
             Self::Editing => "Add, rename, delete, and reshape branches without leaving the map.",
             Self::Details => "Keep node titles short while storing longer notes under a branch.",
@@ -573,6 +606,9 @@ impl HelpTopic {
             Self::Agents => {
                 "User guide for asking agents to use skills, decompose work, and fill in map branches."
             }
+            Self::Ai => {
+                "Open the AI Panel for provider setup, chat, staged suggestions, on/off, and future hooks."
+            }
             Self::Navigation => "User guide plus movement keys and large-map wayfinding tips.",
             Self::Editing => "User guide plus editing keys, undo safety, and restructuring tips.",
             Self::Details => {
@@ -611,6 +647,9 @@ impl HelpTopic {
             }
             Self::Agents => {
                 "agent agents ai llm assistant codex claude chatgpt workflow prompt prompts handoff synthesis planning research structured output skills skill todo decomposition joint branch details append extend validation json export"
+            }
+            Self::Ai => {
+                "ai artificial intelligence assistant llm model openai compatible nvidia nim api key setup profile provider local secret ask current branch help here use ai generate summarize outline gaps risks questions"
             }
             Self::Navigation => {
                 "navigate movement arrows focus jump root open id palette hotkeys relations backlinks related cross links"
@@ -668,6 +707,9 @@ impl HelpTopic {
             }
             Self::Agents => {
                 "mdmind works well as an agent output format when the result needs to stay useful for a human later. The tree keeps structure obvious, inline syntax keeps the map queryable, and mdm gives you validation and inspection tools before you hand the file off."
+            }
+            Self::Ai => {
+                "AI inside mdmind is optional and invite-only. The global palette opens one AI Panel; that panel owns provider setup, chat, review, on/off, and future hooks."
             }
             Self::Navigation => {
                 "Navigation in mdmind is tree-first. Stay in the outline while exploring, then use the palette or id jumps when the map gets too large to scroll comfortably."
@@ -747,6 +789,16 @@ impl HelpTopic {
                 "For larger work, decompose the map first: one branch per workstream, owner, question, or artifact. Agents can then extend their branch with notes, decisions, risks, and next actions while the parent map stays readable.",
                 "Do not force every agent task into a map. Plain Markdown is still better for short prose answers, loose brainstorming, or temporary scratch notes that do not need long-term structure.",
                 "A good agent workflow is: generate the map, run mdm validate, inspect it with mdm view or mdm find, then open it in mdmind for human cleanup. If the output needs machine use later, mdm export --format json is the clean bridge.",
+            ],
+            Self::Ai => &[
+                "AI assistance is experimental and hidden unless mdmind is launched with --experimental-ai or --experimental=ai. When enabled, open the palette with : or Ctrl+P, then run AI: Open Panel.",
+                "The panel contains NIM setup, Codex Local selection, provider switching, chat, review, and on/off.",
+                "The active provider is shown in the header as an AI lamp, such as AI NIM or AI CODEX. If more than one provider is configured, use the AI Panel to choose which one is active.",
+                "Use the AI Panel's Turn AI off action to stop AI activity without deleting provider profiles, stored keys, or staged Review Suggestions. Choose a provider in the panel later to turn it back on.",
+                "After NVIDIA NIM or Codex Local is configured, open the AI Panel and press A to enter AI Chat. mdmind sends the selected branch, compact branch style notes, your message, recent chat context, and a short system instruction to the active provider in the background.",
+                "The first usable AI action is deliberately simple: it keeps conversational answers in AI Chat instead of writing them into the tree.",
+                "While a request is running, the header shows AI WORKING and the status line stays usable instead of freezing the TUI.",
+                "AI Chat is for the live conversation, cancelled runs, and past answers. Review Suggestions is the decision surface for staged map changes. Add-child rows can target the selected branch or an existing descendant. Background mode, dynamic edit extraction, and update/remove patch application are still future slices.",
             ],
             Self::Navigation => &[
                 "The current focus is the center of the interface. The outline, focus card, and visual map all follow it, so plain arrow movement is enough for a lot of work.",
@@ -884,6 +936,21 @@ impl HelpTopic {
                     "Copy example maps locally for prompt and format references",
                 ),
                 ("?", "Open this help topic again when teaching the workflow"),
+            ],
+            Self::Ai => &[
+                (": ai", "Open the AI Panel"),
+                ("A", "Open AI Chat"),
+                ("Enter", "Compose a chat message from AI Chat"),
+                ("Chat C", "Clear AI Chat and start a new conversation"),
+                (
+                    "Chat V",
+                    "Ask for staged edit suggestions from the selected answer",
+                ),
+                ("X", "Cancel the running AI response"),
+                ("S", "Review staged map-change suggestions"),
+                ("N", "Set up or update NVIDIA NIM"),
+                ("Panel C", "Select or record a local Codex provider profile"),
+                ("O", "Turn AI off without deleting provider setup"),
             ],
             Self::Navigation => &[
                 ("↑ / ↓", "Move through visible nodes"),
@@ -1120,6 +1187,13 @@ impl HelpTopic {
                 "Use mdm validate as the contract check before you trust a generated map.",
                 "If humans will keep editing the file, optimize for readable labels and stable ids, not maximal structure everywhere.",
             ],
+            Self::Ai => &[
+                "Use AI for branch-local questions first: gaps, risks, summaries, next steps, and cleanup ideas.",
+                "Use AI Chat for follow-up questions and running conversation. Conversational answers stay in chat for the session; only explicit requests for map edits can stage rows in Review Suggestions.",
+                "Add-child suggestions can be applied today under the selected branch or an existing descendant target. Update and remove suggestions are represented in the review model, but applying those operations is still a later patch path.",
+                "NVIDIA NIM and Codex Local are callable from the TUI in this slice. Codex Local runs codex exec in read-only, ephemeral mode.",
+                "Do not paste secrets into map nodes. Use AI Panel setup so the profile stores a secret reference instead.",
+            ],
             Self::Navigation => &[
                 "If the tree starts feeling noisy, change view mode before you keep scrolling.",
                 "Use recent locations in the palette when you are bouncing between two branches repeatedly.",
@@ -1201,6 +1275,7 @@ impl HelpTopic {
             Self::Agents => {
                 Some("Use mdmind-map-authoring. Create a TODO map and fill branch details.")
             }
+            Self::Ai => Some("AI: Open Panel -> A -> What gaps do you see?"),
             Self::Syntax => Some("API Design #backend @status:todo @owner:mira"),
             Self::TableView => Some("Model Row @provider:openai @aa_rank:01 @source:aa-lmarena"),
             Self::Ids => Some("API Design #backend [id:product/api-design]"),
@@ -1217,19 +1292,20 @@ impl HelpTopic {
             Self::Changelog => 2,
             Self::Outliner => 3,
             Self::Agents => 4,
-            Self::Navigation => 5,
-            Self::Editing => 6,
-            Self::Details => 7,
-            Self::Search => 8,
-            Self::Views => 9,
-            Self::Palette => 10,
-            Self::Safety => 11,
-            Self::Syntax => 12,
-            Self::Ids => 13,
-            Self::Relations => 14,
-            Self::Themes => 15,
-            Self::Mindmap => 16,
-            Self::TableView => 17,
+            Self::Ai => 5,
+            Self::Navigation => 6,
+            Self::Editing => 7,
+            Self::Details => 8,
+            Self::Search => 9,
+            Self::Views => 10,
+            Self::Palette => 11,
+            Self::Safety => 12,
+            Self::Syntax => 13,
+            Self::Ids => 14,
+            Self::Relations => 15,
+            Self::Themes => 16,
+            Self::Mindmap => 17,
+            Self::TableView => 18,
         }
     }
 
@@ -1238,6 +1314,7 @@ impl HelpTopic {
             Self::StartHere | Self::TuiTour | Self::Changelog | Self::Outliner | Self::Agents => {
                 "Basics"
             }
+            Self::Ai => "AI",
             Self::Navigation
             | Self::Editing
             | Self::Details
@@ -1300,6 +1377,7 @@ enum PaletteAction {
     ClearFilter,
     CycleViewMode,
     CheckForUpdates,
+    OpenAiPanel,
     ShowHelp,
 }
 
@@ -2062,6 +2140,12 @@ fn spatial_overview_zoom(scene: &MindmapScene, viewport_width: u16, viewport_hei
     80
 }
 
+fn load_ai_profiles_for_tui() -> AiProfilesConfig {
+    ai_profiles_path()
+        .and_then(|path| load_ai_profiles_from_path(&path))
+        .unwrap_or_default()
+}
+
 impl PromptState {
     fn new(mode: PromptMode, value: String) -> Self {
         let cursor = value.len();
@@ -2225,6 +2309,275 @@ struct PathAnchor {
     id: Option<String>,
 }
 
+struct AiRequestJob {
+    profile_label: String,
+    anchor_label: String,
+    question_preview: String,
+    started_at: Instant,
+    suggestion_index: Option<usize>,
+    cancelled: Arc<AtomicBool>,
+    receiver: Receiver<AiRequestResult>,
+}
+
+impl std::fmt::Debug for AiRequestJob {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AiRequestJob")
+            .field("profile_label", &self.profile_label)
+            .field("anchor_label", &self.anchor_label)
+            .field("question_preview", &self.question_preview)
+            .field("suggestion_index", &self.suggestion_index)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug)]
+enum AiRequestResult {
+    Delta {
+        content: String,
+    },
+    Success {
+        anchor: PathAnchor,
+        anchor_label: String,
+        profile_label: String,
+        question: String,
+        answer: String,
+    },
+    Error {
+        profile_label: String,
+        message: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct AiReviewState {
+    mode: AiReviewMode,
+    item_index: usize,
+    selected: usize,
+    checked: HashSet<usize>,
+    scroll: u16,
+    follow_latest: bool,
+}
+
+impl AiReviewState {
+    fn empty(mode: AiReviewMode) -> Self {
+        Self {
+            mode,
+            item_index: 0,
+            selected: 0,
+            checked: HashSet::new(),
+            scroll: 0,
+            follow_latest: mode == AiReviewMode::History,
+        }
+    }
+
+    fn new(mode: AiReviewMode, suggestion: &AiSuggestion, editable: bool) -> Self {
+        Self {
+            mode,
+            item_index: 0,
+            selected: 0,
+            checked: Self::default_checked(suggestion, editable),
+            scroll: 0,
+            follow_latest: mode == AiReviewMode::History,
+        }
+    }
+
+    fn default_checked(suggestion: &AiSuggestion, editable: bool) -> HashSet<usize> {
+        if !editable {
+            return HashSet::new();
+        }
+        suggestion
+            .changes
+            .iter()
+            .enumerate()
+            .filter_map(|(index, change)| ai_change_apply_supported(change).then_some(index))
+            .collect()
+    }
+
+    fn reset_for(&mut self, suggestion: &AiSuggestion, editable: bool) {
+        self.selected = 0;
+        self.scroll = 0;
+        self.follow_latest = self.mode == AiReviewMode::History;
+        self.checked = Self::default_checked(suggestion, editable);
+    }
+
+    fn clamp_to(&mut self, item_count: usize, suggestion: Option<&AiSuggestion>, editable: bool) {
+        if item_count == 0 {
+            self.item_index = 0;
+        } else {
+            self.item_index = self.item_index.min(item_count - 1);
+        }
+        let len = suggestion.map_or(0, |suggestion| suggestion.changes.len());
+        if len == 0 {
+            self.selected = 0;
+        } else {
+            self.selected = self.selected.min(len - 1);
+        }
+        if editable {
+            self.checked.retain(|index| *index < len);
+        } else {
+            self.checked.clear();
+        }
+    }
+
+    fn toggle_selected(&mut self, suggestion: &AiSuggestion, editable: bool) {
+        if !editable {
+            return;
+        }
+        if self.selected >= suggestion.changes.len() {
+            return;
+        }
+        if !ai_change_apply_supported(&suggestion.changes[self.selected]) {
+            return;
+        }
+        if !self.checked.remove(&self.selected) {
+            self.checked.insert(self.selected);
+        }
+    }
+
+    fn scroll_up(&mut self, lines: u16) {
+        self.scroll = self.scroll.saturating_sub(lines);
+    }
+
+    fn scroll_down(&mut self, lines: u16) {
+        self.scroll = self.scroll.saturating_add(lines);
+    }
+
+    fn keep_selected_visible(&mut self) {
+        let target_line = self.selected.saturating_mul(3) as u16;
+        if target_line < self.scroll {
+            self.scroll = target_line;
+        } else if target_line > self.scroll.saturating_add(8) {
+            self.scroll = target_line.saturating_sub(8);
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct AiChatClearSummary {
+    cleared_turns: usize,
+    cancelled_response: bool,
+    kept_review_suggestions: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AiReviewMode {
+    Suggestions,
+    History,
+}
+
+impl AiReviewMode {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Suggestions => "Review Suggestions",
+            Self::History => "AI Chat",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AiHistoryDisposition {
+    Applied,
+    Dismissed,
+    Cancelled,
+    Cleared,
+}
+
+impl AiHistoryDisposition {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Applied => "applied",
+            Self::Dismissed => "dismissed",
+            Self::Cancelled => "cancelled",
+            Self::Cleared => "cleared",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AiHistoryEntry {
+    suggestion: AiSuggestion,
+    disposition: AiHistoryDisposition,
+}
+
+#[derive(Debug, Clone)]
+struct AiPanelState {
+    selected: usize,
+}
+
+impl AiPanelState {
+    fn new() -> Self {
+        Self { selected: 0 }
+    }
+
+    fn clamp(&mut self, len: usize) {
+        if len == 0 {
+            self.selected = 0;
+        } else {
+            self.selected = self.selected.min(len - 1);
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AiPanelAction {
+    Ask,
+    CancelCurrentAsk,
+    ReviewSuggestions,
+    TurnOff,
+    SetupNvidiaNim,
+    UseNvidiaNim,
+    UseCodexLocal,
+    AutomationHooks,
+}
+
+#[derive(Debug, Clone)]
+struct AiPanelItem {
+    section: &'static str,
+    action: AiPanelAction,
+    title: String,
+    subtitle: String,
+    enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AiReviewItemRef<'a> {
+    Active {
+        index: usize,
+        suggestion: &'a AiSuggestion,
+    },
+    History {
+        entry: &'a AiHistoryEntry,
+    },
+}
+
+impl<'a> AiReviewItemRef<'a> {
+    fn suggestion(self) -> &'a AiSuggestion {
+        match self {
+            Self::Active { suggestion, .. } => suggestion,
+            Self::History { entry } => &entry.suggestion,
+        }
+    }
+
+    fn active_index(self) -> Option<usize> {
+        match self {
+            Self::Active { index, .. } => Some(index),
+            Self::History { .. } => None,
+        }
+    }
+
+    fn editable(self) -> bool {
+        self.active_index().is_some()
+    }
+
+    fn disposition(self) -> Option<AiHistoryDisposition> {
+        match self {
+            Self::Active { .. } => None,
+            Self::History { entry } => Some(entry.disposition),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct WorkspaceSnapshot {
     editor: EditorState,
@@ -2238,6 +2591,53 @@ struct WorkspaceSnapshot {
 struct HistoryEntry {
     label: String,
     snapshot: WorkspaceSnapshot,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TuiExperiment {
+    Ai,
+}
+
+impl TuiExperiment {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Ai => "AI",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TuiFeatureFlags {
+    experiments: BTreeSet<TuiExperiment>,
+}
+
+impl TuiFeatureFlags {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_experiment(mut self, experiment: TuiExperiment) -> Self {
+        self.enable(experiment);
+        self
+    }
+
+    pub fn enable(&mut self, experiment: TuiExperiment) {
+        self.experiments.insert(experiment);
+    }
+
+    fn is_enabled(&self, experiment: TuiExperiment) -> bool {
+        self.experiments.contains(&experiment)
+    }
+
+    fn experimental_label(&self) -> Option<String> {
+        (!self.experiments.is_empty()).then(|| {
+            self.experiments
+                .iter()
+                .map(|experiment| experiment.label())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2279,8 +2679,15 @@ struct TuiApp {
     autosave: bool,
     motion_cue: Option<MotionCue>,
     ui_settings: UiSettings,
+    ai_profiles: AiProfilesConfig,
+    ai_job: Option<AiRequestJob>,
+    ai_suggestions: Vec<AiSuggestion>,
+    ai_history: Vec<AiHistoryEntry>,
+    ai_panel: Option<AiPanelState>,
+    ai_review: Option<AiReviewState>,
     undo_history: Vec<HistoryEntry>,
     redo_history: Vec<HistoryEntry>,
+    feature_flags: TuiFeatureFlags,
 }
 
 impl TuiApp {
@@ -2312,6 +2719,28 @@ impl TuiApp {
         autosave: bool,
         saved_views: SavedViewsState,
         ui_settings: UiSettings,
+    ) -> Self {
+        Self::new_with_settings_and_features(
+            map_path,
+            document,
+            focus_path,
+            warning,
+            autosave,
+            saved_views,
+            ui_settings,
+            TuiFeatureFlags::default(),
+        )
+    }
+
+    fn new_with_settings_and_features(
+        map_path: PathBuf,
+        document: Document,
+        focus_path: Vec<usize>,
+        warning: Option<String>,
+        autosave: bool,
+        saved_views: SavedViewsState,
+        ui_settings: UiSettings,
+        feature_flags: TuiFeatureFlags,
     ) -> Self {
         let mut expanded = initial_expanded_paths(&document);
         for ancestor in ancestor_paths(&focus_path) {
@@ -2361,11 +2790,81 @@ impl TuiApp {
             autosave: autosave || ui_settings.autosave,
             motion_cue: None,
             ui_settings,
+            ai_profiles: load_ai_profiles_for_tui(),
+            ai_job: None,
+            ai_suggestions: Vec::new(),
+            ai_history: Vec::new(),
+            ai_panel: None,
+            ai_review: None,
             undo_history: Vec::new(),
             redo_history: Vec::new(),
+            feature_flags,
         };
         app.remember_current_location();
         app
+    }
+
+    fn experimental_ai_enabled(&self) -> bool {
+        self.feature_flags.is_enabled(TuiExperiment::Ai)
+    }
+
+    fn active_ask_ai_profile(&self) -> Option<&AiProfile> {
+        if !self.ai_profiles.enabled {
+            return None;
+        }
+        self.ai_profiles
+            .default_profile()
+            .filter(|profile| ai_profile_supports_tui_ask(profile))
+            .or_else(|| {
+                self.ai_profiles
+                    .profiles
+                    .iter()
+                    .find(|profile| ai_profile_supports_tui_ask(profile))
+            })
+    }
+
+    fn pending_ai_profile(&self) -> Option<&AiProfile> {
+        if !self.ai_profiles.enabled {
+            return None;
+        }
+        self.ai_profiles
+            .default_profile()
+            .filter(|profile| profile.enabled && !ai_profile_supports_tui_ask(profile))
+    }
+
+    fn ai_suggestion_source_for(
+        &self,
+        profile: &AiProfile,
+        reason: Option<String>,
+        token_estimate: Option<usize>,
+    ) -> AiSuggestionSource {
+        AiSuggestionSource {
+            chat_turn: Some(self.ai_review_item_count_for(AiReviewMode::History) + 1),
+            model: profile.model.clone().or_else(|| {
+                ai_profile_is_codex_local_bridge(profile).then(|| "Codex CLI default".to_string())
+            }),
+            token_estimate,
+            reason,
+        }
+    }
+
+    fn ai_suggestion_source_for_label(
+        &self,
+        profile_label: &str,
+        reason: Option<String>,
+        token_estimate: Option<usize>,
+    ) -> AiSuggestionSource {
+        AiSuggestionSource {
+            chat_turn: Some(self.ai_review_item_count_for(AiReviewMode::History) + 1),
+            model: self
+                .ai_profiles
+                .profiles
+                .iter()
+                .find(|profile| profile.label == profile_label)
+                .and_then(|profile| profile.model.clone()),
+            token_estimate,
+            reason,
+        }
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
@@ -2389,6 +2888,18 @@ impl TuiApp {
             self.quit_armed = false;
             self.delete_armed = false;
             return self.handle_help_key(key);
+        }
+
+        if self.ai_review.is_some() {
+            self.quit_armed = false;
+            self.delete_armed = false;
+            return self.handle_ai_review_key(key);
+        }
+
+        if self.ai_panel.is_some() {
+            self.quit_armed = false;
+            self.delete_armed = false;
+            return self.handle_ai_panel_key(key);
         }
 
         if self.relation_picker.is_some() {
@@ -3932,6 +4443,14 @@ impl TuiApp {
                 )
             }
             PromptMode::EditDetail => unreachable!("handled above"),
+            PromptMode::AiAskCurrentBranch => {
+                self.ask_ai_about_current_branch(value)?;
+                Ok(())
+            }
+            PromptMode::NvidiaNimApiKey => {
+                self.save_nvidia_nim_api_key(value)?;
+                Ok(())
+            }
             PromptMode::SaveView => {
                 self.save_current_search_as(value)?;
                 Ok(())
@@ -4073,6 +4592,122 @@ impl TuiApp {
             return Some(path);
         }
         get_node(&self.editor.document().nodes, &anchor.path).map(|_| anchor.path.clone())
+    }
+
+    fn resolve_ai_suggestion_target_path(&self, target: &AiSuggestionTarget) -> Option<Vec<usize>> {
+        if let Some(id) = target
+            .id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            && let Some(path) = find_path_by_id(&self.editor.document().nodes, id)
+        {
+            return Some(path);
+        }
+        if !target.path.is_empty()
+            && get_node(&self.editor.document().nodes, &target.path).is_some()
+        {
+            return Some(target.path.clone());
+        }
+        let label = target.label.trim();
+        if label.is_empty() {
+            return None;
+        }
+        crate::app::resolve_anchor_path(self.editor.document(), label).ok()
+    }
+
+    fn ai_suggestion_target_label(&self, target: &AiSuggestionTarget, path: &[usize]) -> String {
+        let label = target.label.trim();
+        if !label.is_empty() {
+            return label.to_string();
+        }
+        get_node(&self.editor.document().nodes, path)
+            .map(node_display_label)
+            .unwrap_or_else(|| breadcrumb_for_path(self.editor.document(), path))
+    }
+
+    fn resolve_ai_target_label_within(
+        &self,
+        source_path: &[usize],
+        label: &str,
+    ) -> Option<Vec<usize>> {
+        let label = label.trim();
+        if label.is_empty() {
+            return None;
+        }
+        let source_node = get_node(&self.editor.document().nodes, source_path)?;
+        if normalize_ai_target_label(&source_node.text) == normalize_ai_target_label(label) {
+            return Some(source_path.to_vec());
+        }
+
+        let subtree = Document {
+            nodes: source_node.children.clone(),
+        };
+        if let Ok(mut relative_path) = crate::app::resolve_anchor_path(&subtree, label) {
+            let mut path = source_path.to_vec();
+            path.append(&mut relative_path);
+            return Some(path);
+        }
+
+        if label.contains('/') {
+            return None;
+        }
+        let normalized = normalize_ai_target_label(label);
+        if normalized.is_empty() {
+            return None;
+        }
+        let mut matches = Vec::new();
+        collect_ai_label_matches_anywhere(
+            &source_node.children,
+            &normalized,
+            source_path.to_vec(),
+            &mut matches,
+        );
+        match matches.len() {
+            1 => matches.pop(),
+            _ => None,
+        }
+    }
+
+    fn resolve_ai_suggestion_change_target(
+        &self,
+        suggestion: &AiSuggestion,
+        target: Option<&AiSuggestionTarget>,
+    ) -> Result<(Vec<usize>, String), String> {
+        let Some(source_path) = self.resolve_ai_suggestion_target_path(&suggestion.target) else {
+            return Err(format!(
+                "AI suggestion still exists, but '{}' is no longer in the map.",
+                suggestion.target.label
+            ));
+        };
+        let Some(target) = target else {
+            let label = self.ai_suggestion_target_label(&suggestion.target, &source_path);
+            return Ok((source_path, label));
+        };
+        let has_structured_locator =
+            target.id.as_deref().is_some_and(|id| !id.trim().is_empty()) || !target.path.is_empty();
+        let target_path = if has_structured_locator {
+            self.resolve_ai_suggestion_target_path(target)
+                .or_else(|| self.resolve_ai_target_label_within(&source_path, &target.label))
+        } else {
+            self.resolve_ai_target_label_within(&source_path, &target.label)
+                .or_else(|| self.resolve_ai_suggestion_target_path(target))
+        };
+        let Some(target_path) = target_path else {
+            return Err(format!(
+                "AI suggestion target '{}' is no longer in the map.",
+                target.label
+            ));
+        };
+        if !target_path.starts_with(source_path.as_slice()) {
+            let target_label = self.ai_suggestion_target_label(target, &target_path);
+            let source_label = self.ai_suggestion_target_label(&suggestion.target, &source_path);
+            return Err(format!(
+                "AI suggestion target '{target_label}' is outside the selected branch '{source_label}'."
+            ));
+        }
+        let label = self.ai_suggestion_target_label(target, &target_path);
+        Ok((target_path, label))
     }
 
     fn remember_current_location(&mut self) {
@@ -4655,6 +5290,1553 @@ impl TuiApp {
         Ok(())
     }
 
+    fn open_nvidia_nim_api_key_prompt(&mut self) {
+        self.begin_prompt(PromptMode::NvidiaNimApiKey, String::new());
+        self.set_status(
+            StatusTone::Info,
+            "Paste a NVIDIA NIM API key from https://build.nvidia.com/settings/api-keys.",
+        );
+    }
+
+    fn save_nvidia_nim_api_key(&mut self, api_key: &str) -> Result<(), AppError> {
+        let secret_ref = local_ai_secret_ref(NVIDIA_NIM_LOCAL_SECRET_ID);
+        save_local_ai_secret(NVIDIA_NIM_LOCAL_SECRET_ID, api_key)?;
+
+        let config_path = ai_profiles_path()?;
+        let mut profiles = load_ai_profiles_from_path(&config_path)?;
+        let provider_changed = profiles.default_profile.as_deref() != Some(NVIDIA_NIM_QUICK_ADD_ID);
+        let profile = quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some(secret_ref.clone()))?;
+        profiles.upsert_profile(profile, true);
+        save_ai_profiles_to_path(&config_path, &profiles)?;
+        self.ai_profiles = profiles;
+
+        let clear_summary = provider_changed.then(|| self.clear_ai_chat_session_state(true));
+        let mut message = format!(
+            "NVIDIA NIM ready. Press A in the AI Panel to open AI Chat. Key stored as {secret_ref}."
+        );
+        if let Some(summary) = clear_summary {
+            append_ai_provider_switch_clear_summary(&mut message, summary);
+        }
+        self.set_status(StatusTone::Success, message);
+        Ok(())
+    }
+
+    fn set_active_ai_profile(&mut self, profile_id: &str) -> Result<(), AppError> {
+        let config_path = ai_profiles_path()?;
+        self.set_active_ai_profile_at_path(profile_id, &config_path)
+    }
+
+    fn set_active_ai_profile_at_path(
+        &mut self,
+        profile_id: &str,
+        config_path: &Path,
+    ) -> Result<(), AppError> {
+        let mut profiles = load_ai_profiles_from_path(&config_path)?;
+        let previous_profile_id = profiles.default_profile.clone();
+        if profiles.profile(profile_id).is_none() && profile_id == CODEX_LOCAL_QUICK_ADD_ID {
+            profiles.upsert_profile(quick_add_profile(CODEX_LOCAL_QUICK_ADD_ID, None)?, false);
+        }
+
+        let profile = profiles
+            .profile(profile_id)
+            .cloned()
+            .ok_or_else(|| AppError::new(format!("No AI profile matches '{profile_id}'.")))?;
+        if !profile.enabled {
+            return Err(AppError::new(format!(
+                "AI profile '{}' is disabled.",
+                profile.label
+            )));
+        }
+
+        if !ai_profile_supports_tui_ask(&profile) {
+            profiles.enabled = true;
+            if profiles.default_profile.as_deref() == Some(profile_id) {
+                profiles.default_profile = profiles
+                    .profiles
+                    .iter()
+                    .find(|profile| ai_profile_supports_tui_ask(profile))
+                    .map(|profile| profile.id.clone());
+            }
+            save_ai_profiles_to_path(config_path, &profiles)?;
+            self.ai_profiles = profiles;
+            let suffix = self
+                .active_ask_ai_profile()
+                .map(|profile| format!(" AI Chat will keep using {}.", profile.label))
+                .unwrap_or_else(|| " Add NVIDIA NIM or Codex Local for AI Chat.".to_string());
+            self.set_status(
+                StatusTone::Success,
+                format!(
+                    "{} is configured, but it does not power AI Chat yet.{suffix}",
+                    profile.label
+                ),
+            );
+            return Ok(());
+        }
+
+        let provider_changed = previous_profile_id.as_deref() != Some(profile_id);
+        profiles.set_default_profile(profile_id)?;
+        save_ai_profiles_to_path(config_path, &profiles)?;
+        self.ai_profiles = profiles;
+        let clear_summary = provider_changed.then(|| self.clear_ai_chat_session_state(true));
+
+        let profile = self
+            .ai_profiles
+            .default_profile()
+            .expect("profile was just set as default");
+        let mut message = format!("AI provider: {}.", profile.label);
+        if ai_profile_is_codex_local_bridge(profile) {
+            message.push_str(" AI Chat will use read-only codex exec.");
+        } else {
+            message.push_str(" AI Chat will use this provider.");
+        }
+        if let Some(summary) = clear_summary {
+            append_ai_provider_switch_clear_summary(&mut message, summary);
+        }
+        self.set_status(StatusTone::Success, message);
+        Ok(())
+    }
+
+    fn ai_review_item_count_for(&self, mode: AiReviewMode) -> usize {
+        self.ai_review_items(mode).len()
+    }
+
+    fn ai_review_item_for(
+        &self,
+        mode: AiReviewMode,
+        item_index: usize,
+    ) -> Option<AiReviewItemRef<'_>> {
+        self.ai_review_items(mode).get(item_index).copied()
+    }
+
+    fn ai_review_items(&self, mode: AiReviewMode) -> Vec<AiReviewItemRef<'_>> {
+        match mode {
+            AiReviewMode::Suggestions => self
+                .ai_suggestions
+                .iter()
+                .enumerate()
+                .filter(|(_, suggestion)| !suggestion.changes.is_empty())
+                .map(|(index, suggestion)| AiReviewItemRef::Active { index, suggestion })
+                .collect(),
+            AiReviewMode::History => self
+                .ai_history
+                .iter()
+                .map(|entry| AiReviewItemRef::History { entry })
+                .chain(
+                    self.ai_suggestions
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, suggestion)| suggestion.changes.is_empty())
+                        .map(|(index, suggestion)| AiReviewItemRef::Active { index, suggestion }),
+                )
+                .collect(),
+        }
+    }
+
+    fn ai_active_answer_count(&self) -> usize {
+        self.ai_suggestions
+            .iter()
+            .filter(|suggestion| suggestion.changes.is_empty())
+            .count()
+    }
+
+    fn ai_active_suggestion_count(&self) -> usize {
+        self.ai_suggestions
+            .iter()
+            .filter(|suggestion| !suggestion.changes.is_empty())
+            .count()
+    }
+
+    fn refresh_ai_review_state(&self, review: &mut AiReviewState) {
+        let item_count = self.ai_review_item_count_for(review.mode);
+        let item = self.ai_review_item_for(review.mode, review.item_index);
+        review.clamp_to(
+            item_count,
+            item.map(|item| item.suggestion()),
+            item.is_some_and(|item| item.editable()),
+        );
+    }
+
+    fn ai_streaming_suggestion_index(&self) -> Option<usize> {
+        self.ai_job.as_ref().and_then(|job| job.suggestion_index)
+    }
+
+    fn ai_review_item_is_streaming(&self, item: AiReviewItemRef<'_>) -> bool {
+        item.active_index()
+            .is_some_and(|index| Some(index) == self.ai_streaming_suggestion_index())
+    }
+
+    fn archive_ai_suggestion(
+        &mut self,
+        suggestion: AiSuggestion,
+        disposition: AiHistoryDisposition,
+    ) {
+        self.ai_history.push(AiHistoryEntry {
+            suggestion,
+            disposition,
+        });
+    }
+
+    fn archive_active_ai_answers(&mut self, disposition: AiHistoryDisposition) -> usize {
+        let mut archived = 0;
+        let mut index = 0;
+        while index < self.ai_suggestions.len() {
+            if self.ai_suggestions[index].changes.is_empty() {
+                let suggestion = self.ai_suggestions.remove(index);
+                self.archive_ai_suggestion(suggestion, disposition);
+                archived += 1;
+            } else {
+                index += 1;
+            }
+        }
+        archived
+    }
+
+    fn cancel_ai_job(&mut self, disposition: AiHistoryDisposition) -> Option<(String, bool)> {
+        let job = self.ai_job.take()?;
+        job.cancelled.store(true, Ordering::Relaxed);
+        let summary = ai_job_summary(&job);
+        let mut archived = false;
+        if let Some(index) = job.suggestion_index
+            && index < self.ai_suggestions.len()
+        {
+            let mut suggestion = self.ai_suggestions.remove(index);
+            if let Some(answer) = suggestion.answer.as_mut() {
+                if answer.trim().is_empty() {
+                    match disposition {
+                        AiHistoryDisposition::Cancelled => {
+                            *answer = "Request cancelled before response text arrived.".to_string()
+                        }
+                        AiHistoryDisposition::Cleared => {
+                            *answer = "Request cleared before response text arrived.".to_string()
+                        }
+                        _ => {}
+                    }
+                } else if disposition == AiHistoryDisposition::Cancelled {
+                    answer.push_str("\n\n[Request cancelled.]");
+                } else if disposition == AiHistoryDisposition::Cleared {
+                    answer.push_str("\n\n[Request cleared.]");
+                }
+            }
+            self.archive_ai_suggestion(suggestion, disposition);
+            archived = true;
+        }
+        Some((summary, archived))
+    }
+
+    fn cancel_current_ai_ask(&mut self) {
+        if let Some((summary, archived)) = self.cancel_ai_job(AiHistoryDisposition::Cancelled) {
+            if let Some(mut review) = self.ai_review.take() {
+                if let Some(item) = self.ai_review_item_for(review.mode, review.item_index) {
+                    review.reset_for(item.suggestion(), item.editable());
+                    self.ai_review = Some(review);
+                } else if let Some(item) = self.ai_review_item_for(review.mode, 0) {
+                    review.item_index = 0;
+                    review.reset_for(item.suggestion(), item.editable());
+                    self.ai_review = Some(review);
+                }
+            }
+            let suffix = if archived {
+                " Partial output stayed in AI Chat."
+            } else {
+                ""
+            };
+            self.set_status(
+                StatusTone::Success,
+                format!("Cancelled AI response: {summary}.{suffix}"),
+            );
+        } else {
+            self.set_status(StatusTone::Info, "No AI response is running.");
+        }
+    }
+
+    fn turn_ai_off(&mut self) -> Result<(), AppError> {
+        let config_path = ai_profiles_path()?;
+        self.turn_ai_off_at_path(&config_path)
+    }
+
+    fn turn_ai_off_at_path(&mut self, config_path: &Path) -> Result<(), AppError> {
+        let mut profiles = load_ai_profiles_from_path(&config_path)?;
+        profiles.turn_off();
+        save_ai_profiles_to_path(config_path, &profiles)?;
+        self.ai_profiles = profiles;
+        let cancelled = self.cancel_ai_job(AiHistoryDisposition::Cancelled);
+        let archived_answers = self.archive_active_ai_answers(AiHistoryDisposition::Cleared);
+        let kept_review_suggestions = self.ai_active_suggestion_count();
+        self.ai_review = None;
+        let mut message = if cancelled.is_some() {
+            "AI turned off and the active response was cancelled.".to_string()
+        } else {
+            "AI turned off.".to_string()
+        };
+        message.push_str(" Provider profiles and stored keys were kept.");
+        if archived_answers > 0 || cancelled.is_some() {
+            message.push_str(" AI Chat history was kept for this TUI session.");
+        }
+        if kept_review_suggestions > 0 {
+            message.push_str(&format!(
+                " Kept {kept_review_suggestions} staged Review Suggestions item(s)."
+            ));
+        }
+        self.set_status(StatusTone::Success, message);
+        Ok(())
+    }
+
+    fn clear_ai_chat_session_state(&mut self, keep_current_overlay: bool) -> AiChatClearSummary {
+        let cancelled = self.cancel_ai_job(AiHistoryDisposition::Cleared);
+        let cleared_history = self.ai_history.len();
+        self.ai_history.clear();
+        let cleared_active_answers = self.ai_active_answer_count();
+        self.ai_suggestions
+            .retain(|suggestion| !suggestion.changes.is_empty());
+        if keep_current_overlay {
+            if let Some(review) = self.ai_review.as_mut()
+                && review.mode == AiReviewMode::History
+            {
+                *review = AiReviewState::empty(AiReviewMode::History);
+            }
+        } else {
+            self.ai_review = Some(AiReviewState::empty(AiReviewMode::History));
+        }
+        AiChatClearSummary {
+            cleared_turns: cleared_history + cleared_active_answers,
+            cancelled_response: cancelled.is_some(),
+            kept_review_suggestions: self.ai_active_suggestion_count() > 0,
+        }
+    }
+
+    fn clear_ai_chat_session(&mut self) {
+        let summary = self.clear_ai_chat_session_state(false);
+        let mut message = if summary.cleared_turns == 0 {
+            "Started a fresh AI Chat conversation. No prior chat turns were open.".to_string()
+        } else {
+            format!(
+                "Started a fresh AI Chat conversation. Cleared {} chat turn(s).",
+                summary.cleared_turns
+            )
+        };
+        if summary.cancelled_response {
+            message.push_str(" Running response cancelled.");
+        }
+        if summary.kept_review_suggestions {
+            message.push_str(" Staged Review Suggestions were kept.");
+        }
+        self.set_status(StatusTone::Success, message);
+    }
+
+    fn open_ai_panel(&mut self) {
+        if !self.experimental_ai_enabled() {
+            self.set_status(
+                StatusTone::Warning,
+                "AI is experimental. Relaunch mdmind with --experimental-ai to enable the AI Panel.",
+            );
+            return;
+        }
+        self.ai_panel = Some(AiPanelState::new());
+        self.set_status(
+            StatusTone::Info,
+            "AI Panel open. Use A for Chat, X to cancel a response, S to review staged suggestions.",
+        );
+    }
+
+    fn ai_panel_items(&self) -> Vec<AiPanelItem> {
+        let active_provider = self.active_ask_ai_profile();
+        let active_provider_id = active_provider.map(|profile| profile.id.as_str());
+        let nvidia_configured = self.ai_profiles.profile(NVIDIA_NIM_QUICK_ADD_ID).is_some();
+        let nvidia_active = active_provider_id == Some(NVIDIA_NIM_QUICK_ADD_ID);
+        let codex_active = active_provider_id == Some(CODEX_LOCAL_QUICK_ADD_ID);
+        let ai_on = self.ai_profiles.enabled;
+        let active_answers = self.ai_active_answer_count();
+        let staged_suggestions = self.ai_active_suggestion_count();
+        let history_count = self.ai_history.len();
+        let running_job = self.ai_job.as_ref();
+
+        vec![
+            AiPanelItem {
+                section: "Chat",
+                action: AiPanelAction::Ask,
+                title: "Open AI Chat".to_string(),
+                subtitle: if let Some(job) = running_job {
+                    format!("Response streaming: {}", ai_job_summary(job))
+                } else {
+                    active_provider
+                        .map(|profile| {
+                            format!("Chat with {} using the focused branch", profile.label)
+                        })
+                        .unwrap_or_else(|| {
+                            if ai_on {
+                                "Needs NVIDIA NIM or Codex Local first".to_string()
+                            } else {
+                                "AI is off; choose a provider to turn it back on".to_string()
+                            }
+                        })
+                },
+                enabled: (ai_on && active_provider.is_some())
+                    || active_answers > 0
+                    || history_count > 0
+                    || running_job.is_some(),
+            },
+            AiPanelItem {
+                section: "Chat",
+                action: AiPanelAction::CancelCurrentAsk,
+                title: "Cancel response".to_string(),
+                subtitle: running_job
+                    .map(|job| format!("Stop {}", ai_job_summary(job)))
+                    .unwrap_or_else(|| "No AI response is running".to_string()),
+                enabled: running_job.is_some(),
+            },
+            AiPanelItem {
+                section: "Suggestions",
+                action: AiPanelAction::ReviewSuggestions,
+                title: "Review suggestions".to_string(),
+                subtitle: if staged_suggestions == 0 {
+                    "No staged map changes to review".to_string()
+                } else {
+                    format!("{staged_suggestions} staged map-change item(s)")
+                },
+                enabled: staged_suggestions > 0,
+            },
+            AiPanelItem {
+                section: "Providers",
+                action: AiPanelAction::SetupNvidiaNim,
+                title: if nvidia_configured {
+                    "Update NVIDIA NIM key".to_string()
+                } else {
+                    "Set up NVIDIA NIM".to_string()
+                },
+                subtitle: "Paste a key from build.nvidia.com/settings/api-keys".to_string(),
+                enabled: true,
+            },
+            AiPanelItem {
+                section: "Providers",
+                action: AiPanelAction::UseNvidiaNim,
+                title: if nvidia_active {
+                    "Active: NVIDIA NIM".to_string()
+                } else {
+                    "Use NVIDIA NIM".to_string()
+                },
+                subtitle: if nvidia_active {
+                    "AI Chat is using NVIDIA NIM".to_string()
+                } else if nvidia_configured {
+                    "Make NIM the active AI provider".to_string()
+                } else {
+                    "Set up NIM first".to_string()
+                },
+                enabled: nvidia_configured,
+            },
+            AiPanelItem {
+                section: "Providers",
+                action: AiPanelAction::UseCodexLocal,
+                title: if codex_active {
+                    "Active: Codex Local".to_string()
+                } else {
+                    "Use Codex Local".to_string()
+                },
+                subtitle: if codex_active {
+                    "AI Chat is using read-only local codex exec".to_string()
+                } else {
+                    "Use read-only local codex exec for AI Chat".to_string()
+                },
+                enabled: true,
+            },
+            AiPanelItem {
+                section: "Automation",
+                action: AiPanelAction::AutomationHooks,
+                title: "Automation hooks".to_string(),
+                subtitle: "Configure event-triggered AI checks; planned next slice".to_string(),
+                enabled: false,
+            },
+            AiPanelItem {
+                section: "Settings",
+                action: AiPanelAction::TurnOff,
+                title: "Turn AI off".to_string(),
+                subtitle: "Stop AI activity and hide AI status; keep profiles and keys".to_string(),
+                enabled: ai_on || self.ai_job.is_some() || !self.ai_suggestions.is_empty(),
+            },
+        ]
+    }
+
+    fn handle_ai_panel_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
+        let Some(mut panel) = self.ai_panel.take() else {
+            return Ok(true);
+        };
+        let items = self.ai_panel_items();
+        panel.clamp(items.len());
+
+        let action = match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                self.set_status(StatusTone::Info, "Closed AI Panel.");
+                return Ok(true);
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                panel.selected = panel.selected.saturating_sub(1);
+                None
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if !items.is_empty() {
+                    panel.selected = (panel.selected + 1).min(items.len() - 1);
+                }
+                None
+            }
+            KeyCode::Enter => items.get(panel.selected).map(|item| item.action),
+            KeyCode::Char('a') | KeyCode::Char('A') => Some(AiPanelAction::Ask),
+            KeyCode::Char('x') | KeyCode::Char('X') => Some(AiPanelAction::CancelCurrentAsk),
+            KeyCode::Char('h') | KeyCode::Char('H') => Some(AiPanelAction::Ask),
+            KeyCode::Char('s') | KeyCode::Char('S') => Some(AiPanelAction::ReviewSuggestions),
+            KeyCode::Char('o') | KeyCode::Char('O') => Some(AiPanelAction::TurnOff),
+            KeyCode::Char('n') | KeyCode::Char('N') => Some(AiPanelAction::SetupNvidiaNim),
+            KeyCode::Char('p') | KeyCode::Char('P') => Some(AiPanelAction::UseNvidiaNim),
+            KeyCode::Char('c') | KeyCode::Char('C') => Some(AiPanelAction::UseCodexLocal),
+            KeyCode::Char('u') | KeyCode::Char('U') => Some(AiPanelAction::AutomationHooks),
+            _ => None,
+        };
+
+        panel.clamp(self.ai_panel_items().len());
+        self.ai_panel = Some(panel);
+        if let Some(action) = action {
+            self.execute_ai_panel_action(action)?;
+        }
+        Ok(true)
+    }
+
+    fn execute_ai_panel_action(&mut self, action: AiPanelAction) -> Result<(), AppError> {
+        let item = self
+            .ai_panel_items()
+            .into_iter()
+            .find(|item| item.action == action);
+        if let Some(item) = &item
+            && !item.enabled
+        {
+            self.set_status(StatusTone::Info, item.subtitle.clone());
+            return Ok(());
+        }
+
+        match action {
+            AiPanelAction::Ask => {
+                self.open_ai_chat();
+            }
+            AiPanelAction::CancelCurrentAsk => {
+                self.cancel_current_ai_ask();
+            }
+            AiPanelAction::ReviewSuggestions => {
+                self.open_ai_review(AiReviewMode::Suggestions);
+            }
+            AiPanelAction::TurnOff => {
+                self.turn_ai_off()?;
+            }
+            AiPanelAction::SetupNvidiaNim => {
+                self.open_nvidia_nim_api_key_prompt();
+            }
+            AiPanelAction::UseNvidiaNim => {
+                self.set_active_ai_profile(NVIDIA_NIM_QUICK_ADD_ID)?;
+            }
+            AiPanelAction::UseCodexLocal => {
+                self.set_active_ai_profile(CODEX_LOCAL_QUICK_ADD_ID)?;
+            }
+            AiPanelAction::AutomationHooks => {
+                self.set_status(
+                    StatusTone::Info,
+                    "AI automation hooks will live here; this slice only stages the panel entry.",
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn open_ai_chat(&mut self) {
+        let mut chat = AiReviewState::empty(AiReviewMode::History);
+        let item_count = self.ai_review_item_count_for(AiReviewMode::History);
+        if item_count > 0 {
+            chat.item_index = item_count - 1;
+        }
+        self.ai_review = Some(chat);
+        self.set_status(
+            StatusTone::Info,
+            "AI Chat open. Press Enter to write, X to cancel a streaming response, Esc to close.",
+        );
+    }
+
+    fn open_ai_ask_prompt(&mut self) {
+        self.open_ai_ask_prompt_with(String::new());
+    }
+
+    fn open_ai_ask_prompt_with(&mut self, message: impl Into<String>) {
+        if !self.ai_profiles.enabled {
+            self.set_status(
+                StatusTone::Info,
+                "AI is off. Open AI: Open Panel and choose a provider to turn it back on.",
+            );
+            return;
+        }
+        self.begin_prompt(PromptMode::AiAskCurrentBranch, message.into());
+        if let Some(job) = &self.ai_job {
+            self.set_status(
+                StatusTone::Warning,
+                format!(
+                    "AI Chat composer open. Sending a new message will cancel {}.",
+                    ai_job_summary(job)
+                ),
+            );
+        } else {
+            self.set_status(
+                StatusTone::Info,
+                "Write a chat message. Enter sends the current branch plus recent chat context.",
+            );
+        }
+    }
+
+    fn open_ai_quick_prompt(&mut self, index: usize) {
+        let Some(prompt) = ai_quick_prompt(index) else {
+            return;
+        };
+        self.open_ai_ask_prompt_with(prompt);
+    }
+
+    fn suggest_edits_from_selected_ai_chat_turn(&mut self) -> Result<(), AppError> {
+        let Some(review) = self
+            .ai_review
+            .as_ref()
+            .filter(|review| review.mode == AiReviewMode::History)
+        else {
+            self.set_status(
+                StatusTone::Info,
+                "Open AI Chat before asking for suggestions from an answer.",
+            );
+            return Ok(());
+        };
+        let Some(item) = self.ai_review_item_for(AiReviewMode::History, review.item_index) else {
+            self.set_status(
+                StatusTone::Info,
+                "No AI Chat answer is selected for suggestion staging.",
+            );
+            return Ok(());
+        };
+        if self.ai_review_item_is_streaming(item) {
+            self.set_status(
+                StatusTone::Info,
+                "Wait for the current AI response to finish before asking for suggestions from it.",
+            );
+            return Ok(());
+        }
+        let suggestion = item.suggestion().clone();
+        if !suggestion.is_conversational_answer() {
+            self.set_status(
+                StatusTone::Info,
+                "That AI item is already a map-change suggestion. Open Review Suggestions with S.",
+            );
+            return Ok(());
+        }
+        let Some(answer) = suggestion
+            .answer
+            .as_deref()
+            .map(str::trim)
+            .filter(|answer| !answer.is_empty())
+        else {
+            self.set_status(
+                StatusTone::Info,
+                "That AI Chat turn has no answer text to use for suggestions.",
+            );
+            return Ok(());
+        };
+        let anchor = PathAnchor {
+            path: suggestion.target.path.clone(),
+            id: suggestion.target.id.clone(),
+        };
+        let Some(path) = self.resolve_anchor_path(&anchor) else {
+            self.set_status(
+                StatusTone::Error,
+                format!(
+                    "Cannot create suggestions from this AI answer because '{}' is no longer in the map.",
+                    suggestion.target.label
+                ),
+            );
+            return Ok(());
+        };
+        self.editor.set_focus_path(path)?;
+        let prompt = format!(
+            "Use this AI Chat answer to suggest reviewable map edits I can apply. Stage concise add-child suggestions under the current branch or an existing descendant when useful.\n\nSelected AI Chat answer:\n{answer}"
+        );
+        self.ask_ai_about_current_branch(&prompt)
+    }
+
+    fn ask_ai_about_current_branch(&mut self, question: &str) -> Result<(), AppError> {
+        if !self.ai_profiles.enabled {
+            self.set_status(
+                StatusTone::Info,
+                "AI is off. Open AI: Open Panel and choose a provider to turn it back on.",
+            );
+            return Ok(());
+        }
+        self.ai_profiles = load_ai_profiles_for_tui();
+        let profile = self.active_ask_ai_profile().cloned().ok_or_else(|| {
+            if let Some(profile) = self.pending_ai_profile() {
+                AppError::new(format!(
+                    "{} is configured, but that provider cannot power AI Chat yet. Use NVIDIA NIM or Codex Local in the AI Panel.",
+                    profile.label
+                ))
+            } else {
+                AppError::new(
+                    "No callable AI provider is configured yet. Open AI: Open Panel and set up NVIDIA NIM or use Codex Local first."
+                )
+            }
+        })?;
+
+        let anchor = self.current_anchor().ok_or_else(|| {
+            AppError::new("The document has no focused node for the AI response.")
+        })?;
+        let anchor_label = self
+            .editor
+            .current()
+            .map(node_display_label)
+            .unwrap_or_else(|| "(no focus)".to_string());
+        let context = self.ai_current_branch_context()?;
+        let style_notes = self.ai_current_branch_style_notes()?;
+        let chat_context = self.ai_chat_context_for_prompt();
+        let edit_contract = if ai_chat_explicitly_requests_map_edits(question) {
+            reviewable_map_suggestion_contract()
+        } else {
+            conversational_only_contract()
+        };
+        let user_prompt = if chat_context.is_empty() {
+            format!(
+                "Message:\n{question}\n\nAI output contract:\n{edit_contract}\n\nCurrent branch style notes:\n{style_notes}\n\nCurrent mdmind branch:\n```mdmind\n{context}\n```"
+            )
+        } else {
+            format!(
+                "Message:\n{question}\n\nRecent AI chat in this TUI session:\n{chat_context}\n\nAI output contract:\n{edit_contract}\n\nCurrent branch style notes:\n{style_notes}\n\nCurrent mdmind branch:\n```mdmind\n{context}\n```"
+            )
+        };
+        let profile_label = profile.label.clone();
+        let job_profile_label = profile_label.clone();
+        let job_anchor_label = anchor_label.clone();
+        let question_preview = compact_ai_question(question);
+        let question = question.to_string();
+        let replaced = self.cancel_ai_job(AiHistoryDisposition::Cancelled);
+        let (sender, receiver) = mpsc::channel();
+        let workspace_cwd = std::env::current_dir().ok();
+        let streaming_index = self.ai_suggestions.len();
+        let cancellation = Arc::new(AtomicBool::new(false));
+        self.ai_suggestions.push(AiSuggestion {
+            target: AiSuggestionTarget::new(anchor.path.clone(), anchor.id.clone(), &anchor_label),
+            profile_label: job_profile_label.clone(),
+            question: question.clone(),
+            answer: Some(String::new()),
+            changes: Vec::new(),
+            source: Some(self.ai_suggestion_source_for(
+                &profile,
+                ai_reviewable_suggestion_reason(&question),
+                Some(estimate_ai_tokens(&user_prompt)),
+            )),
+        });
+        let mut review = AiReviewState::new(
+            AiReviewMode::History,
+            self.ai_suggestions
+                .get(streaming_index)
+                .expect("streaming AI placeholder should exist"),
+            true,
+        );
+        review.item_index = self
+            .ai_review_items(AiReviewMode::History)
+            .iter()
+            .position(|item| item.active_index() == Some(streaming_index))
+            .unwrap_or(0);
+        self.ai_review = Some(review);
+
+        let worker_cancellation = Arc::clone(&cancellation);
+        thread::spawn(move || {
+            let delta_sender = sender.clone();
+            let delta_cancellation = Arc::clone(&worker_cancellation);
+            let read_cancellation = Arc::clone(&worker_cancellation);
+            let result = match send_ai_chat_streaming_cancellable(
+                &profile,
+                map_assistant_system_prompt(),
+                &user_prompt,
+                workspace_cwd.as_deref(),
+                move |content| {
+                    if !delta_cancellation.load(Ordering::Relaxed) {
+                        let _ = delta_sender.send(AiRequestResult::Delta {
+                            content: content.to_string(),
+                        });
+                    }
+                },
+                move || read_cancellation.load(Ordering::Relaxed),
+            ) {
+                Ok(answer) => AiRequestResult::Success {
+                    anchor,
+                    anchor_label,
+                    profile_label: profile_label.clone(),
+                    question,
+                    answer,
+                },
+                Err(error) => AiRequestResult::Error {
+                    profile_label,
+                    message: error.message().to_string(),
+                },
+            };
+            let _ = sender.send(result);
+        });
+
+        self.ai_job = Some(AiRequestJob {
+            profile_label: job_profile_label.clone(),
+            anchor_label: job_anchor_label.clone(),
+            question_preview,
+            started_at: Instant::now(),
+            suggestion_index: Some(streaming_index),
+            cancelled: cancellation,
+            receiver,
+        });
+        let mut message = format!(
+            "AI working with {} on '{}'. Keep the AI Panel open to watch for the response.",
+            job_profile_label, job_anchor_label
+        );
+        if replaced.is_some() {
+            message.push_str(" Previous response cancelled.");
+        }
+        self.set_status(StatusTone::Info, message);
+        Ok(())
+    }
+
+    fn poll_ai_job(&mut self) -> Result<(), AppError> {
+        let result = match self.ai_job.as_ref() {
+            Some(job) => match job.receiver.try_recv() {
+                Ok(result) => Some(result),
+                Err(TryRecvError::Empty) => None,
+                Err(TryRecvError::Disconnected) => Some(AiRequestResult::Error {
+                    profile_label: job.profile_label.clone(),
+                    message: "AI request ended before returning a response.".to_string(),
+                }),
+            },
+            None => None,
+        };
+
+        let Some(result) = result else {
+            return Ok(());
+        };
+        match result {
+            AiRequestResult::Delta { content } => {
+                self.append_ai_stream_delta(&content);
+                Ok(())
+            }
+            AiRequestResult::Success {
+                anchor,
+                anchor_label,
+                profile_label,
+                question,
+                answer,
+            } => {
+                let suggestion_index = self.ai_streaming_suggestion_index();
+                self.ai_job = None;
+                if let Some(suggestion_index) = suggestion_index {
+                    self.finish_ai_stream_response(
+                        suggestion_index,
+                        anchor,
+                        &anchor_label,
+                        &profile_label,
+                        &question,
+                        &answer,
+                    )
+                } else {
+                    self.stage_ai_response(
+                        anchor,
+                        &anchor_label,
+                        &profile_label,
+                        &question,
+                        &answer,
+                    )
+                }
+            }
+            AiRequestResult::Error {
+                profile_label,
+                message,
+            } => {
+                let suggestion_index = self.ai_streaming_suggestion_index();
+                self.ai_job = None;
+                if let Some(suggestion_index) = suggestion_index {
+                    self.finish_ai_stream_error(suggestion_index, &message);
+                }
+                self.set_status(
+                    StatusTone::Error,
+                    format!("AI request failed with {profile_label}: {message}"),
+                );
+                Ok(())
+            }
+        }
+    }
+
+    fn append_ai_stream_delta(&mut self, content: &str) {
+        let Some(suggestion_index) = self.ai_streaming_suggestion_index() else {
+            return;
+        };
+        let Some(suggestion) = self.ai_suggestions.get_mut(suggestion_index) else {
+            return;
+        };
+        suggestion
+            .answer
+            .get_or_insert_with(String::new)
+            .push_str(content);
+    }
+
+    fn finish_ai_stream_response(
+        &mut self,
+        suggestion_index: usize,
+        anchor: PathAnchor,
+        anchor_label: &str,
+        profile_label: &str,
+        question: &str,
+        answer: &str,
+    ) -> Result<(), AppError> {
+        if self.resolve_anchor_path(&anchor).is_none() {
+            self.set_status(
+                StatusTone::Error,
+                "AI response returned, but the original branch no longer exists.",
+            );
+            return Ok(());
+        }
+
+        let target = AiSuggestionTarget::new(anchor.path.clone(), anchor.id.clone(), anchor_label);
+        let extraction = ai_chat_answer_and_reviewable_suggestions(question, answer);
+        let staged_change_count = extraction.changes.len();
+        let chat_answer = ai_chat_answer_text(
+            extraction.answer,
+            staged_change_count,
+            extraction.warning.as_deref(),
+        );
+        let source = if let Some(suggestion) = self.ai_suggestions.get_mut(suggestion_index) {
+            suggestion.target = target.clone();
+            suggestion.profile_label = profile_label.to_string();
+            suggestion.question = question.to_string();
+            suggestion.answer = (!chat_answer.trim().is_empty()).then(|| chat_answer.clone());
+            if let Some(source) = suggestion.source.as_mut() {
+                source.token_estimate =
+                    Some(source.token_estimate.unwrap_or(0) + estimate_ai_tokens(answer));
+            }
+            suggestion.source.clone()
+        } else {
+            self.stage_ai_response(anchor, anchor_label, profile_label, question, answer)?;
+            return Ok(());
+        };
+        if !extraction.changes.is_empty() {
+            let mut suggestion =
+                AiSuggestion::new(target, profile_label, question, extraction.changes);
+            suggestion.source = source;
+            self.ai_suggestions.push(suggestion);
+        }
+        self.set_status(
+            StatusTone::Success,
+            ai_response_complete_status(
+                anchor_label,
+                staged_change_count,
+                extraction.warning.as_deref(),
+            ),
+        );
+        Ok(())
+    }
+
+    fn finish_ai_stream_error(&mut self, suggestion_index: usize, message: &str) {
+        let Some(suggestion) = self.ai_suggestions.get_mut(suggestion_index) else {
+            return;
+        };
+        let answer = suggestion.answer.get_or_insert_with(String::new);
+        if answer.trim().is_empty() {
+            *answer = format!("Request failed before any response text arrived:\n{message}");
+        } else {
+            answer.push_str("\n\n[Request failed before the stream completed.]");
+        }
+    }
+
+    fn stage_ai_response(
+        &mut self,
+        anchor: PathAnchor,
+        anchor_label: &str,
+        profile_label: &str,
+        question: &str,
+        answer: &str,
+    ) -> Result<(), AppError> {
+        if self.resolve_anchor_path(&anchor).is_none() {
+            self.set_status(
+                StatusTone::Error,
+                "AI response returned, but the original branch no longer exists.",
+            );
+            return Ok(());
+        }
+        let target = AiSuggestionTarget::new(anchor.path, anchor.id, anchor_label);
+        let extraction = ai_chat_answer_and_reviewable_suggestions(question, answer);
+        let staged_change_count = extraction.changes.len();
+        let chat_answer = ai_chat_answer_text(
+            extraction.answer,
+            staged_change_count,
+            extraction.warning.as_deref(),
+        );
+        let source = self.ai_suggestion_source_for_label(
+            profile_label,
+            ai_reviewable_suggestion_reason(question),
+            Some(estimate_ai_tokens(question) + estimate_ai_tokens(answer)),
+        );
+        self.ai_suggestions.push(
+            AiSuggestion::answer(target.clone(), profile_label, question, chat_answer)
+                .with_source(source.clone()),
+        );
+        if !extraction.changes.is_empty() {
+            self.ai_suggestions.push(
+                AiSuggestion::new(target, profile_label, question, extraction.changes)
+                    .with_source(source),
+            );
+        }
+        self.set_status(
+            StatusTone::Success,
+            ai_response_ready_status(
+                anchor_label,
+                staged_change_count,
+                extraction.warning.as_deref(),
+            ),
+        );
+        Ok(())
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
+    fn accept_next_ai_suggestion(&mut self) -> Result<(), AppError> {
+        let Some(suggestion) = self.ai_suggestions.first().cloned() else {
+            self.set_status(StatusTone::Info, "No staged AI suggestions to accept.");
+            return Ok(());
+        };
+        if suggestion.is_conversational_answer() {
+            self.set_status(
+                StatusTone::Info,
+                "That AI item is a conversational answer, not a map edit. Open AI Chat to read it.",
+            );
+            return Ok(());
+        }
+        for change in &suggestion.changes {
+            match change {
+                AiSuggestedChange::AddChild {
+                    target,
+                    fragment,
+                    detail,
+                } => {
+                    let (target_path, target_label) = match self
+                        .resolve_ai_suggestion_change_target(&suggestion, target.as_ref())
+                    {
+                        Ok(target) => target,
+                        Err(message) => {
+                            self.set_status(StatusTone::Error, message);
+                            return Ok(());
+                        }
+                    };
+                    self.editor.set_focus_path(target_path)?;
+                    self.apply_edit(
+                        |editor| editor.add_child_with_detail(fragment, detail),
+                        format!(
+                            "Accepted AI suggestion from {} under '{}'.",
+                            suggestion.profile_label, target_label
+                        ),
+                        Some(format!("AI suggestion accepted under '{target_label}'")),
+                    )?;
+                }
+                AiSuggestedChange::UpdateNode { .. } | AiSuggestedChange::RemoveNode { .. } => {
+                    self.set_status(
+                        StatusTone::Warning,
+                        format!(
+                            "AI {} suggestions are staged for review, but applying them is not wired yet.",
+                            change.operation_label()
+                        ),
+                    );
+                    return Ok(());
+                }
+            }
+        }
+
+        let archived = self.ai_suggestions.remove(0);
+        self.archive_ai_suggestion(archived, AiHistoryDisposition::Applied);
+        Ok(())
+    }
+
+    fn open_ai_review(&mut self, mode: AiReviewMode) {
+        if mode == AiReviewMode::History {
+            self.open_ai_chat();
+            return;
+        }
+        let Some(item) = self.ai_review_item_for(mode, 0) else {
+            self.set_status(
+                StatusTone::Info,
+                match mode {
+                    AiReviewMode::Suggestions => "No staged map-change suggestions to review.",
+                    AiReviewMode::History => unreachable!("AI Chat opens even when it is empty."),
+                },
+            );
+            return;
+        };
+        let suggestion = item.suggestion().clone();
+        let editable = item.editable();
+        self.ai_review = Some(AiReviewState::new(mode, &suggestion, editable));
+        self.set_status(
+            StatusTone::Info,
+            format!(
+                "Review suggestions open for '{}' with {} change row(s).",
+                suggestion.target.label,
+                suggestion.changes.len()
+            ),
+        );
+    }
+
+    fn handle_ai_review_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
+        let Some(mut review) = self.ai_review.take() else {
+            return Ok(true);
+        };
+        self.refresh_ai_review_state(&mut review);
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                let label = if review.mode == AiReviewMode::History {
+                    "Closed AI Chat."
+                } else {
+                    "Closed AI review."
+                };
+                self.set_status(StatusTone::Info, label);
+                return Ok(true);
+            }
+            KeyCode::Home | KeyCode::Char('g') if review.mode == AiReviewMode::History => {
+                if let Some(item) = self.ai_review_item_for(review.mode, 0) {
+                    review.item_index = 0;
+                    review.reset_for(item.suggestion(), item.editable());
+                    review.follow_latest = false;
+                    self.set_status(StatusTone::Info, "Viewing the first AI Chat turn.");
+                }
+            }
+            KeyCode::End | KeyCode::Char('G') if review.mode == AiReviewMode::History => {
+                let item_count = self.ai_review_item_count_for(review.mode);
+                if item_count > 0 {
+                    let latest = item_count - 1;
+                    if let Some(item) = self.ai_review_item_for(review.mode, latest) {
+                        review.item_index = latest;
+                        review.reset_for(item.suggestion(), item.editable());
+                        review.follow_latest = true;
+                        self.set_status(StatusTone::Info, "Following the latest AI Chat turn.");
+                    }
+                }
+            }
+            KeyCode::BackTab | KeyCode::Char('[') => {
+                let item_count = self.ai_review_item_count_for(review.mode);
+                let previous = review.item_index.saturating_sub(1);
+                if previous != review.item_index {
+                    review.item_index = previous;
+                    if let Some(item) = self.ai_review_item_for(review.mode, review.item_index) {
+                        review.reset_for(item.suggestion(), item.editable());
+                        if review.mode == AiReviewMode::History {
+                            review.follow_latest = previous + 1 == item_count;
+                            if !review.follow_latest {
+                                review.scroll = self.ai_chat_turn_scroll_for_index(previous);
+                            }
+                        }
+                    }
+                }
+            }
+            KeyCode::Tab | KeyCode::Char(']') => {
+                let item_count = self.ai_review_item_count_for(review.mode);
+                if item_count > 0 {
+                    let next = (review.item_index + 1).min(item_count - 1);
+                    if next != review.item_index {
+                        review.item_index = next;
+                        if let Some(item) = self.ai_review_item_for(review.mode, review.item_index)
+                        {
+                            review.reset_for(item.suggestion(), item.editable());
+                            if review.mode == AiReviewMode::History {
+                                review.follow_latest = next + 1 == item_count;
+                                if !review.follow_latest {
+                                    review.scroll = self.ai_chat_turn_scroll_for_index(next);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            KeyCode::PageUp => {
+                if review.mode == AiReviewMode::History {
+                    review.follow_latest = false;
+                }
+                review.scroll_up(8);
+            }
+            KeyCode::PageDown => {
+                if review.mode == AiReviewMode::History {
+                    review.follow_latest = false;
+                }
+                review.scroll_down(8);
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                let item = self.ai_review_item_for(review.mode, review.item_index);
+                if let Some(item) = item
+                    && item.editable()
+                    && !item.suggestion().changes.is_empty()
+                {
+                    review.selected = review.selected.saturating_sub(1);
+                    review.keep_selected_visible();
+                } else {
+                    if review.mode == AiReviewMode::History {
+                        review.follow_latest = false;
+                    }
+                    review.scroll_up(1);
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let item = self.ai_review_item_for(review.mode, review.item_index);
+                if let Some(item) = item
+                    && item.editable()
+                    && !item.suggestion().changes.is_empty()
+                {
+                    review.selected =
+                        (review.selected + 1).min(item.suggestion().changes.len() - 1);
+                    review.keep_selected_visible();
+                } else {
+                    if review.mode == AiReviewMode::History {
+                        review.follow_latest = false;
+                    }
+                    review.scroll_down(1);
+                }
+            }
+            KeyCode::Char(' ') => {
+                if let Some(item) = self.ai_review_item_for(review.mode, review.item_index) {
+                    if self.ai_review_item_is_streaming(item) {
+                        self.set_status(
+                            StatusTone::Info,
+                            "AI response is still streaming; review actions unlock when it finishes.",
+                        );
+                    } else {
+                        review.toggle_selected(item.suggestion(), item.editable());
+                    }
+                }
+            }
+            KeyCode::Enter | KeyCode::Char('a') | KeyCode::Char('A')
+                if review.mode == AiReviewMode::History =>
+            {
+                self.ai_review = Some(review);
+                self.open_ai_ask_prompt();
+                return Ok(true);
+            }
+            KeyCode::Char('1') if review.mode == AiReviewMode::History => {
+                self.ai_review = Some(review);
+                self.open_ai_quick_prompt(1);
+                return Ok(true);
+            }
+            KeyCode::Char('2') if review.mode == AiReviewMode::History => {
+                self.ai_review = Some(review);
+                self.open_ai_quick_prompt(2);
+                return Ok(true);
+            }
+            KeyCode::Char('3') if review.mode == AiReviewMode::History => {
+                self.ai_review = Some(review);
+                self.open_ai_quick_prompt(3);
+                return Ok(true);
+            }
+            KeyCode::Char('4') if review.mode == AiReviewMode::History => {
+                self.ai_review = Some(review);
+                self.open_ai_quick_prompt(4);
+                return Ok(true);
+            }
+            KeyCode::Char('c') | KeyCode::Char('C') if review.mode == AiReviewMode::History => {
+                self.clear_ai_chat_session();
+                return Ok(true);
+            }
+            KeyCode::Char('s') | KeyCode::Char('S') if review.mode == AiReviewMode::History => {
+                self.ai_review = Some(review);
+                self.open_ai_review(AiReviewMode::Suggestions);
+                return Ok(true);
+            }
+            KeyCode::Char('v') | KeyCode::Char('V') if review.mode == AiReviewMode::History => {
+                self.ai_review = Some(review);
+                self.suggest_edits_from_selected_ai_chat_turn()?;
+                return Ok(true);
+            }
+            KeyCode::Char('x') | KeyCode::Char('X') if review.mode == AiReviewMode::History => {
+                self.ai_review = Some(review);
+                self.cancel_current_ai_ask();
+                return Ok(true);
+            }
+            KeyCode::Enter | KeyCode::Char('a') | KeyCode::Char('A') => {
+                if self
+                    .ai_review_item_for(review.mode, review.item_index)
+                    .is_some_and(|item| self.ai_review_item_is_streaming(item))
+                {
+                    self.ai_review = Some(review);
+                    self.set_status(
+                        StatusTone::Info,
+                        "AI response is still streaming; review actions unlock when it finishes.",
+                    );
+                    return Ok(true);
+                }
+                let checked = review.checked.clone();
+                let active_index = self
+                    .ai_review_item_for(review.mode, review.item_index)
+                    .and_then(|item| item.active_index());
+                self.ai_review = Some(review);
+                return match active_index {
+                    Some(active_index) => self
+                        .accept_checked_ai_review_changes(active_index, &checked)
+                        .map(|()| true),
+                    None => {
+                        self.set_status(
+                            StatusTone::Info,
+                            "Past AI history is read-only. Use Tab or ] to move between items.",
+                        );
+                        Ok(true)
+                    }
+                };
+            }
+            KeyCode::Char('d') | KeyCode::Char('D') => {
+                if review.mode == AiReviewMode::History {
+                    self.ai_review = Some(review);
+                    self.set_status(
+                        StatusTone::Info,
+                        "AI Chat keeps this session's turns visible. Use Review Suggestions to dismiss staged map changes.",
+                    );
+                    return Ok(true);
+                }
+                if self
+                    .ai_review_item_for(review.mode, review.item_index)
+                    .is_some_and(|item| self.ai_review_item_is_streaming(item))
+                {
+                    self.ai_review = Some(review);
+                    self.set_status(
+                        StatusTone::Info,
+                        "AI response is still streaming; wait for it to finish before dismissing.",
+                    );
+                    return Ok(true);
+                }
+                let active_index = self
+                    .ai_review_item_for(review.mode, review.item_index)
+                    .and_then(|item| item.active_index());
+                let Some(active_index) = active_index else {
+                    self.set_status(
+                        StatusTone::Info,
+                        "Past AI history is already archived; close review with Esc.",
+                    );
+                    self.ai_review = Some(review);
+                    return Ok(true);
+                };
+                self.dismiss_ai_suggestion(active_index);
+                if let Some(item) = self.ai_review_item_for(review.mode, review.item_index) {
+                    review.reset_for(item.suggestion(), item.editable());
+                } else if let Some(item) = self.ai_review_item_for(review.mode, 0) {
+                    review.item_index = 0;
+                    review.reset_for(item.suggestion(), item.editable());
+                } else {
+                    return Ok(true);
+                }
+            }
+            _ => {}
+        }
+
+        self.refresh_ai_review_state(&mut review);
+        self.ai_review = Some(review);
+        Ok(true)
+    }
+
+    fn accept_checked_ai_review_changes(
+        &mut self,
+        active_index: usize,
+        checked: &HashSet<usize>,
+    ) -> Result<(), AppError> {
+        let Some(suggestion) = self.ai_suggestions.get(active_index).cloned() else {
+            self.ai_review = None;
+            self.set_status(StatusTone::Info, "No staged AI suggestions to accept.");
+            return Ok(());
+        };
+        if suggestion.is_conversational_answer() {
+            self.set_status(
+                StatusTone::Info,
+                "This AI response is conversational, so there is nothing to apply to the map. It stays in AI Chat for this TUI session.",
+            );
+            return Ok(());
+        }
+        if checked.is_empty() {
+            self.set_status(
+                StatusTone::Info,
+                "No checked AI suggestion rows to apply. Toggle rows with Space.",
+            );
+            return Ok(());
+        }
+
+        let mut applied = 0usize;
+        let mut applied_targets = Vec::new();
+        for (index, change) in suggestion.changes.iter().enumerate() {
+            if !checked.contains(&index) {
+                continue;
+            }
+            match change {
+                AiSuggestedChange::AddChild {
+                    target,
+                    fragment,
+                    detail,
+                } => {
+                    let (target_path, target_label) = match self
+                        .resolve_ai_suggestion_change_target(&suggestion, target.as_ref())
+                    {
+                        Ok(target) => target,
+                        Err(message) => {
+                            self.set_status(StatusTone::Error, message);
+                            return Ok(());
+                        }
+                    };
+                    self.editor.set_focus_path(target_path)?;
+                    self.apply_edit(
+                        |editor| editor.add_child_with_detail(fragment, detail),
+                        format!(
+                            "Accepted AI suggestion from {} under '{}'.",
+                            suggestion.profile_label, target_label
+                        ),
+                        Some(format!("AI suggestion accepted under '{target_label}'")),
+                    )?;
+                    applied += 1;
+                    applied_targets.push(target_label);
+                }
+                AiSuggestedChange::UpdateNode { .. } | AiSuggestedChange::RemoveNode { .. } => {
+                    self.set_status(
+                        StatusTone::Warning,
+                        format!(
+                            "AI {} suggestions are staged for review, but applying them is not wired yet.",
+                            change.operation_label()
+                        ),
+                    );
+                    return Ok(());
+                }
+            }
+        }
+
+        if applied == 0 {
+            self.set_status(
+                StatusTone::Info,
+                "No supported checked AI suggestion rows to apply.",
+            );
+            return Ok(());
+        }
+
+        let archived = self.ai_suggestions.remove(active_index);
+        self.archive_ai_suggestion(archived, AiHistoryDisposition::Applied);
+        if let Some(mut review) = self.ai_review.take() {
+            if let Some(item) = self.ai_review_item_for(review.mode, review.item_index) {
+                review.reset_for(item.suggestion(), item.editable());
+                self.ai_review = Some(review);
+            } else if let Some(item) = self.ai_review_item_for(review.mode, 0) {
+                review.item_index = 0;
+                review.reset_for(item.suggestion(), item.editable());
+                self.ai_review = Some(review);
+            }
+        }
+        applied_targets.sort();
+        applied_targets.dedup();
+        let target_summary = match applied_targets.as_slice() {
+            [label] => format!(" under '{label}'"),
+            [] => String::new(),
+            targets => format!(" under {} targets", targets.len()),
+        };
+        self.set_status(
+            StatusTone::Success,
+            format!(
+                "Applied {applied} AI suggestion row(s) from {}{target_summary}.",
+                suggestion.profile_label
+            ),
+        );
+        Ok(())
+    }
+
+    fn dismiss_ai_suggestion(&mut self, active_index: usize) {
+        if self.ai_suggestions.is_empty() {
+            self.set_status(StatusTone::Info, "No staged AI suggestions to dismiss.");
+            return;
+        }
+        if active_index >= self.ai_suggestions.len() {
+            self.set_status(StatusTone::Info, "That AI item is no longer staged.");
+            return;
+        }
+        let suggestion = self.ai_suggestions.remove(active_index);
+        self.set_status(
+            StatusTone::Info,
+            format!(
+                "Dismissed AI item from {} for '{}'. It remains in this session's AI history.",
+                suggestion.profile_label, suggestion.target.label
+            ),
+        );
+        self.archive_ai_suggestion(suggestion, AiHistoryDisposition::Dismissed);
+    }
+
+    fn ai_current_branch_context(&self) -> Result<String, AppError> {
+        let node = self
+            .editor
+            .current()
+            .ok_or_else(|| AppError::new("The document has no focused node."))?;
+        let mut lines = Vec::new();
+        lines.push(format!(
+            "Breadcrumb: {}",
+            self.editor.breadcrumb().join(" / ")
+        ));
+        lines.push(String::new());
+        render_node_for_ai_context(node, 0, &mut lines);
+        Ok(lines.join("\n"))
+    }
+
+    fn ai_current_branch_style_notes(&self) -> Result<String, AppError> {
+        let node = self
+            .editor
+            .current()
+            .ok_or_else(|| AppError::new("The document has no focused node."))?;
+        Ok(ai_branch_style_notes(node))
+    }
+
+    fn ai_chat_context_for_prompt(&self) -> String {
+        let mut turns = self
+            .ai_history
+            .iter()
+            .filter_map(|entry| {
+                let suggestion = &entry.suggestion;
+                suggestion
+                    .changes
+                    .is_empty()
+                    .then(|| (Some(entry.disposition), suggestion))
+            })
+            .chain(
+                self.ai_suggestions
+                    .iter()
+                    .filter(|suggestion| suggestion.changes.is_empty())
+                    .map(|suggestion| (None, suggestion)),
+            )
+            .filter(|(_, suggestion)| {
+                !suggestion.question.trim().is_empty()
+                    || suggestion
+                        .answer
+                        .as_deref()
+                        .is_some_and(|answer| !answer.trim().is_empty())
+            })
+            .collect::<Vec<_>>();
+
+        let start = turns.len().saturating_sub(6);
+        turns.drain(0..start);
+        turns
+            .into_iter()
+            .enumerate()
+            .map(|(index, (disposition, suggestion))| {
+                let disposition = disposition
+                    .map(|disposition| format!(" ({})", disposition.label()))
+                    .unwrap_or_default();
+                let answer = suggestion
+                    .answer
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|answer| !answer.is_empty())
+                    .map(|answer| truncate_trailing(answer, 1200))
+                    .unwrap_or_else(|| "[response still streaming]".to_string());
+                format!(
+                    "Turn {}{disposition}\nUser: {}\nAssistant: {}",
+                    index + 1,
+                    truncate_trailing(suggestion.question.trim(), 500),
+                    answer
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    }
+
+    fn ai_chat_turn_scroll_for_index(&self, selected_index: usize) -> u16 {
+        let items = self.ai_review_items(AiReviewMode::History);
+        ai_chat_turn_start_scroll(&items, selected_index)
+    }
+
     fn execute_palette_target(&mut self, target: PaletteTarget) -> Result<(), AppError> {
         match target {
             PaletteTarget::Action(action) => match action {
@@ -4745,6 +6927,9 @@ impl TuiApp {
                 }
                 PaletteAction::CheckForUpdates => {
                     self.check_for_updates();
+                }
+                PaletteAction::OpenAiPanel => {
+                    self.open_ai_panel();
                 }
                 PaletteAction::ShowHelp => {
                     self.open_help(None);
@@ -5130,6 +7315,7 @@ impl TuiApp {
                         | HelpTopic::TuiTour
                         | HelpTopic::Changelog
                         | HelpTopic::Outliner
+                        | HelpTopic::Ai
                         | HelpTopic::Details
                         | HelpTopic::Search
                         | HelpTopic::Palette
@@ -5327,6 +7513,12 @@ impl TuiApp {
                 PaletteAction::CheckForUpdates,
             ),
             (
+                "AI: Open Panel",
+                "Open chat, review, setup, providers, and AI controls",
+                "ai ask chat review suggestions setup nvidia nim codex provider profile off hooks automation model assistant",
+                PaletteAction::OpenAiPanel,
+            ),
+            (
                 "Show Help",
                 "Open the built-in help overlay",
                 "help guide docs shortcuts",
@@ -5336,6 +7528,9 @@ impl TuiApp {
 
         actions
             .into_iter()
+            .filter(|(_, _, _, action)| {
+                !matches!(action, PaletteAction::OpenAiPanel) || self.experimental_ai_enabled()
+            })
             .filter_map(|(title, subtitle, keywords, action)| {
                 palette_match_score(query, title, &format!("{title} {subtitle} {keywords}")).map(
                     |score| PaletteItem {
@@ -5880,6 +8075,7 @@ impl TuiApp {
             HelpTopic::Changelog,
             HelpTopic::Outliner,
             HelpTopic::Agents,
+            HelpTopic::Ai,
             HelpTopic::Navigation,
             HelpTopic::Editing,
             HelpTopic::Details,
@@ -5895,6 +8091,7 @@ impl TuiApp {
             HelpTopic::Relations,
         ]
         .into_iter()
+        .filter(|topic| *topic != HelpTopic::Ai || self.experimental_ai_enabled())
         .filter_map(|topic| {
             if query.is_empty() {
                 Some((topic, 0_i64))
@@ -6826,7 +9023,39 @@ impl TuiApp {
             focus_id,
             filter_summary,
             scope_label,
+            ai_summary: self.ai_status_summary(),
         }
+    }
+
+    fn ai_status_summary(&self) -> Option<String> {
+        if !self.experimental_ai_enabled() {
+            return None;
+        }
+        if let Some(job) = &self.ai_job {
+            return Some(ai_job_summary(job));
+        }
+        if let Some(suggestion) = self.ai_suggestions.first() {
+            let count = self.ai_suggestions.len();
+            if suggestion.is_conversational_answer() {
+                return Some(format!(
+                    "{} answer · {}",
+                    compact_ai_profile_label(&suggestion.profile_label),
+                    compact_ai_question(&suggestion.question)
+                ));
+            }
+            return Some(format!(
+                "{} review {} · {}",
+                compact_ai_profile_label(&suggestion.profile_label),
+                count,
+                compact_ai_question(&suggestion.question)
+            ));
+        }
+        self.active_ask_ai_profile()
+            .map(|profile| compact_ai_profile_label(&profile.label))
+            .or_else(|| {
+                self.pending_ai_profile()
+                    .map(|profile| format!("{} pending", compact_ai_profile_label(&profile.label)))
+            })
     }
 
     fn after_edit(&mut self, message: impl Into<String>) -> Result<(), AppError> {
@@ -6875,6 +9104,536 @@ impl TuiApp {
         edit(&mut self.editor)?;
         self.after_edit(message)
     }
+}
+
+fn render_node_for_ai_context(node: &Node, depth: usize, lines: &mut Vec<String>) {
+    let indent = "  ".repeat(depth);
+    let mut line = format!("{indent}- {}", node.text);
+    if let Some(task) = node.task {
+        let marker = match task {
+            TaskState::Open => "[ ] ",
+            TaskState::Done => "[x] ",
+        };
+        line = format!("{indent}- {marker}{}", node.text);
+    }
+    if !node.tags.is_empty() {
+        line.push(' ');
+        line.push_str(&node.tags.join(" "));
+    }
+    for entry in &node.metadata {
+        line.push(' ');
+        line.push('@');
+        line.push_str(&entry.key);
+        line.push(':');
+        line.push_str(&entry.value);
+    }
+    if let Some(id) = &node.id {
+        line.push_str(" [id:");
+        line.push_str(id);
+        line.push(']');
+    }
+    for reference in &node.references {
+        line.push(' ');
+        line.push_str(&reference.display_token());
+    }
+    for relation in &node.relations {
+        line.push(' ');
+        line.push_str(&relation.display_token());
+    }
+    lines.push(line);
+
+    for detail in &node.detail {
+        lines.push(format!("{indent}  | {detail}"));
+    }
+    for child in &node.children {
+        render_node_for_ai_context(child, depth + 1, lines);
+    }
+}
+
+#[derive(Default)]
+struct AiBranchStyleStats {
+    node_count: usize,
+    detail_node_count: usize,
+    task_markers: BTreeMap<String, usize>,
+    tags: BTreeMap<String, usize>,
+    metadata_keys: BTreeMap<String, usize>,
+    ids: BTreeSet<String>,
+    relation_styles: BTreeMap<String, usize>,
+    external_refs: BTreeMap<String, usize>,
+}
+
+fn ai_branch_style_notes(node: &Node) -> String {
+    let mut stats = AiBranchStyleStats::default();
+    collect_ai_branch_style(node, &mut stats);
+
+    let mut lines = Vec::new();
+    lines.push(format!(
+        "Selected branch has {} node(s); align each suggested edit with the target branch's nearby siblings and descendants.",
+        stats.node_count
+    ));
+
+    let mut has_structure = false;
+    if !stats.task_markers.is_empty() {
+        has_structure = true;
+        lines.push(format!(
+            "Task markers: {}.",
+            counted_style_items(&stats.task_markers, 4)
+        ));
+    }
+    if !stats.tags.is_empty() {
+        has_structure = true;
+        lines.push(format!(
+            "Common tags: {}.",
+            counted_style_items(&stats.tags, 6)
+        ));
+    }
+    if !stats.metadata_keys.is_empty() {
+        has_structure = true;
+        lines.push(format!(
+            "Metadata keys: {}.",
+            counted_style_items(&stats.metadata_keys, 6)
+        ));
+    }
+    if !stats.ids.is_empty() {
+        has_structure = true;
+        let examples = stats
+            .ids
+            .iter()
+            .take(5)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        lines.push(format!("Stable id examples: {examples}."));
+    }
+    if !stats.relation_styles.is_empty() {
+        has_structure = true;
+        lines.push(format!(
+            "Relation styles: {}.",
+            counted_style_items(&stats.relation_styles, 4)
+        ));
+    }
+    if !stats.external_refs.is_empty() {
+        has_structure = true;
+        lines.push(format!(
+            "External refs: {}.",
+            counted_style_items(&stats.external_refs, 3)
+        ));
+    }
+    if stats.detail_node_count > 0 {
+        has_structure = true;
+        lines.push(format!(
+            "Detail lines: {} node(s) use details; put rationale or context in detail text rather than long labels.",
+            stats.detail_node_count
+        ));
+    }
+    if !has_structure {
+        lines.push(
+            "No recurring tags, metadata keys, ids, relations, external refs, task markers, or detail lines were observed; prefer plain concise labels unless extra structure clearly helps."
+                .to_string(),
+        );
+    }
+    lines.push(
+        "Use the smallest useful mdmind structure and preserve the user's local vocabulary."
+            .to_string(),
+    );
+
+    lines.join("\n")
+}
+
+fn collect_ai_branch_style(node: &Node, stats: &mut AiBranchStyleStats) {
+    stats.node_count += 1;
+    if !node.detail.is_empty() {
+        stats.detail_node_count += 1;
+    }
+    if let Some(task) = node.task {
+        let marker = match task {
+            TaskState::Open => "[ ]",
+            TaskState::Done => "[x]",
+        };
+        increment_count(&mut stats.task_markers, marker);
+    }
+    for tag in &node.tags {
+        increment_count(&mut stats.tags, tag);
+    }
+    for entry in &node.metadata {
+        increment_count(&mut stats.metadata_keys, &entry.key);
+    }
+    if let Some(id) = &node.id {
+        stats.ids.insert(id.clone());
+    }
+    for relation in &node.relations {
+        let label = relation
+            .kind
+            .as_deref()
+            .map(|kind| format!("rel:{kind}"))
+            .unwrap_or_else(|| "plain [[target]]".to_string());
+        increment_count(&mut stats.relation_styles, &label);
+    }
+    for reference in &node.references {
+        let label = match reference.kind {
+            ExternalRefKind::Image => "Markdown image",
+            ExternalRefKind::Link => "Markdown link",
+        };
+        increment_count(&mut stats.external_refs, label);
+    }
+    for child in &node.children {
+        collect_ai_branch_style(child, stats);
+    }
+}
+
+fn increment_count(counts: &mut BTreeMap<String, usize>, label: &str) {
+    *counts.entry(label.to_string()).or_insert(0) += 1;
+}
+
+fn counted_style_items(counts: &BTreeMap<String, usize>, limit: usize) -> String {
+    let mut items = counts.iter().collect::<Vec<_>>();
+    items.sort_by(|left, right| right.1.cmp(left.1).then_with(|| left.0.cmp(right.0)));
+    items
+        .into_iter()
+        .take(limit)
+        .map(|(label, count)| format!("{label} ({count})"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn node_display_label(node: &Node) -> String {
+    if node.text.is_empty() {
+        "(empty)".to_string()
+    } else {
+        node.text.clone()
+    }
+}
+
+fn normalize_ai_target_label(raw: &str) -> String {
+    let normalized = raw
+        .trim()
+        .chars()
+        .map(|ch| match ch {
+            '-' | '_' => ' ',
+            other => other.to_ascii_lowercase(),
+        })
+        .collect::<String>();
+    normalized.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn collect_ai_label_matches_anywhere(
+    nodes: &[Node],
+    normalized_label: &str,
+    prefix: Vec<usize>,
+    matches: &mut Vec<Vec<usize>>,
+) {
+    for (index, node) in nodes.iter().enumerate() {
+        let mut path = prefix.clone();
+        path.push(index);
+        if normalize_ai_target_label(&node.text) == normalized_label {
+            matches.push(path.clone());
+        }
+        collect_ai_label_matches_anywhere(&node.children, normalized_label, path, matches);
+    }
+}
+
+fn compact_ai_question(question: &str) -> String {
+    let compact = question.split_whitespace().collect::<Vec<_>>().join(" ");
+    if compact.is_empty() {
+        "(empty message)".to_string()
+    } else {
+        truncate_trailing(&compact, 56)
+    }
+}
+
+fn ai_chat_explicitly_requests_map_edits(message: &str) -> bool {
+    let normalized = normalize_ai_intent_text(message);
+    if normalized.is_empty() {
+        return false;
+    }
+
+    let strong_phrases = [
+        "review suggestions",
+        "reviewable suggestions",
+        "staged suggestions",
+        "stage suggestions",
+        "stage map suggestions",
+        "suggest map changes",
+        "suggest map edits",
+        "suggest branch changes",
+        "suggest branch edits",
+        "suggest outline changes",
+        "suggest outline edits",
+        "suggest node changes",
+        "suggest node edits",
+        "suggest nodes",
+        "suggest child nodes",
+        "suggest changes i can apply",
+        "suggest edits i can apply",
+        "suggest changes to review",
+        "suggest edits to review",
+        "suggest changes to stage",
+        "suggest edits to stage",
+        "map edits",
+        "map changes",
+        "edit the map",
+        "change the map",
+        "modify the map",
+        "edit this branch",
+        "change this branch",
+        "modify this branch",
+        "edit current branch",
+        "change current branch",
+        "add child",
+        "add children",
+        "add node",
+        "add nodes",
+        "insert node",
+        "insert nodes",
+        "create child",
+        "create children",
+        "create node",
+        "create nodes",
+        "update node",
+        "update nodes",
+        "remove node",
+        "remove nodes",
+        "delete node",
+        "delete nodes",
+        "turn this into nodes",
+        "convert this into nodes",
+        "changes i can apply",
+        "edits i can apply",
+    ];
+    if strong_phrases
+        .iter()
+        .any(|phrase| normalized.contains(phrase))
+    {
+        return true;
+    }
+
+    if ai_chat_requests_additive_suggestions(&normalized) {
+        return true;
+    }
+
+    let asks_for_changes = [
+        "suggest changes",
+        "suggest edits",
+        "propose changes",
+        "propose edits",
+        "recommend changes",
+        "recommend edits",
+    ]
+    .iter()
+    .any(|phrase| normalized.contains(phrase));
+    let map_context = [
+        "map",
+        "branch",
+        "tree",
+        "outline",
+        "node",
+        "nodes",
+        "review",
+        "reviewable",
+        "apply",
+        "stage",
+        "staged",
+    ]
+    .iter()
+    .any(|word| normalized.split_whitespace().any(|token| token == *word));
+
+    asks_for_changes && map_context
+}
+
+fn ai_chat_requests_additive_suggestions(normalized: &str) -> bool {
+    let tokens = normalized.split_whitespace().collect::<Vec<_>>();
+    for (index, token) in tokens.iter().enumerate() {
+        if *token != "suggest" && *token != "propose" && *token != "recommend" {
+            continue;
+        }
+
+        let mut cursor = index + 1;
+        while tokens
+            .get(cursor)
+            .is_some_and(|token| matches!(*token, "me" | "some" | "a" | "an" | "the" | "few"))
+        {
+            cursor += 1;
+        }
+
+        if tokens
+            .get(cursor)
+            .is_some_and(|token| matches!(*token, "new" | "additional" | "more" | "missing"))
+        {
+            let next_subject = tokens.get(cursor + 1).copied().unwrap_or_default();
+            if !matches!(
+                next_subject,
+                "title" | "titles" | "label" | "labels" | "name" | "names" | "wording" | "phrasing"
+            ) {
+                return true;
+            }
+        }
+
+        if tokens[cursor..].iter().any(|token| *token == "add") {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn normalize_ai_intent_text(message: &str) -> String {
+    message
+        .to_ascii_lowercase()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn ai_reviewable_suggestion_reason(message: &str) -> Option<String> {
+    ai_chat_explicitly_requests_map_edits(message)
+        .then(|| "Staged because your prompt requested reviewable map edits.".to_string())
+}
+
+fn ai_quick_prompt(index: usize) -> Option<&'static str> {
+    match index {
+        1 => Some("Summarize this branch."),
+        2 => Some("Find gaps, risks, and open questions in this branch."),
+        3 => Some("Extract TODOs, risks, and open questions from this branch."),
+        4 => Some("Suggest map edits I can review."),
+        _ => None,
+    }
+}
+
+fn ai_quick_prompt_line() -> Line<'static> {
+    let palette = active_palette();
+    Line::from(vec![
+        Span::styled(
+            "Quick prompts  ",
+            Style::default()
+                .fg(palette.text)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("[1] summarize", Style::default().fg(palette.muted)),
+        separator_span(),
+        Span::styled("[2] gaps", Style::default().fg(palette.muted)),
+        separator_span(),
+        Span::styled("[3] TODOs", Style::default().fg(palette.muted)),
+        separator_span(),
+        Span::styled(
+            "[4] suggest edits",
+            Style::default()
+                .fg(palette.sky)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ])
+}
+
+#[derive(Debug, Clone)]
+struct AiChatAnswerExtraction {
+    answer: String,
+    changes: Vec<AiSuggestedChange>,
+    warning: Option<String>,
+}
+
+fn ai_chat_answer_and_reviewable_suggestions(
+    question: &str,
+    answer: &str,
+) -> AiChatAnswerExtraction {
+    if ai_chat_explicitly_requests_map_edits(question) {
+        let extraction = split_reviewable_map_suggestions_with_warning(answer);
+        AiChatAnswerExtraction {
+            answer: extraction.answer,
+            changes: extraction.changes,
+            warning: extraction.warning,
+        }
+    } else {
+        AiChatAnswerExtraction {
+            answer: answer.trim().to_string(),
+            changes: Vec::new(),
+            warning: None,
+        }
+    }
+}
+
+fn ai_chat_answer_text(
+    answer: String,
+    staged_change_count: usize,
+    warning: Option<&str>,
+) -> String {
+    if !answer.trim().is_empty() {
+        return answer.trim().to_string();
+    }
+    if let Some(warning) = warning {
+        return format!("{warning} Ask \"stage these as map edits\" to retry.");
+    }
+    if staged_change_count > 0 {
+        format!(
+            "I staged {staged_change_count} map-change suggestion row(s) in Review Suggestions."
+        )
+    } else {
+        String::new()
+    }
+}
+
+fn ai_response_complete_status(
+    anchor_label: &str,
+    staged_change_count: usize,
+    warning: Option<&str>,
+) -> String {
+    if warning.is_some() {
+        return format!(
+            "AI response complete for '{anchor_label}'. Could not stage suggestions; details are in AI Chat."
+        );
+    }
+    if staged_change_count > 0 {
+        format!(
+            "AI response complete for '{anchor_label}'. {staged_change_count} suggestion row(s) staged in Review Suggestions · S Review."
+        )
+    } else {
+        format!("AI response complete for '{anchor_label}'. It is open in AI Chat.")
+    }
+}
+
+fn ai_response_ready_status(
+    anchor_label: &str,
+    staged_change_count: usize,
+    warning: Option<&str>,
+) -> String {
+    if warning.is_some() {
+        return format!(
+            "AI response ready for '{anchor_label}'. Could not stage suggestions; details are in AI Chat."
+        );
+    }
+    if staged_change_count > 0 {
+        format!(
+            "AI response ready for '{anchor_label}'. {staged_change_count} suggestion row(s) staged in Review Suggestions · S Review."
+        )
+    } else {
+        format!("AI response ready for '{anchor_label}'. It is staged in AI Chat.")
+    }
+}
+
+fn append_ai_provider_switch_clear_summary(message: &mut String, summary: AiChatClearSummary) {
+    message.push_str(" Started a fresh AI Chat conversation for this provider.");
+    if summary.cleared_turns > 0 {
+        message.push_str(&format!(
+            " Cleared {} prior chat turn(s).",
+            summary.cleared_turns
+        ));
+    }
+    if summary.cancelled_response {
+        message.push_str(" Running response cancelled.");
+    }
+    if summary.kept_review_suggestions {
+        message.push_str(" Staged Review Suggestions were kept.");
+    }
+}
+
+fn ai_job_summary(job: &AiRequestJob) -> String {
+    format!(
+        "{} {}s {}",
+        compact_ai_profile_label(&job.profile_label),
+        job.started_at.elapsed().as_secs(),
+        truncate_trailing(&job.anchor_label, 24)
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -7380,8 +10139,17 @@ pub fn run_interactive_with_mode(
     autosave: bool,
     mode: OpenTargetMode,
 ) -> Result<(), AppError> {
+    run_interactive_with_mode_and_features(target, autosave, mode, TuiFeatureFlags::default())
+}
+
+pub fn run_interactive_with_mode_and_features(
+    target: &str,
+    autosave: bool,
+    mode: OpenTargetMode,
+    feature_flags: TuiFeatureFlags,
+) -> Result<(), AppError> {
     match classify_open_target(target, mode)? {
-        ClassifiedTarget::NativeMap(loaded) => run_map_interactive(loaded, autosave),
+        ClassifiedTarget::NativeMap(loaded) => run_map_interactive(loaded, autosave, feature_flags),
         ClassifiedTarget::OrdinaryMarkdown { target, source } => {
             run_markdown_interactive(target.path, source, autosave)
         }
@@ -7396,7 +10164,11 @@ pub fn run_interactive_with_mode(
     }
 }
 
-fn run_map_interactive(loaded: crate::app::LoadedDocument, autosave: bool) -> Result<(), AppError> {
+fn run_map_interactive(
+    loaded: crate::app::LoadedDocument,
+    autosave: bool,
+    feature_flags: TuiFeatureFlags,
+) -> Result<(), AppError> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(AppError::new(
             "mdmind needs an interactive terminal. Use `--preview` for a static view.",
@@ -7418,7 +10190,7 @@ fn run_map_interactive(loaded: crate::app::LoadedDocument, autosave: bool) -> Re
     let location_memory = load_locations_for(&loaded.target.path)?;
     let checkpoints = load_checkpoints_for(&loaded.target.path)?;
     let ui_settings = load_ui_settings_for(&loaded.target.path)?;
-    let mut app = TuiApp::new_with_settings(
+    let mut app = TuiApp::new_with_settings_and_features(
         loaded.target.path.clone(),
         loaded.document,
         focus_path,
@@ -7426,6 +10198,7 @@ fn run_map_interactive(loaded: crate::app::LoadedDocument, autosave: bool) -> Re
         autosave,
         saved_views,
         ui_settings,
+        feature_flags,
     );
     app.location_memory = location_memory;
     app.recent_locations.clear();
@@ -7598,6 +10371,10 @@ fn run_event_loop(
     app: &mut TuiApp,
 ) -> Result<(), AppError> {
     loop {
+        if let Err(error) = app.poll_ai_job() {
+            app.set_status(StatusTone::Error, error.message().to_string());
+        }
+
         terminal
             .draw(|frame| render(frame, app))
             .map_err(|error| AppError::new(format!("Could not draw the TUI: {error}")))?;
@@ -8023,12 +10800,19 @@ fn render(frame: &mut Frame, app: &mut TuiApp) {
         return;
     }
 
+    let ai_status_active = app.ai_status_summary().is_some();
+    let status_height = match (app.ui_settings.minimal_mode, ai_status_active) {
+        (true, true) => 4,
+        (true, false) => 3,
+        (false, true) => 5,
+        (false, false) => 4,
+    };
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(if app.ui_settings.minimal_mode { 3 } else { 4 }),
             Constraint::Min(16),
-            Constraint::Length(if app.ui_settings.minimal_mode { 3 } else { 4 }),
+            Constraint::Length(status_height),
             Constraint::Length(if app.ui_settings.minimal_mode { 0 } else { 1 }),
         ])
         .split(area);
@@ -8066,6 +10850,18 @@ fn render(frame: &mut Frame, app: &mut TuiApp) {
 
     if let Some(search) = &app.search {
         render_search_overlay(frame, centered_rect(78, 80, area), app, search);
+    }
+
+    if app.experimental_ai_enabled()
+        && let Some(panel) = &app.ai_panel
+    {
+        render_ai_panel_overlay(frame, centered_rect(86, 78, area), app, panel);
+    }
+
+    if app.experimental_ai_enabled()
+        && let Some(review) = &app.ai_review
+    {
+        render_ai_review_overlay(frame, centered_rect(78, 70, area), app, review);
     }
 
     if let Some(palette) = &app.palette {
@@ -8112,6 +10908,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
             ),
             Span::raw("  "),
         ];
+        line.extend(experimental_badge_spans(app, PALETTE));
         line.extend(status_lamps);
         render_header_top_row(
             frame,
@@ -8136,6 +10933,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
         ),
         Span::raw("  "),
     ];
+    header_spans.extend(experimental_badge_spans(app, PALETTE));
     header_spans.extend(status_lamps);
     let top_row = Rect {
         x: inner.x,
@@ -8169,6 +10967,22 @@ fn render_header(frame: &mut Frame, area: Rect, app: &TuiApp) {
             breadcrumb_row,
         );
     }
+}
+
+fn experimental_badge_spans(app: &TuiApp, palette: Palette) -> Vec<Span<'static>> {
+    let Some(label) = app.feature_flags.experimental_label() else {
+        return Vec::new();
+    };
+    vec![
+        Span::styled(
+            format!(" EXPERIMENTAL {label} "),
+            Style::default()
+                .fg(palette.background)
+                .bg(palette.warn)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  "),
+    ]
 }
 
 fn header_breadcrumb_line(
@@ -8245,6 +11059,44 @@ fn render_header_top_row(
         Paragraph::new(Line::from(Span::styled(identity, identity_style)))
             .alignment(Alignment::Right),
         identity_area,
+    );
+}
+
+fn render_split_line(
+    frame: &mut Frame,
+    area: Rect,
+    left_spans: Vec<Span<'static>>,
+    right_spans: Vec<Span<'static>>,
+) {
+    if area.width == 0 {
+        return;
+    }
+    if right_spans.is_empty() {
+        frame.render_widget(Paragraph::new(Line::from(left_spans)), area);
+        return;
+    }
+
+    let right_width = spans_render_width(&right_spans);
+    let left_area_width = (area.width as usize)
+        .saturating_sub(right_width + 2)
+        .min(area.width as usize) as u16;
+    let left_area = Rect {
+        x: area.x,
+        y: area.y,
+        width: left_area_width,
+        height: area.height,
+    };
+    let right_area_width = right_width.min(area.width as usize) as u16;
+    let right_area = Rect {
+        x: area.x + area.width.saturating_sub(right_area_width),
+        y: area.y,
+        width: right_area_width,
+        height: area.height,
+    };
+    frame.render_widget(Paragraph::new(Line::from(left_spans)), left_area);
+    frame.render_widget(
+        Paragraph::new(Line::from(right_spans)).alignment(Alignment::Right),
+        right_area,
     );
 }
 
@@ -8413,6 +11265,18 @@ fn header_status_lamps(app: &TuiApp, palette: Palette) -> Vec<Span<'static>> {
         app.filter.is_some(),
         palette,
     );
+    if app.experimental_ai_enabled() {
+        push_header_lamp_separator(&mut spans, palette);
+        push_header_lamp(
+            &mut spans,
+            ai_status_lamp_label(app),
+            app.active_ask_ai_profile().is_some()
+                || app.pending_ai_profile().is_some()
+                || app.ai_job.is_some()
+                || !app.ai_suggestions.is_empty(),
+            palette,
+        );
+    }
     push_header_lamp_separator(&mut spans, palette);
     push_header_lamp(&mut spans, "MINIMAL", app.ui_settings.minimal_mode, palette);
     push_header_lamp(&mut spans, "READING", app.ui_settings.reading_mode, palette);
@@ -8426,6 +11290,309 @@ fn header_status_lamps(app: &TuiApp, palette: Palette) -> Vec<Span<'static>> {
     push_header_lamp(&mut spans, "MODIFIED", app.editor.dirty(), palette);
 
     spans
+}
+
+fn ai_status_lamp_label(app: &TuiApp) -> String {
+    if app.ai_job.is_some() {
+        return "AI WORKING".to_string();
+    }
+    if !app.ai_suggestions.is_empty() {
+        return "AI REVIEW".to_string();
+    }
+
+    if app.active_ask_ai_profile().is_none() && app.pending_ai_profile().is_some() {
+        return "AI PENDING".to_string();
+    }
+
+    app.active_ask_ai_profile()
+        .map(|profile| format!("AI {}", compact_ai_profile_label(&profile.label)))
+        .unwrap_or_else(|| "AI OFF".to_string())
+}
+
+fn ai_session_provider_metadata(app: &TuiApp) -> (String, String, String) {
+    let profile = app
+        .active_ask_ai_profile()
+        .or_else(|| app.pending_ai_profile());
+    let provider = profile
+        .map(|profile| profile.label.clone())
+        .unwrap_or_else(|| "none".to_string());
+    let model = profile
+        .map(|profile| {
+            profile.model.clone().unwrap_or_else(|| {
+                if ai_profile_is_codex_local_bridge(profile) {
+                    "Codex CLI default".to_string()
+                } else {
+                    "not set".to_string()
+                }
+            })
+        })
+        .unwrap_or_else(|| "not set".to_string());
+    let tokens = format_ai_token_estimate(ai_chat_session_token_estimate(app));
+    (provider, model, tokens)
+}
+
+fn ai_session_header_line(
+    title: &str,
+    state: &str,
+    provider: &str,
+    model: &str,
+    session_tokens: &str,
+    palette: Palette,
+) -> Line<'static> {
+    let label_style = Style::default()
+        .fg(palette.muted)
+        .add_modifier(Modifier::ITALIC);
+    Line::from(vec![
+        Span::styled(
+            title.to_string(),
+            Style::default()
+                .fg(palette.text)
+                .add_modifier(Modifier::BOLD),
+        ),
+        separator_span(),
+        Span::styled("State ", label_style),
+        Span::styled(
+            ai_title_case_status(state),
+            Style::default()
+                .fg(palette.sky)
+                .add_modifier(Modifier::BOLD),
+        ),
+        separator_span(),
+        Span::styled("Provider ", label_style),
+        Span::styled(
+            truncate_trailing(provider, 24),
+            Style::default()
+                .fg(palette.text)
+                .add_modifier(Modifier::BOLD),
+        ),
+        separator_span(),
+        Span::styled("Model ", label_style),
+        Span::styled(
+            truncate_trailing(model, 48),
+            Style::default()
+                .fg(palette.metadata)
+                .add_modifier(Modifier::ITALIC),
+        ),
+        separator_span(),
+        Span::styled("Tokens ", label_style),
+        Span::styled(session_tokens.to_string(), Style::default().fg(palette.sky)),
+    ])
+}
+
+fn ai_title_case_status(status: &str) -> String {
+    status
+        .split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => format!("{}{}", first.to_ascii_uppercase(), chars.as_str()),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn ai_chat_turn_indicator_spans(
+    item_count: usize,
+    selected_index: usize,
+    palette: Palette,
+) -> Vec<Span<'static>> {
+    if item_count == 0 {
+        return vec![Span::styled("NO TURNS", Style::default().fg(palette.muted))];
+    }
+    let position = selected_index.min(item_count.saturating_sub(1)) + 1;
+    if position == item_count {
+        vec![
+            Span::styled(
+                "LATEST",
+                Style::default()
+                    .fg(palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            separator_span(),
+            Span::styled(
+                format!("turn {position}/{item_count}"),
+                Style::default().fg(palette.sky),
+            ),
+        ]
+    } else {
+        vec![
+            Span::styled(
+                "OLDER",
+                Style::default()
+                    .fg(palette.warn)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            separator_span(),
+            Span::styled(
+                format!("turn {position}/{item_count}"),
+                Style::default().fg(palette.sky),
+            ),
+            separator_span(),
+            Span::styled("End for latest", Style::default().fg(palette.muted)),
+        ]
+    }
+}
+
+fn ai_review_counter_spans(
+    item_state: &str,
+    item_position: usize,
+    item_count: usize,
+    streaming: bool,
+    editable: bool,
+    palette: Palette,
+) -> Vec<Span<'static>> {
+    let state_style = if streaming {
+        Style::default()
+            .fg(palette.warn)
+            .add_modifier(Modifier::BOLD)
+    } else if editable {
+        Style::default()
+            .fg(palette.sky)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(palette.muted)
+    };
+    vec![
+        Span::styled(item_state.to_string(), state_style),
+        Span::raw(" "),
+        Span::styled(
+            format!("{item_position}/{item_count}"),
+            Style::default().fg(palette.sky),
+        ),
+    ]
+}
+
+fn ai_current_focus_target_label(app: &TuiApp) -> String {
+    app.editor
+        .current()
+        .map(node_display_label)
+        .unwrap_or_else(|| "(no focus)".to_string())
+}
+
+fn ai_chat_input_summary() -> &'static str {
+    "selected branch + style notes + recent chat"
+}
+
+fn ai_chat_reply_context(app: &TuiApp) -> String {
+    let target = ai_current_focus_target_label(app);
+    let item_count = app.ai_review_item_count_for(AiReviewMode::History);
+    let turn = if item_count == 0 {
+        "Starting AI Chat".to_string()
+    } else {
+        let selected = app
+            .ai_review
+            .as_ref()
+            .filter(|review| review.mode == AiReviewMode::History)
+            .map(|review| review.item_index.min(item_count.saturating_sub(1)))
+            .unwrap_or(item_count.saturating_sub(1));
+        if selected + 1 == item_count {
+            "Replying to latest turn".to_string()
+        } else {
+            format!("Replying from turn {}/{}", selected + 1, item_count)
+        }
+    };
+    format!("{turn} · message target {target}")
+}
+
+fn ai_chat_turn_start_scroll(items: &[AiReviewItemRef<'_>], selected_index: usize) -> u16 {
+    let line_count = items
+        .iter()
+        .take(selected_index.min(items.len()))
+        .map(|item| ai_chat_turn_rendered_line_count(*item))
+        .sum::<usize>();
+    line_count.min(u16::MAX as usize) as u16
+}
+
+fn ai_chat_turn_rendered_line_count(item: AiReviewItemRef<'_>) -> usize {
+    let suggestion = item.suggestion();
+    let question_lines = suggestion.question.lines().count();
+    let answer_lines = suggestion
+        .answer
+        .as_deref()
+        .filter(|answer| !answer.is_empty())
+        .map(|answer| answer.lines().count())
+        .unwrap_or(1);
+    1 + question_lines + 1 + answer_lines + 1
+}
+
+fn ai_turn_key_hint() -> Span<'static> {
+    let palette = active_palette();
+    Span::styled(
+        if ascii_accents_enabled() {
+            "Tab/[ ] turn"
+        } else {
+            "Tab/[ ]:turn"
+        },
+        Style::default().fg(palette.muted),
+    )
+}
+
+fn ai_chat_session_token_estimate(app: &TuiApp) -> usize {
+    app.ai_review_items(AiReviewMode::History)
+        .iter()
+        .map(|item| ai_suggestion_token_estimate(item.suggestion()))
+        .sum()
+}
+
+fn ai_suggestion_token_estimate(suggestion: &AiSuggestion) -> usize {
+    estimate_ai_tokens(&suggestion.question)
+        + suggestion
+            .answer
+            .as_deref()
+            .map(estimate_ai_tokens)
+            .unwrap_or(0)
+}
+
+fn estimate_ai_tokens(text: &str) -> usize {
+    let text = text.trim();
+    if text.is_empty() {
+        return 0;
+    }
+    let char_estimate = (text.chars().count() + 3) / 4;
+    let word_estimate = text.split_whitespace().count();
+    char_estimate.max(word_estimate).max(1)
+}
+
+fn format_ai_token_estimate(tokens: usize) -> String {
+    if tokens >= 1_000_000 {
+        format!("~{:.1}m", tokens as f64 / 1_000_000.0)
+    } else if tokens >= 10_000 {
+        format!("~{}k", (tokens + 500) / 1_000)
+    } else if tokens >= 1_000 {
+        format!("~{:.1}k", tokens as f64 / 1_000.0)
+    } else {
+        format!("~{tokens}")
+    }
+}
+
+fn compact_ai_profile_label(label: &str) -> String {
+    let upper = label.to_ascii_uppercase();
+    if upper.contains("NVIDIA") || upper.contains("NIM") {
+        "NIM".to_string()
+    } else if upper.contains("CODEX") {
+        "CODEX".to_string()
+    } else {
+        upper
+            .split_whitespace()
+            .next()
+            .filter(|part| !part.is_empty())
+            .unwrap_or("ON")
+            .chars()
+            .take(8)
+            .collect()
+    }
+}
+
+fn ai_profile_supports_tui_ask(profile: &AiProfile) -> bool {
+    profile.enabled
+        && (profile.adapter_type == AiAdapterType::OpenAiCompatibleHttp
+            || ai_profile_is_codex_local_bridge(profile))
+}
+
+fn ai_change_apply_supported(change: &AiSuggestedChange) -> bool {
+    matches!(change, AiSuggestedChange::AddChild { .. })
 }
 
 fn push_header_lamp(
@@ -9210,7 +12377,7 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let PALETTE = app.theme_colors();
     let status = app.status_model();
     if app.ui_settings.minimal_mode {
-        let mut line = vec![Span::styled(
+        let mut info_line = vec![Span::styled(
             match status.tone {
                 StatusTone::Info => "info",
                 StatusTone::Success => "saved",
@@ -9227,8 +12394,8 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
                 .add_modifier(Modifier::BOLD),
         )];
         if let Some(filter) = &status.filter_summary {
-            line.push(Span::raw("  "));
-            line.push(Span::styled(
+            info_line.push(Span::raw("  "));
+            info_line.push(Span::styled(
                 format!("filter {filter}"),
                 Style::default().fg(if motion_level(MotionTarget::FilterResult) > 0 {
                     PALETTE.warn
@@ -9237,7 +12404,7 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
                 }),
             ));
         }
-        line.extend([
+        info_line.extend([
             Span::raw("  "),
             Span::styled(status.message, Style::default().fg(PALETTE.text)),
             Span::raw("  "),
@@ -9259,16 +12426,26 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
                 }),
             ),
         ]);
+        let mut lines = vec![Line::from(info_line)];
+        if let Some(ai) = &status.ai_summary {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    "ai",
+                    Style::default()
+                        .fg(ai_status_chip_color(app, PALETTE))
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw("  "),
+                Span::styled(ai.clone(), Style::default().fg(PALETTE.text)),
+            ]));
+        }
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(PALETTE.border))
             .style(Style::default().bg(PALETTE.background));
         let inner = block.inner(area);
         frame.render_widget(block, area);
-        frame.render_widget(
-            Paragraph::new(Line::from(line)).wrap(Wrap { trim: false }),
-            inner,
-        );
+        frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
         return;
     }
     let (label, color) = match status.tone {
@@ -9340,7 +12517,29 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
         },
     ));
 
-    let lines = vec![Line::from(headline), Line::from(context)];
+    let mut lines = vec![Line::from(headline)];
+    if let Some(ai) = &status.ai_summary {
+        lines.push(Line::from(vec![
+            status_chip(
+                "AI",
+                ai,
+                ai_status_chip_color(app, PALETTE),
+                PALETTE.background,
+            ),
+            Span::raw(" "),
+            Span::styled(
+                if app.ai_job.is_some() {
+                    "working in background"
+                } else if !app.ai_suggestions.is_empty() {
+                    "open AI Panel"
+                } else {
+                    "available from palette"
+                },
+                Style::default().fg(PALETTE.muted),
+            ),
+        ]));
+    }
+    lines.push(Line::from(context));
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -9354,6 +12553,16 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+fn ai_status_chip_color(app: &TuiApp, palette: Palette) -> Color {
+    if app.ai_job.is_some() {
+        palette.warn
+    } else if !app.ai_suggestions.is_empty() {
+        palette.sky
+    } else {
+        palette.accent
+    }
 }
 
 #[allow(non_snake_case)]
@@ -9423,6 +12632,11 @@ fn keybar_spans(app: &TuiApp) -> Vec<Span<'static>> {
     if has_outgoing_relations || has_backlinks {
         spans.push(separator_span());
         spans.push(key_hint("[ ]", "related"));
+    }
+
+    if !app.ai_suggestions.is_empty() {
+        spans.push(separator_span());
+        spans.push(key_hint(":", "ai panel"));
     }
 
     spans
@@ -11271,6 +14485,1319 @@ fn render_search_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, search: &S
     );
 }
 
+#[allow(non_snake_case)]
+fn render_ai_panel_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, panel: &AiPanelState) {
+    let PALETTE = app.theme_colors();
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .title(styled_title("AI Panel", PALETTE.sky))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.sky))
+        .style(Style::default().bg(PALETTE.surface_alt))
+        .padding(Padding::uniform(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(10),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
+    let (provider, model, session_tokens) = ai_session_provider_metadata(app);
+    let state = if app.ai_job.is_some() {
+        "working"
+    } else if !app.ai_suggestions.is_empty() {
+        "review"
+    } else if app.active_ask_ai_profile().is_some() {
+        "ready"
+    } else if app.pending_ai_profile().is_some() {
+        "pending provider"
+    } else if app.ai_profiles.enabled {
+        "not configured"
+    } else {
+        "off"
+    };
+    frame.render_widget(
+        Paragraph::new(vec![
+            ai_session_header_line("AI workspace", state, &provider, &model, &session_tokens, PALETTE),
+            Line::from(Span::styled(
+                "Chat, staged suggestions, provider setup, and future hooks live here; the main map keeps one AI entry point.",
+                Style::default().fg(PALETTE.muted),
+            )),
+        ]),
+        sections[0],
+    );
+
+    let body = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
+        .split(sections[1]);
+
+    let items = app.ai_panel_items();
+    let mut list_state = ListState::default();
+    let mut row_item_indices = Vec::new();
+    let mut last_section = None;
+    let mut list_items = Vec::new();
+    for (index, item) in items.iter().enumerate() {
+        if last_section != Some(item.section) {
+            last_section = Some(item.section);
+            row_item_indices.push(None);
+            list_items.push(ListItem::new(Line::from(Span::styled(
+                item.section.to_ascii_uppercase(),
+                Style::default()
+                    .fg(PALETTE.sky)
+                    .add_modifier(Modifier::BOLD),
+            ))));
+        }
+        row_item_indices.push(Some(index));
+        let title_style = if item.enabled {
+            Style::default()
+                .fg(PALETTE.text)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(PALETTE.muted)
+        };
+        let title = ai_panel_action_key(item.action)
+            .map(|key| format!("[{key}] {}", item.title))
+            .unwrap_or_else(|| item.title.clone());
+        list_items.push(ListItem::new(vec![
+            Line::from(Span::styled(title, title_style)),
+            Line::from(Span::styled(
+                item.subtitle.clone(),
+                Style::default().fg(if item.enabled {
+                    PALETTE.muted
+                } else {
+                    PALETTE.border
+                }),
+            )),
+        ]));
+    }
+    if !items.is_empty() {
+        let selected = panel.selected.min(items.len() - 1);
+        let selected_row = row_item_indices
+            .iter()
+            .position(|index| *index == Some(selected))
+            .unwrap_or(0);
+        list_state.select(Some(selected_row));
+    }
+    frame.render_stateful_widget(
+        List::new(list_items)
+            .block(
+                Block::default()
+                    .title(Line::from(Span::styled(
+                        "Actions",
+                        Style::default()
+                            .fg(PALETTE.sky)
+                            .add_modifier(Modifier::BOLD),
+                    )))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(PALETTE.border))
+                    .style(Style::default().bg(PALETTE.surface)),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(PALETTE.selection)
+                    .fg(PALETTE.selection_text)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        body[0],
+        &mut list_state,
+    );
+
+    let selected = items.get(panel.selected).map(|item| item.action);
+    frame.render_widget(
+        Paragraph::new(ai_panel_preview_lines(app, selected))
+            .block(
+                Block::default()
+                    .title(Line::from(Span::styled(
+                        "Workspace",
+                        Style::default()
+                            .fg(PALETTE.accent)
+                            .add_modifier(Modifier::BOLD),
+                    )))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(PALETTE.border))
+                    .style(Style::default().bg(PALETTE.surface)),
+            )
+            .wrap(Wrap { trim: false }),
+        body[1],
+    );
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            key_hint("↑↓", "choose"),
+            separator_span(),
+            key_hint("Enter", "run"),
+            separator_span(),
+            key_hint("A", "chat"),
+            separator_span(),
+            key_hint("X", "cancel"),
+            separator_span(),
+            key_hint("S", "review"),
+            separator_span(),
+            key_hint("N", "nim"),
+            separator_span(),
+            key_hint("C", "codex"),
+            separator_span(),
+            key_hint("O", "off"),
+            separator_span(),
+            key_hint("Esc", "close"),
+        ]))
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(PALETTE.muted)),
+        sections[2],
+    );
+}
+
+fn ai_panel_preview_lines(app: &TuiApp, selected: Option<AiPanelAction>) -> Vec<Line<'static>> {
+    let palette = active_palette();
+    let mut lines = Vec::new();
+
+    if let Some(job) = &app.ai_job {
+        lines.push(Line::from(vec![
+            Span::styled("working ", Style::default().fg(palette.warn)),
+            Span::styled(ai_job_summary(job), Style::default().fg(palette.text)),
+        ]));
+        lines.push(Line::from(""));
+    }
+
+    if let Some(suggestion) = app.ai_suggestions.first() {
+        lines.push(Line::from(Span::styled(
+            if suggestion.is_conversational_answer() {
+                "Latest chat"
+            } else {
+                "Latest staged edits"
+            },
+            Style::default()
+                .fg(palette.sky)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(vec![
+            Span::styled(
+                suggestion.profile_label.clone(),
+                Style::default().fg(palette.accent),
+            ),
+            Span::raw(" · "),
+            Span::styled(
+                suggestion.target.label.clone(),
+                Style::default().fg(palette.text),
+            ),
+        ]));
+        lines.push(Line::from(Span::styled(
+            compact_ai_question(&suggestion.question),
+            Style::default().fg(palette.muted),
+        )));
+        if let Some(answer) = &suggestion.answer {
+            lines.push(Line::from(""));
+            if answer.is_empty() && app.ai_job.is_some() {
+                lines.push(Line::from(Span::styled(
+                    "Waiting for first tokens...",
+                    Style::default().fg(palette.muted),
+                )));
+            } else {
+                lines.extend(answer.lines().take(7).map(|line| {
+                    Line::from(Span::styled(
+                        line.to_string(),
+                        Style::default().fg(palette.text),
+                    ))
+                }));
+            }
+        } else {
+            for change in suggestion.changes.iter().take(5) {
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        change.operation_label(),
+                        Style::default().fg(palette.accent),
+                    ),
+                    Span::raw("  "),
+                    Span::styled(
+                        ai_change_diff_preview(change),
+                        Style::default().fg(palette.text),
+                    ),
+                ]));
+            }
+        }
+        lines.push(Line::from(""));
+    } else if let Some(entry) = app.ai_history.last() {
+        let suggestion = &entry.suggestion;
+        lines.push(Line::from(Span::styled(
+            "Latest chat history",
+            Style::default()
+                .fg(palette.sky)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(vec![
+            Span::styled(
+                entry.disposition.label(),
+                Style::default().fg(palette.muted),
+            ),
+            Span::raw(" · "),
+            Span::styled(
+                suggestion.profile_label.clone(),
+                Style::default().fg(palette.accent),
+            ),
+            Span::raw(" · "),
+            Span::styled(
+                suggestion.target.label.clone(),
+                Style::default().fg(palette.text),
+            ),
+        ]));
+        lines.push(Line::from(Span::styled(
+            compact_ai_question(&suggestion.question),
+            Style::default().fg(palette.muted),
+        )));
+        if let Some(answer) = &suggestion.answer {
+            lines.push(Line::from(""));
+            lines.extend(answer.lines().take(5).map(|line| {
+                Line::from(Span::styled(
+                    line.to_string(),
+                    Style::default().fg(palette.text),
+                ))
+            }));
+        }
+        lines.push(Line::from(""));
+    }
+
+    let hint = match selected {
+        Some(AiPanelAction::Ask) => {
+            "Chat opens the session surface. Press Enter there to send a message."
+        }
+        Some(AiPanelAction::CancelCurrentAsk) => {
+            "Cancel stops the active response in the TUI and keeps any partial answer in AI Chat."
+        }
+        Some(AiPanelAction::ReviewSuggestions) => {
+            "Review suggestions shows staged map changes only. Checked rows are the ones that can edit the map."
+        }
+        Some(AiPanelAction::TurnOff) => {
+            "Turn off stops AI activity and clears active AI panel state, but keeps provider setup and keys."
+        }
+        Some(AiPanelAction::SetupNvidiaNim) => {
+            "NVIDIA NIM uses an OpenAI-compatible endpoint. The key is stored as a local secret reference."
+        }
+        Some(AiPanelAction::UseNvidiaNim) => {
+            "Select NVIDIA NIM as the active OpenAI-compatible provider for AI Chat."
+        }
+        Some(AiPanelAction::UseCodexLocal) => {
+            "Codex Local uses codex exec in read-only, ephemeral mode for AI Chat."
+        }
+        Some(AiPanelAction::AutomationHooks) => {
+            "Hooks will pair map events with instructions and send outputs into this same review flow."
+        }
+        None => "Choose an AI action.",
+    };
+    lines.push(Line::from(Span::styled(
+        hint,
+        Style::default().fg(palette.muted),
+    )));
+    lines
+}
+
+fn ai_panel_action_key(action: AiPanelAction) -> Option<&'static str> {
+    match action {
+        AiPanelAction::Ask => Some("A"),
+        AiPanelAction::CancelCurrentAsk => Some("X"),
+        AiPanelAction::ReviewSuggestions => Some("S"),
+        AiPanelAction::TurnOff => Some("O"),
+        AiPanelAction::SetupNvidiaNim => Some("N"),
+        AiPanelAction::UseNvidiaNim => Some("P"),
+        AiPanelAction::UseCodexLocal => Some("C"),
+        AiPanelAction::AutomationHooks => Some("U"),
+    }
+}
+
+#[allow(non_snake_case)]
+fn render_ai_review_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review: &AiReviewState) {
+    if review.mode == AiReviewMode::History {
+        render_ai_chat_overlay(frame, area, app, review);
+        return;
+    }
+
+    let PALETTE = app.theme_colors();
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .title(styled_title(review.mode.title(), PALETTE.sky))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.sky))
+        .style(Style::default().bg(PALETTE.surface_alt))
+        .padding(Padding::uniform(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(7),
+            Constraint::Min(8),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
+    let item_count = app.ai_review_item_count_for(review.mode);
+    let Some(item) = app.ai_review_item_for(review.mode, review.item_index) else {
+        let empty = match review.mode {
+            AiReviewMode::Suggestions => "No staged map-change suggestions to review.",
+            AiReviewMode::History => "No AI Chat messages in this TUI session.",
+        };
+        frame.render_widget(
+            Paragraph::new(empty)
+                .style(Style::default().fg(PALETTE.muted))
+                .alignment(Alignment::Center),
+            sections[1],
+        );
+        return;
+    };
+    let suggestion = item.suggestion();
+    let streaming = app.ai_review_item_is_streaming(item);
+    let item_position = review.item_index.min(item_count.saturating_sub(1)) + 1;
+    let item_state = if streaming {
+        "streaming".to_string()
+    } else {
+        item.disposition()
+            .map(|disposition| format!("history · {}", disposition.label()))
+            .unwrap_or_else(|| "staged".to_string())
+    };
+
+    let header_top = Rect {
+        x: sections[0].x,
+        y: sections[0].y,
+        width: sections[0].width,
+        height: 1.min(sections[0].height),
+    };
+    render_split_line(
+        frame,
+        header_top,
+        vec![
+            Span::styled(
+                suggestion.profile_label.clone(),
+                Style::default()
+                    .fg(PALETTE.text)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            separator_span(),
+            Span::styled(
+                suggestion.target.label.clone(),
+                Style::default()
+                    .fg(PALETTE.text)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ],
+        ai_review_counter_spans(
+            &item_state,
+            item_position,
+            item_count,
+            streaming,
+            item.editable(),
+            PALETTE,
+        ),
+    );
+
+    let mut header_lines = vec![
+        ai_prompt_provenance_line(&suggestion.question, PALETTE),
+        ai_suggestion_provenance_line(suggestion, PALETTE),
+    ];
+    if let Some(reason) = suggestion
+        .source
+        .as_ref()
+        .and_then(|source| source.reason.as_deref())
+    {
+        header_lines.push(Line::from(Span::styled(
+            reason.to_string(),
+            Style::default()
+                .fg(PALETTE.sky)
+                .add_modifier(Modifier::ITALIC),
+        )));
+    }
+    if !suggestion.changes.is_empty() {
+        header_lines.push(ai_suggestion_placement_summary_line(suggestion, PALETTE));
+    }
+    header_lines.push(Line::from(Span::styled(
+        if suggestion.is_conversational_answer() {
+            if streaming {
+                "Streaming answer. Text appears here as the provider sends it.".to_string()
+            } else if item.editable() {
+                "Answer only. Nothing here will change the map.".to_string()
+            } else {
+                "Past conversational answer from this TUI session. Read-only.".to_string()
+            }
+        } else if item.editable() {
+            format!(
+                "{} staged change(s). Checked rows apply; disabled rows are review-only in this slice.",
+                suggestion.changes.len()
+            )
+        } else {
+            format!(
+                "{} past change row(s). This history item is read-only.",
+                suggestion.changes.len()
+            )
+        },
+        Style::default().fg(PALETTE.sky),
+    )));
+
+    if sections[0].height > 1 {
+        frame.render_widget(
+            Paragraph::new(header_lines),
+            Rect {
+                x: sections[0].x,
+                y: sections[0].y + 1,
+                width: sections[0].width,
+                height: sections[0].height.saturating_sub(1),
+            },
+        );
+    }
+
+    if let Some(answer) = &suggestion.answer
+        && suggestion.changes.is_empty()
+    {
+        let mut lines = vec![
+            Line::from(Span::styled(
+                if streaming {
+                    "Streaming answer"
+                } else {
+                    "Conversational answer"
+                },
+                Style::default()
+                    .fg(PALETTE.sky)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                if streaming {
+                    "Keep AI Chat open to watch text arrive. It will not be inserted into the map."
+                } else {
+                    "This stays in AI Chat. It will not be inserted into the map."
+                },
+                Style::default().fg(PALETTE.muted),
+            )),
+            Line::from(""),
+        ];
+        if answer.is_empty() {
+            lines.push(Line::from(Span::styled(
+                "Waiting for first tokens...",
+                Style::default().fg(PALETTE.muted),
+            )));
+        } else {
+            lines.extend(answer.lines().map(|line| {
+                Line::from(Span::styled(
+                    line.to_string(),
+                    Style::default().fg(PALETTE.text),
+                ))
+            }));
+        }
+        frame.render_widget(
+            Paragraph::new(lines)
+                .style(Style::default().fg(PALETTE.text))
+                .wrap(Wrap { trim: false })
+                .scroll((review.scroll, 0)),
+            sections[1],
+        );
+        let mut footer = vec![
+            key_hint("↑↓", "scroll"),
+            separator_span(),
+            key_hint("PgUp/PgDn", "jump"),
+            separator_span(),
+            key_hint("Tab/]", "next"),
+            separator_span(),
+            key_hint("[", "prev"),
+        ];
+        if item.editable() && !streaming {
+            footer.push(separator_span());
+            footer.push(key_hint("D", "dismiss"));
+        }
+        footer.push(separator_span());
+        footer.push(key_hint("Esc", "close"));
+        frame.render_widget(
+            Paragraph::new(Line::from(footer))
+                .alignment(Alignment::Center)
+                .style(Style::default().fg(PALETTE.muted)),
+            sections[2],
+        );
+        return;
+    }
+
+    let mut rows = Vec::new();
+    for (index, change) in suggestion.changes.iter().enumerate() {
+        let selected = item.editable() && !streaming && index == review.selected;
+        let supported = ai_change_apply_supported(change);
+        let checked = item.editable() && !streaming && review.checked.contains(&index);
+        let selector = if selected { ">" } else { " " };
+        let checkbox = if !item.editable() || streaming {
+            "[-]"
+        } else if !supported {
+            "[-]"
+        } else if checked {
+            "[x]"
+        } else {
+            "[ ]"
+        };
+        let op_style = if supported && item.editable() && !streaming {
+            Style::default()
+                .fg(PALETTE.text)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(PALETTE.muted)
+        };
+        rows.push(Line::from(vec![
+            Span::styled(
+                selector.to_string(),
+                if selected {
+                    Style::default()
+                        .fg(PALETTE.selection_text)
+                        .bg(PALETTE.selection)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(PALETTE.muted)
+                },
+            ),
+            Span::raw(" "),
+            Span::styled(checkbox.to_string(), Style::default().fg(PALETTE.accent)),
+            Span::raw(" "),
+            Span::styled(change.operation_label().to_ascii_uppercase(), op_style),
+            Span::raw("  "),
+            Span::styled(
+                ai_change_placement_label(suggestion, change),
+                Style::default().fg(PALETTE.sky),
+            ),
+        ]));
+        rows.push(Line::from(vec![
+            Span::raw("    "),
+            Span::styled(
+                ai_change_diff_preview(change),
+                Style::default().fg(if supported && item.editable() && !streaming {
+                    PALETTE.muted
+                } else {
+                    PALETTE.border
+                }),
+            ),
+        ]));
+        if streaming {
+            rows.push(Line::from(Span::styled(
+                "    Streaming item is read-only until the response finishes.",
+                Style::default().fg(PALETTE.border),
+            )));
+        } else if !item.editable() {
+            rows.push(Line::from(Span::styled(
+                "    Read-only session history.",
+                Style::default().fg(PALETTE.border),
+            )));
+        } else if !supported {
+            rows.push(Line::from(Span::styled(
+                "    Review-only until update/remove patch application is wired.",
+                Style::default().fg(PALETTE.warn),
+            )));
+        }
+    }
+
+    let detail_area = if !suggestion.changes.is_empty() && sections[1].height >= 10 {
+        let body = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(5), Constraint::Length(5)])
+            .split(sections[1]);
+        Some(body[1])
+    } else {
+        None
+    };
+    let rows_area = if detail_area.is_some() {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(5), Constraint::Length(5)])
+            .split(sections[1])[0]
+    } else {
+        sections[1]
+    };
+
+    frame.render_widget(
+        Paragraph::new(rows)
+            .style(Style::default().fg(PALETTE.text))
+            .wrap(Wrap { trim: false })
+            .scroll((review.scroll, 0)),
+        rows_area,
+    );
+    if let Some(detail_area) = detail_area
+        && let Some(change) = suggestion.changes.get(review.selected)
+    {
+        let supported = ai_change_apply_supported(change);
+        let checked =
+            item.editable() && !streaming && supported && review.checked.contains(&review.selected);
+        frame.render_widget(
+            Paragraph::new(ai_selected_change_detail_lines(
+                suggestion,
+                change,
+                supported,
+                checked,
+                streaming,
+                item.editable(),
+                PALETTE,
+            ))
+            .block(
+                Block::default()
+                    .title(Line::from(Span::styled(
+                        "Selected Change",
+                        Style::default()
+                            .fg(PALETTE.accent)
+                            .add_modifier(Modifier::BOLD),
+                    )))
+                    .borders(Borders::TOP)
+                    .border_style(Style::default().fg(PALETTE.border))
+                    .style(Style::default().bg(PALETTE.surface_alt)),
+            )
+            .wrap(Wrap { trim: false }),
+            detail_area,
+        );
+    }
+
+    let mut footer = vec![
+        key_hint("Tab/]", "next"),
+        separator_span(),
+        key_hint("[", "prev"),
+        separator_span(),
+        key_hint("PgUp/PgDn", "scroll"),
+    ];
+    if item.editable() && !streaming {
+        footer.extend([
+            separator_span(),
+            key_hint("↑↓", "choose"),
+            separator_span(),
+            key_hint("Space", "toggle"),
+            separator_span(),
+            key_hint("A", "apply"),
+            separator_span(),
+            key_hint("D", "dismiss"),
+        ]);
+    } else {
+        footer.extend([separator_span(), key_hint("↑↓", "scroll")]);
+    }
+    footer.extend([separator_span(), key_hint("Esc", "close")]);
+    frame.render_widget(
+        Paragraph::new(Line::from(footer))
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(PALETTE.muted)),
+        sections[2],
+    );
+}
+
+#[allow(non_snake_case)]
+fn render_ai_chat_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review: &AiReviewState) {
+    let PALETTE = app.theme_colors();
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .title(styled_title("AI Chat", PALETTE.sky))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PALETTE.sky))
+        .style(Style::default().bg(PALETTE.surface_alt))
+        .padding(Padding::uniform(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(8),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
+    let items = app.ai_review_items(AiReviewMode::History);
+    let selected_index = if items.is_empty() {
+        0
+    } else {
+        review.item_index.min(items.len().saturating_sub(1))
+    };
+    let selected_item = items.get(selected_index).copied();
+    let selected_latest = !items.is_empty() && selected_index + 1 == items.len();
+    let new_text_below = selected_item
+        .is_some_and(|item| app.ai_review_item_is_streaming(item) && selected_latest)
+        && !review.follow_latest;
+    let viewed_target_label = selected_item
+        .map(|item| item.suggestion().target.label.clone())
+        .unwrap_or_else(|| ai_current_focus_target_label(app));
+
+    let (provider, model, session_tokens) = ai_session_provider_metadata(app);
+    let state = if app.ai_job.is_some() {
+        "streaming"
+    } else if app.ai_profiles.enabled && app.active_ask_ai_profile().is_some() {
+        "ready"
+    } else if app.pending_ai_profile().is_some() {
+        "pending provider"
+    } else {
+        "not configured"
+    };
+    frame.render_widget(
+        Paragraph::new(ai_session_header_line(
+            "Chat session",
+            state,
+            &provider,
+            &model,
+            &session_tokens,
+            PALETTE,
+        )),
+        Rect {
+            x: sections[0].x,
+            y: sections[0].y,
+            width: sections[0].width,
+            height: 1.min(sections[0].height),
+        },
+    );
+    if sections[0].height > 1 {
+        let label_style = Style::default()
+            .fg(PALETTE.muted)
+            .add_modifier(Modifier::ITALIC);
+        render_split_line(
+            frame,
+            Rect {
+                x: sections[0].x,
+                y: sections[0].y + 1,
+                width: sections[0].width,
+                height: 1,
+            },
+            vec![
+                Span::styled("Chat target ", label_style),
+                Span::styled(
+                    viewed_target_label.clone(),
+                    Style::default()
+                        .fg(PALETTE.text)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ],
+            ai_chat_turn_indicator_spans(items.len(), selected_index, PALETTE),
+        );
+    }
+    if sections[0].height > 2 {
+        let label_style = Style::default()
+            .fg(PALETTE.muted)
+            .add_modifier(Modifier::ITALIC);
+        let right_spans = if new_text_below {
+            vec![
+                Span::styled(
+                    "New text below",
+                    Style::default()
+                        .fg(PALETTE.warn)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                separator_span(),
+                Span::styled("End to follow", Style::default().fg(PALETTE.muted)),
+            ]
+        } else {
+            Vec::new()
+        };
+        render_split_line(
+            frame,
+            Rect {
+                x: sections[0].x,
+                y: sections[0].y + 2,
+                width: sections[0].width,
+                height: 1,
+            },
+            vec![
+                Span::styled("Input ", label_style),
+                Span::styled(ai_chat_input_summary(), Style::default().fg(PALETTE.muted)),
+            ],
+            right_spans,
+        );
+    }
+
+    if items.is_empty() {
+        let mut lines = vec![
+            Line::from(Span::styled(
+                "No messages yet.",
+                Style::default()
+                    .fg(PALETTE.sky)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(vec![
+                Span::styled(
+                    "Target ",
+                    Style::default()
+                        .fg(PALETTE.muted)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+                Span::styled(
+                    viewed_target_label,
+                    Style::default()
+                        .fg(PALETTE.text)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "Input ",
+                    Style::default()
+                        .fg(PALETTE.muted)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+                Span::styled(ai_chat_input_summary(), Style::default().fg(PALETTE.muted)),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Press Enter to ask a question, or press 4 for reviewable map-edit suggestions.",
+                Style::default().fg(PALETTE.text),
+            )),
+            ai_quick_prompt_line(),
+        ];
+        if app.active_ask_ai_profile().is_none() {
+            lines.push(Line::from(Span::styled(
+                "Choose NVIDIA NIM or Codex Local in the AI Panel before sending.",
+                Style::default().fg(PALETTE.warn),
+            )));
+        }
+        frame.render_widget(
+            Paragraph::new(lines)
+                .style(Style::default().fg(PALETTE.text))
+                .wrap(Wrap { trim: false }),
+            sections[1],
+        );
+    } else {
+        let mut lines = Vec::new();
+        for (index, item) in items.iter().copied().enumerate() {
+            let suggestion = item.suggestion();
+            let selected = index == selected_index;
+            let streaming = app.ai_review_item_is_streaming(item);
+            let disposition = item
+                .disposition()
+                .map(|disposition| format!(" · {}", disposition.label()))
+                .unwrap_or_default();
+            let marker = if selected { ">" } else { " " };
+
+            lines.push(Line::from(vec![
+                Span::styled(
+                    marker,
+                    if selected {
+                        Style::default()
+                            .fg(PALETTE.selection_text)
+                            .bg(PALETTE.selection)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(PALETTE.muted)
+                    },
+                ),
+                Span::raw(" "),
+                Span::styled(
+                    format!("Turn {}", index + 1),
+                    Style::default().fg(PALETTE.muted),
+                ),
+                separator_span(),
+                Span::styled(
+                    "You",
+                    Style::default()
+                        .fg(PALETTE.text)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                separator_span(),
+                Span::styled(
+                    suggestion.target.label.clone(),
+                    Style::default()
+                        .fg(PALETTE.text)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+            for question_line in suggestion.question.lines() {
+                lines.push(Line::from(Span::styled(
+                    format!("  {question_line}"),
+                    Style::default().fg(PALETTE.text),
+                )));
+            }
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(
+                    if streaming {
+                        "AI · streaming".to_string()
+                    } else {
+                        format!("AI · {}{disposition}", suggestion.profile_label)
+                    },
+                    Style::default()
+                        .fg(PALETTE.sky)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+            match suggestion.answer.as_deref() {
+                Some(answer) if !answer.is_empty() => {
+                    for answer_line in answer.lines() {
+                        lines.push(Line::from(Span::styled(
+                            format!("  {answer_line}"),
+                            Style::default().fg(PALETTE.text),
+                        )));
+                    }
+                }
+                _ if streaming => lines.push(Line::from(Span::styled(
+                    "  Waiting for first tokens...",
+                    Style::default().fg(PALETTE.muted),
+                ))),
+                _ => lines.push(Line::from(Span::styled(
+                    "  No answer text.",
+                    Style::default().fg(PALETTE.muted),
+                ))),
+            }
+            lines.push(Line::from(""));
+        }
+
+        let scroll = if review.follow_latest && selected_latest {
+            let visible_height = sections[1].height as usize;
+            lines.len().saturating_sub(visible_height) as u16
+        } else {
+            review.scroll
+        };
+        frame.render_widget(
+            Paragraph::new(lines)
+                .style(Style::default().fg(PALETTE.text))
+                .wrap(Wrap { trim: false })
+                .scroll((scroll, 0)),
+            sections[1],
+        );
+    }
+
+    let mut footer = vec![
+        key_hint("Enter/A", "message"),
+        separator_span(),
+        key_hint("1-4", "prompts"),
+        separator_span(),
+        key_hint("C", "clear"),
+        separator_span(),
+        key_hint("↑↓", "scroll"),
+        separator_span(),
+        key_hint("PgUp/PgDn", "jump"),
+        separator_span(),
+        ai_turn_key_hint(),
+        separator_span(),
+        key_hint("Home/End", "first/latest"),
+    ];
+    if app.ai_job.is_some() {
+        footer.extend([separator_span(), key_hint("X", "cancel")]);
+    }
+    let staged_suggestions = app.ai_active_suggestion_count();
+    if staged_suggestions > 0 {
+        footer.extend([
+            separator_span(),
+            key_hint("S", "review"),
+            separator_span(),
+            Span::styled(
+                format!("{staged_suggestions} staged"),
+                Style::default()
+                    .fg(PALETTE.sky)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]);
+    }
+    if selected_item.is_some_and(|item| {
+        item.suggestion().is_conversational_answer() && !app.ai_review_item_is_streaming(item)
+    }) {
+        footer.extend([separator_span(), key_hint("V", "stage edits")]);
+    }
+    if new_text_below {
+        footer.extend([
+            separator_span(),
+            Span::styled(
+                "new text below",
+                Style::default()
+                    .fg(PALETTE.warn)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]);
+    }
+    footer.extend([separator_span(), key_hint("Esc", "close")]);
+    frame.render_widget(
+        Paragraph::new(Line::from(footer))
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(PALETTE.muted)),
+        sections[2],
+    );
+}
+
+fn ai_prompt_provenance_line(question: &str, palette: Palette) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(
+            " Prompt ",
+            Style::default()
+                .fg(palette.selection_text)
+                .bg(palette.selection)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" > ", Style::default().fg(palette.sky)),
+        Span::styled(
+            format!("\"{}\"", compact_ai_question(question)),
+            Style::default()
+                .fg(palette.text)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ])
+}
+
+fn ai_suggestion_placement_summary_line(
+    suggestion: &AiSuggestion,
+    palette: Palette,
+) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(
+            "Placement",
+            Style::default()
+                .fg(palette.accent)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" > ", Style::default().fg(palette.sky)),
+        Span::styled(
+            ai_suggestion_placement_summary(suggestion),
+            Style::default().fg(palette.text),
+        ),
+    ])
+}
+
+fn ai_suggestion_placement_summary(suggestion: &AiSuggestion) -> String {
+    let mut placements = Vec::new();
+    for change in &suggestion.changes {
+        placements.push(ai_change_target_name(suggestion, change));
+    }
+    placements.retain(|placement| !placement.trim().is_empty());
+    placements.sort();
+    placements.dedup();
+
+    let target_summary = summarize_ai_target_labels(&placements, 3);
+    let change_count = suggestion.changes.len();
+    let target_count = placements.len();
+    if target_count <= 1 {
+        format!("{change_count} edit(s) under {target_summary}")
+    } else {
+        format!("{change_count} edit(s) across {target_count} targets: {target_summary}")
+    }
+}
+
+fn summarize_ai_target_labels(labels: &[String], visible_count: usize) -> String {
+    if labels.is_empty() {
+        return "the selected branch".to_string();
+    }
+    let mut summary = labels
+        .iter()
+        .take(visible_count)
+        .map(|label| truncate_trailing(label, 34))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let remaining = labels.len().saturating_sub(visible_count);
+    if remaining > 0 {
+        if !summary.is_empty() {
+            summary.push_str(", ");
+        }
+        summary.push_str(&format!("+{remaining} more"));
+    }
+    truncate_trailing(&summary, 118)
+}
+
+fn ai_change_placement_label(suggestion: &AiSuggestion, change: &AiSuggestedChange) -> String {
+    let target = ai_change_target_name(suggestion, change);
+    match change {
+        AiSuggestedChange::AddChild { .. } => format!("Place under {target}"),
+        AiSuggestedChange::UpdateNode { .. } => format!("Update {target}"),
+        AiSuggestedChange::RemoveNode { .. } => format!("Remove {target}"),
+    }
+}
+
+fn ai_change_target_name(suggestion: &AiSuggestion, change: &AiSuggestedChange) -> String {
+    match change {
+        AiSuggestedChange::AddChild { target, .. } => target
+            .as_ref()
+            .map(ai_target_display_label)
+            .unwrap_or_else(|| ai_target_display_label(&suggestion.target)),
+        AiSuggestedChange::UpdateNode { target, .. } | AiSuggestedChange::RemoveNode { target } => {
+            ai_target_display_label(target)
+        }
+    }
+}
+
+fn ai_target_display_label(target: &AiSuggestionTarget) -> String {
+    let label = target.label.trim();
+    if !label.is_empty() {
+        return label.to_string();
+    }
+    if let Some(id) = target
+        .id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    {
+        return id.to_string();
+    }
+    if !target.path.is_empty() {
+        return format!(
+            "path {}",
+            target
+                .path
+                .iter()
+                .map(|index| index.to_string())
+                .collect::<Vec<_>>()
+                .join("/")
+        );
+    }
+    "the selected branch".to_string()
+}
+
+fn ai_change_diff_preview(change: &AiSuggestedChange) -> String {
+    match change {
+        AiSuggestedChange::AddChild {
+            fragment, detail, ..
+        } => {
+            let detail = truncate_trailing(detail.lines().next().unwrap_or(""), 64);
+            if detail.is_empty() {
+                format!("+ {}", truncate_trailing(fragment, 82))
+            } else {
+                format!("+ {} · {}", truncate_trailing(fragment, 60), detail)
+            }
+        }
+        AiSuggestedChange::UpdateNode {
+            target,
+            fragment,
+            detail,
+        } => {
+            let mut parts = Vec::new();
+            if let Some(fragment) = fragment {
+                parts.push(format!(
+                    "{} -> {}",
+                    truncate_trailing(&target.label, 34),
+                    truncate_trailing(fragment, 42)
+                ));
+            }
+            if let Some(detail) = detail {
+                parts.push(format!("detail -> {}", truncate_trailing(detail, 42)));
+            }
+            format!("~ {}", parts.join("; "))
+        }
+        AiSuggestedChange::RemoveNode { target } => {
+            format!("- {}", truncate_trailing(&target.label, 82))
+        }
+    }
+}
+
+fn ai_selected_change_detail_lines(
+    suggestion: &AiSuggestion,
+    change: &AiSuggestedChange,
+    supported: bool,
+    checked: bool,
+    streaming: bool,
+    editable: bool,
+    palette: Palette,
+) -> Vec<Line<'static>> {
+    let status = if streaming {
+        "waiting for response to finish"
+    } else if !editable {
+        "read-only history"
+    } else if !supported {
+        "review-only in this slice"
+    } else if checked {
+        "checked; will apply"
+    } else {
+        "unchecked; will not apply"
+    };
+    let status_color = if supported && editable && !streaming {
+        palette.sky
+    } else {
+        palette.warn
+    };
+    let mut lines = vec![Line::from(vec![
+        Span::styled(
+            change.operation_label().to_ascii_uppercase(),
+            Style::default()
+                .fg(palette.text)
+                .add_modifier(Modifier::BOLD),
+        ),
+        separator_span(),
+        Span::styled(
+            ai_change_placement_label(suggestion, change),
+            Style::default().fg(palette.sky),
+        ),
+        separator_span(),
+        Span::styled(status, Style::default().fg(status_color)),
+    ])];
+    match change {
+        AiSuggestedChange::AddChild {
+            fragment, detail, ..
+        } => {
+            lines.push(ai_labeled_detail_line("Fragment", fragment, palette));
+            if !detail.trim().is_empty() {
+                lines.push(ai_labeled_detail_line("Detail", detail, palette));
+            }
+        }
+        AiSuggestedChange::UpdateNode {
+            target,
+            fragment,
+            detail,
+        } => {
+            lines.push(ai_labeled_detail_line("Target", &target.label, palette));
+            if let Some(fragment) = fragment {
+                lines.push(ai_labeled_detail_line("Fragment", fragment, palette));
+            }
+            if let Some(detail) = detail {
+                lines.push(ai_labeled_detail_line("Detail", detail, palette));
+            }
+        }
+        AiSuggestedChange::RemoveNode { target } => {
+            lines.push(ai_labeled_detail_line("Target", &target.label, palette));
+        }
+    }
+    lines
+}
+
+fn ai_labeled_detail_line(label: &str, value: &str, palette: Palette) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(
+            format!("{label} "),
+            Style::default()
+                .fg(palette.muted)
+                .add_modifier(Modifier::ITALIC),
+        ),
+        Span::styled(value.to_string(), Style::default().fg(palette.text)),
+    ])
+}
+
+fn ai_suggestion_provenance_line(suggestion: &AiSuggestion, palette: Palette) -> Line<'static> {
+    let Some(source) = &suggestion.source else {
+        return Line::from(Span::styled(
+            "Source: AI Chat session",
+            Style::default().fg(palette.border),
+        ));
+    };
+    let mut spans = Vec::new();
+    spans.push(Span::styled(
+        "Source ",
+        Style::default()
+            .fg(palette.muted)
+            .add_modifier(Modifier::ITALIC),
+    ));
+    if let Some(turn) = source.chat_turn {
+        spans.push(Span::styled(
+            format!("turn {turn}"),
+            Style::default().fg(palette.text),
+        ));
+    } else {
+        spans.push(Span::styled("AI Chat", Style::default().fg(palette.text)));
+    }
+    if let Some(model) = &source.model {
+        spans.push(separator_span());
+        spans.push(Span::styled(
+            "Model ",
+            Style::default()
+                .fg(palette.muted)
+                .add_modifier(Modifier::ITALIC),
+        ));
+        spans.push(Span::styled(
+            truncate_trailing(model, 48),
+            Style::default().fg(palette.metadata),
+        ));
+    }
+    if let Some(tokens) = source.token_estimate {
+        spans.push(separator_span());
+        spans.push(Span::styled(
+            "Tokens ",
+            Style::default()
+                .fg(palette.muted)
+                .add_modifier(Modifier::ITALIC),
+        ));
+        spans.push(Span::styled(
+            format_ai_token_estimate(tokens),
+            Style::default().fg(palette.sky),
+        ));
+    }
+    Line::from(spans)
+}
+
 fn render_table_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, table: &TableOverlayState) {
     let palette = app.theme_colors();
     frame.render_widget(Clear, area);
@@ -12529,6 +17056,16 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
                     .to_string()
             }
         }
+        HelpTopic::Ai => app
+            .active_ask_ai_profile()
+            .map(|profile| format!("active AI Chat provider: {}", profile.label))
+            .or_else(|| {
+                app.pending_ai_profile()
+                    .map(|profile| format!("{} configured; AI Chat support pending", profile.label))
+            })
+            .unwrap_or_else(|| {
+                "no callable AI profile configured yet; open AI Panel from the palette".to_string()
+            }),
         HelpTopic::Navigation => {
             let breadcrumb = if app.editor.breadcrumb().is_empty() {
                 "(no focus)".to_string()
@@ -13581,7 +18118,8 @@ fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState, ap
                 .style(Style::default().bg(PALETTE.surface)),
         );
         frame.render_widget(
-            Paragraph::new("Enter saves. Esc cancels.").style(Style::default().fg(PALETTE.muted)),
+            Paragraph::new(prompt_action_hint(prompt.mode))
+                .style(Style::default().fg(PALETTE.muted)),
             chunks[1],
         );
         return;
@@ -13616,7 +18154,7 @@ fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState, ap
         header_chunks[0],
     );
     frame.render_widget(
-        Paragraph::new("Enter saves  ·  Esc cancels")
+        Paragraph::new(prompt_action_hint(prompt.mode))
             .alignment(Alignment::Right)
             .style(Style::default().fg(PALETTE.sky)),
         header_chunks[1],
@@ -13636,7 +18174,7 @@ fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState, ap
 
     render_prompt_feedback(frame, chunks[2], &assist, assist_color, PALETTE);
 
-    if let Some(footer) = prompt_footer_text(prompt.mode) {
+    if let Some(footer) = prompt_footer_text(app, prompt.mode) {
         frame.render_widget(
             Paragraph::new(footer)
                 .style(Style::default().fg(PALETTE.muted))
@@ -13805,16 +18343,29 @@ fn render_prompt_input(
         return;
     }
 
-    let (visible_value, cursor_offset) =
-        single_line_view(&prompt.value, prompt.cursor, input_inner.width as usize);
-    frame.render_widget(
-        Paragraph::new(highlight_prompt_input(&visible_value, prompt.mode, palette))
-            .wrap(Wrap { trim: false }),
-        input_inner,
-    );
+    let (visible_value, cursor_offset) = if prompt.mode.is_secret() {
+        let masked_value = mask_prompt_value(&prompt.value);
+        let masked_cursor = prompt.value[..prompt.cursor].chars().count();
+        single_line_view(&masked_value, masked_cursor, input_inner.width as usize)
+    } else {
+        single_line_view(&prompt.value, prompt.cursor, input_inner.width as usize)
+    };
+    let line = if prompt.mode.is_secret() {
+        Line::from(Span::styled(
+            visible_value,
+            Style::default().fg(palette.text),
+        ))
+    } else {
+        highlight_prompt_input(&visible_value, prompt.mode, palette)
+    };
+    frame.render_widget(Paragraph::new(line).wrap(Wrap { trim: false }), input_inner);
     if input_inner.width > 0 && input_inner.height > 0 {
         frame.set_cursor_position((input_inner.x + cursor_offset as u16, input_inner.y));
     }
+}
+
+fn mask_prompt_value(value: &str) -> String {
+    value.chars().map(|_| '*').collect()
 }
 
 fn highlight_prompt_input(value: &str, mode: PromptMode, palette: Palette) -> Line<'static> {
@@ -13885,6 +18436,8 @@ fn prompt_token_kind(token: &str, mode: PromptMode) -> PromptTokenKind {
         }
         PromptMode::EditDetail => PromptTokenKind::Text,
         PromptMode::AttachFile => PromptTokenKind::Text,
+        PromptMode::AiAskCurrentBranch => PromptTokenKind::Text,
+        PromptMode::NvidiaNimApiKey => PromptTokenKind::Text,
         PromptMode::OpenId => PromptTokenKind::Id,
         PromptMode::SaveView | PromptMode::SaveCheckpoint => PromptTokenKind::Text,
     }
@@ -13937,6 +18490,8 @@ fn prompt_input_title(mode: PromptMode) -> &'static str {
         }
         PromptMode::EditDetail => " Details ",
         PromptMode::AttachFile => " File or URL ",
+        PromptMode::AiAskCurrentBranch => " Message ",
+        PromptMode::NvidiaNimApiKey => " API key ",
         PromptMode::OpenId => " Node id ",
         PromptMode::SaveView => " View name ",
         PromptMode::SaveCheckpoint => " Checkpoint name ",
@@ -13952,23 +18507,46 @@ fn prompt_feedback_label(tone: PromptAssistTone) -> &'static str {
     }
 }
 
-fn prompt_footer_text(mode: PromptMode) -> Option<&'static str> {
+fn prompt_action_hint(mode: PromptMode) -> &'static str {
+    match mode {
+        PromptMode::AiAskCurrentBranch => "Enter sends  ·  Esc returns",
+        PromptMode::NvidiaNimApiKey => "Enter stores  ·  Esc cancels",
+        _ => "Enter saves  ·  Esc cancels",
+    }
+}
+
+fn prompt_footer_text(app: &TuiApp, mode: PromptMode) -> Option<String> {
     match mode {
         PromptMode::AddChild | PromptMode::AddSibling | PromptMode::AddRoot | PromptMode::Edit => {
             Some(
-                "Single-line node syntax: Label #tag @key:value [id:path] [[target]]. ↑/↓ jumps start/end; Alt+←/→ jumps words; Alt+Backspace deletes a word.",
+                "Single-line node syntax: Label #tag @key:value [id:path] [[target]]. ↑/↓ jumps start/end; Alt+←/→ jumps words; Alt+Backspace deletes a word."
+                    .to_string(),
             )
         }
         PromptMode::EditDetail => Some(
-            "Details are stored below the node as | ... lines. ↑/↓ moves lines; Alt+←/→ jumps words; Ctrl+K deletes the current line.",
+            "Details are stored below the node as | ... lines. ↑/↓ moves lines; Alt+←/→ jumps words; Ctrl+K deletes the current line."
+                .to_string(),
         ),
         PromptMode::AttachFile => {
-            Some("Enter a local path, URL, or full Markdown link like [brief](docs/brief.md).")
+            Some(
+                "Enter a local path, URL, or full Markdown link like [brief](docs/brief.md)."
+                    .to_string(),
+            )
         }
-        PromptMode::OpenId => Some("Ids come from [id:...] tokens on node lines."),
-        PromptMode::SaveView => Some("Saves the current active filter under a reusable name."),
+        PromptMode::AiAskCurrentBranch => Some(format!(
+            "Enter sends to '{}'. Esc returns to AI Chat. Answers stream into chat; reviewable edits appear in Review Suggestions.",
+            ai_current_focus_target_label(app)
+        )),
+        PromptMode::NvidiaNimApiKey => Some(
+            "Get a key at https://build.nvidia.com/settings/api-keys. Input is masked; the profile stores only a secret reference."
+                .to_string(),
+        ),
+        PromptMode::OpenId => Some("Ids come from [id:...] tokens on node lines.".to_string()),
+        PromptMode::SaveView => {
+            Some("Saves the current active filter under a reusable name.".to_string())
+        }
         PromptMode::SaveCheckpoint => {
-            Some("Stores a local snapshot of the current workspace state.")
+            Some("Stores a local snapshot of the current workspace state.".to_string())
         }
     }
 }
@@ -13994,6 +18572,10 @@ fn prompt_assist(app: &TuiApp, prompt: &PromptState) -> PromptAssist {
         }
         PromptMode::EditDetail => prompt_detail_assist(app, prompt.value.as_str()),
         PromptMode::AttachFile => prompt_attach_file_assist(app, prompt.value.as_str()),
+        PromptMode::AiAskCurrentBranch => {
+            prompt_ai_ask_current_branch_assist(app, prompt.value.as_str())
+        }
+        PromptMode::NvidiaNimApiKey => prompt_nvidia_nim_api_key_assist(prompt.value.as_str()),
         PromptMode::OpenId => prompt_open_id_assist(app, prompt.value.trim()),
         PromptMode::SaveView => {
             if let Some(query) = app.current_search_query_for_save() {
@@ -14022,6 +18604,130 @@ fn prompt_assist(app: &TuiApp, prompt: &PromptState) -> PromptAssist {
             ],
         },
     }
+}
+
+fn prompt_ai_ask_current_branch_assist(app: &TuiApp, value: &str) -> PromptAssist {
+    let trimmed = value.trim();
+    let Some(profile) = app.active_ask_ai_profile() else {
+        if let Some(profile) = app.pending_ai_profile() {
+            return PromptAssist {
+                tone: PromptAssistTone::Warning,
+                lines: vec![
+                    format!(
+                        "{} is configured, but AI Chat cannot call it yet.",
+                        profile.label
+                    ),
+                    "Use NVIDIA NIM or Codex Local from the AI Panel for AI Chat.".to_string(),
+                ],
+            };
+        }
+        return PromptAssist {
+            tone: PromptAssistTone::Warning,
+            lines: vec![
+                "No callable AI profile is configured yet.".to_string(),
+                "Open AI: Open Panel and choose NVIDIA NIM or Codex Local.".to_string(),
+            ],
+        };
+    };
+
+    let reply_context = ai_chat_reply_context(app);
+    let message_target = ai_current_focus_target_label(app);
+    let (_, model, _) = ai_session_provider_metadata(app);
+    let edit_requested = ai_chat_explicitly_requests_map_edits(trimmed);
+    let edit_mode_hint = if edit_requested {
+        "\"Suggest\" edit mode detected. Reviewable map edits will stage in Review Suggestions if the model returns valid rows."
+    } else {
+        "Ordinary questions stay in AI Chat. To create Review Suggestions, ask to suggest new/missing items or map edits."
+    };
+    if let Some(job) = &app.ai_job {
+        if trimmed.is_empty() {
+            return PromptAssist {
+                tone: PromptAssistTone::Warning,
+                lines: vec![
+                    reply_context,
+                    format!("AI is already responding: {}.", ai_job_summary(job)),
+                    "Type a new message and press Enter to cancel that response and continue."
+                        .to_string(),
+                    "Esc closes this composer and leaves the current response running.".to_string(),
+                ],
+            };
+        }
+        return PromptAssist {
+            tone: PromptAssistTone::Warning,
+            lines: vec![
+                reply_context,
+                format!("Will send to {} about '{}'.", profile.label, message_target),
+                edit_mode_hint.to_string(),
+                format!("Submitting will cancel {}.", ai_job_summary(job)),
+                "Any partial answer from the cancelled response stays in AI Chat.".to_string(),
+            ],
+        };
+    }
+
+    if trimmed.is_empty() {
+        return PromptAssist {
+            tone: PromptAssistTone::Info,
+            lines: vec![
+                reply_context,
+                format!(
+                    "Provider: {} · model {}.",
+                    profile.label,
+                    truncate_trailing(&model, 64)
+                ),
+                format!("Sends {}.", ai_chat_input_summary()),
+                edit_mode_hint.to_string(),
+                "Try: summarize this branch; find gaps; suggest new characters.".to_string(),
+            ],
+        };
+    }
+
+    let lines = vec![
+        reply_context,
+        format!("Will send to {} about '{}'.", profile.label, message_target),
+        edit_mode_hint.to_string(),
+        "The response will stream into AI Chat.".to_string(),
+    ];
+
+    PromptAssist {
+        tone: PromptAssistTone::Success,
+        lines,
+    }
+}
+
+fn prompt_nvidia_nim_api_key_assist(value: &str) -> PromptAssist {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return PromptAssist {
+            tone: PromptAssistTone::Info,
+            lines: vec![
+                "Paste a NVIDIA NIM API key here.".to_string(),
+                "Get one at https://build.nvidia.com/settings/api-keys.".to_string(),
+                format!(
+                    "mdmind will store it in the local secret store as {}.",
+                    local_ai_secret_ref(NVIDIA_NIM_LOCAL_SECRET_ID)
+                ),
+            ],
+        };
+    }
+
+    let mut lines = vec![
+        "Ready to save this key outside the profile JSON.".to_string(),
+        format!(
+            "The NVIDIA NIM profile will reference {}.",
+            local_ai_secret_ref(NVIDIA_NIM_LOCAL_SECRET_ID)
+        ),
+    ];
+    let tone = if trimmed.starts_with("nvapi-") {
+        PromptAssistTone::Success
+    } else {
+        lines.push(
+            "NVIDIA keys usually start with nvapi-; check the pasted value if this looks wrong."
+                .to_string(),
+        );
+        PromptAssistTone::Warning
+    };
+
+    PromptAssist { tone, lines }
 }
 
 fn prompt_detail_assist(app: &TuiApp, value: &str) -> PromptAssist {
@@ -15724,7 +20430,7 @@ mod tests {
     use crate::validate::validate_document;
     use std::collections::HashMap;
     use std::path::Path;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
     fn sample_document() -> Document {
         parse_document(
@@ -15738,6 +20444,10 @@ mod tests {
             "- Product Idea [id:product]\n  - MVP Scope [id:product/mvp] [[prompts/library]] [[rel:supports->product/requirements]]\n  - Requirements [id:product/requirements]\n  - Prompt Library [id:prompts/library] [[rel:informs->product/mvp]]\n",
         )
         .document
+    }
+
+    fn enable_ai_experiment(app: &mut TuiApp) {
+        app.feature_flags.enable(TuiExperiment::Ai);
     }
 
     fn temp_map_path(name: &str) -> PathBuf {
@@ -16742,7 +21452,7 @@ mod tests {
     fn empty_query_palette_defaults_to_a_mixed_home_surface() {
         let map_path = temp_map_path("palette-home.md");
         let document = sample_document();
-        let app = TuiApp::new(
+        let mut app = TuiApp::new(
             map_path.clone(),
             document,
             vec![0],
@@ -16750,6 +21460,7 @@ mod tests {
             false,
             SavedViewsState::default(),
         );
+        app.ai_profiles = AiProfilesConfig::default();
 
         let items = app.palette_items("");
         assert!(!items.is_empty(), "home palette should not be empty");
@@ -16837,7 +21548,7 @@ mod tests {
     fn command_palette_surfaces_manual_update_check() {
         let map_path = temp_map_path("palette-update-check.md");
         let document = sample_document();
-        let app = TuiApp::new(
+        let mut app = TuiApp::new(
             map_path.clone(),
             document,
             vec![0],
@@ -16845,6 +21556,7 @@ mod tests {
             false,
             SavedViewsState::default(),
         );
+        app.ai_profiles = AiProfilesConfig::default();
 
         let item = app
             .palette_items("check updates")
@@ -16857,6 +21569,1599 @@ mod tests {
             PaletteTarget::Action(PaletteAction::CheckForUpdates)
         ));
 
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn command_palette_surfaces_ai_panel_entry_point() {
+        let map_path = temp_map_path("palette-ai-setup.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles = AiProfilesConfig::default();
+
+        assert!(
+            app.palette_items("ai ask")
+                .into_iter()
+                .all(|item| item.title != "AI: Open Panel"),
+            "AI panel should stay hidden until experimental AI is enabled"
+        );
+        app.open_ai_panel();
+        assert!(app.ai_panel.is_none());
+        assert!(app.status.text.contains("--experimental-ai"));
+
+        enable_ai_experiment(&mut app);
+        let panel = app
+            .palette_items("ai ask")
+            .into_iter()
+            .find(|item| item.title == "AI: Open Panel")
+            .expect("AI panel should be discoverable");
+        assert!(panel.subtitle.contains("chat"));
+        assert!(matches!(
+            panel.target,
+            PaletteTarget::Action(PaletteAction::OpenAiPanel)
+        ));
+
+        assert!(
+            app.palette_items("ai nvidia")
+                .into_iter()
+                .any(|item| item.title == "AI: Open Panel"),
+            "provider/setup searches should lead to the AI panel"
+        );
+        assert!(
+            app.palette_items("ai provider codex")
+                .into_iter()
+                .all(|item| !item.title.starts_with("AI Provider:")),
+            "provider switching should live inside the AI panel"
+        );
+        assert!(
+            app.palette_items("ai setup nvidia")
+                .into_iter()
+                .all(|item| item.title != "AI Setup: NVIDIA NIM"),
+            "NVIDIA setup should live inside the AI panel"
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn nvidia_ai_setup_opens_masked_api_key_prompt() {
+        let map_path = temp_map_path("palette-ai-nvidia-prompt.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:test".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        enable_ai_experiment(&mut app);
+
+        app.open_ai_panel();
+        app.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE))
+            .expect("N should open NVIDIA setup from the AI panel");
+
+        let prompt = app.prompt.as_ref().expect("prompt should be open");
+        assert_eq!(prompt.mode, PromptMode::NvidiaNimApiKey);
+        assert!(
+            app.ai_panel.is_some(),
+            "NVIDIA setup prompt should keep the AI Panel open underneath"
+        );
+        assert_eq!(mask_prompt_value("nvapi-secret"), "************");
+        assert!(app.status.text.contains("build.nvidia.com"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_action_opens_session_and_composer() {
+        let map_path = temp_map_path("palette-ai-ask-prompt.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:test".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        enable_ai_experiment(&mut app);
+
+        app.open_ai_panel();
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE))
+            .expect("A should open AI Chat from the AI panel");
+
+        assert!(app.prompt.is_none());
+        assert!(
+            app.ai_review
+                .as_ref()
+                .is_some_and(|review| review.mode == AiReviewMode::History),
+            "AI Chat should open as the session surface"
+        );
+        assert!(app.status.text.contains("AI Chat open"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("Enter should open the AI Chat composer");
+        let prompt = app.prompt.as_ref().expect("composer prompt should be open");
+        assert_eq!(prompt.mode, PromptMode::AiAskCurrentBranch);
+        assert!(
+            app.ai_panel.is_some(),
+            "AI Chat composer should keep the AI Panel open underneath"
+        );
+        assert!(app.status.text.contains("Write a chat message"));
+        let assist = prompt_ai_ask_current_branch_assist(&app, "What changes would help?");
+        assert!(
+            assist
+                .lines
+                .iter()
+                .any(|line| line.contains("suggest new/missing items or map edits"))
+        );
+        assert!(
+            assist
+                .lines
+                .iter()
+                .any(|line| line.contains("message target Product Idea"))
+        );
+        let empty_assist = prompt_ai_ask_current_branch_assist(&app, "");
+        assert!(
+            empty_assist
+                .lines
+                .iter()
+                .any(|line| line.contains("selected branch + style notes + recent chat"))
+        );
+        assert!(assist.lines.iter().all(|line| !line.contains("Scope:")));
+        assert!(assist.lines.iter().all(|line| !line.contains("chat-only")));
+        assert_eq!(
+            prompt_action_hint(PromptMode::AiAskCurrentBranch),
+            "Enter sends  ·  Esc returns"
+        );
+        let footer = prompt_footer_text(&app, PromptMode::AiAskCurrentBranch)
+            .expect("AI Chat should provide composer footer help");
+        assert!(footer.contains("Enter sends to 'Product Idea'"));
+        assert!(footer.contains("Review Suggestions"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .expect("Esc should close the AI Chat composer");
+        assert!(app.prompt.is_none());
+        assert!(
+            app.ai_review.is_some(),
+            "closing the composer should return to AI Chat"
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_composer_allows_replacing_a_running_response() {
+        let map_path = temp_map_path("palette-ai-ask-replace.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:test".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        let (_sender, receiver) = mpsc::channel();
+        app.ai_job = Some(AiRequestJob {
+            profile_label: "NVIDIA NIM".to_string(),
+            anchor_label: "Product Idea".to_string(),
+            question_preview: "What gaps do you see?".to_string(),
+            started_at: Instant::now(),
+            suggestion_index: None,
+            cancelled: Arc::new(AtomicBool::new(false)),
+            receiver,
+        });
+
+        enable_ai_experiment(&mut app);
+        app.open_ai_panel();
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE))
+            .expect("A should open AI Chat even while another response is running");
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("Enter should open the AI Chat composer");
+
+        let prompt = app.prompt.as_ref().expect("prompt should be open");
+        assert_eq!(prompt.mode, PromptMode::AiAskCurrentBranch);
+        assert!(app.status.text.contains("Sending a new message"));
+        let assist = prompt_ai_ask_current_branch_assist(&app, "Try another angle");
+        assert_eq!(assist.tone, PromptAssistTone::Warning);
+        assert!(
+            assist
+                .lines
+                .iter()
+                .any(|line| line.contains("Submitting will cancel"))
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_panel_can_cancel_current_response_and_keep_partial_history() {
+        let map_path = temp_map_path("ai-panel-cancel-running-ask.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let cancel_token = Arc::new(AtomicBool::new(false));
+        app.ai_suggestions.push(AiSuggestion {
+            target: AiSuggestionTarget::new(vec![0], Some("product".to_string()), "Product Idea"),
+            profile_label: "NVIDIA NIM".to_string(),
+            question: "What gaps do you see?".to_string(),
+            answer: Some("Partial response".to_string()),
+            changes: Vec::new(),
+            source: None,
+        });
+        let (_sender, receiver) = mpsc::channel();
+        app.ai_job = Some(AiRequestJob {
+            profile_label: "NVIDIA NIM".to_string(),
+            anchor_label: "Product Idea".to_string(),
+            question_preview: "What gaps do you see?".to_string(),
+            started_at: Instant::now(),
+            suggestion_index: Some(0),
+            cancelled: Arc::clone(&cancel_token),
+            receiver,
+        });
+
+        enable_ai_experiment(&mut app);
+        app.open_ai_panel();
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE))
+            .expect("X should cancel the running AI response");
+
+        assert!(cancel_token.load(Ordering::Relaxed));
+        assert!(app.ai_job.is_none());
+        assert!(app.ai_suggestions.is_empty());
+        assert_eq!(app.ai_history.len(), 1);
+        assert_eq!(
+            app.ai_history[0].disposition,
+            AiHistoryDisposition::Cancelled
+        );
+        let answer = app.ai_history[0]
+            .suggestion
+            .answer
+            .as_deref()
+            .expect("cancelled item should keep partial answer");
+        assert!(answer.contains("Partial response"));
+        assert!(answer.contains("Request cancelled"));
+        assert!(app.status.text.contains("Cancelled AI response"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn turning_ai_off_keeps_staged_review_suggestions() {
+        let map_path = temp_map_path("ai-off-keeps-review.md");
+        let config_path = temp_map_path("ai-off-keeps-review-profiles.json");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let mut profiles = AiProfilesConfig::default();
+        profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:nim".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        save_ai_profiles_to_path(&config_path, &profiles)
+            .expect("test AI profiles should be saved");
+        app.ai_profiles = profiles;
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor.clone(),
+            "Product Idea",
+            "NVIDIA NIM",
+            "Summarize this branch.",
+            "This stays in chat history.",
+        )
+        .expect("chat answer should stage");
+        app.ai_suggestions.push(AiSuggestion::new(
+            AiSuggestionTarget::new(anchor.path, anchor.id, "Product Idea"),
+            "NVIDIA NIM",
+            "Suggest map edits I can review.",
+            vec![AiSuggestedChange::AddChild {
+                target: None,
+                fragment: "Acceptance criteria #todo".to_string(),
+                detail: "Define done.".to_string(),
+            }],
+        ));
+
+        app.turn_ai_off_at_path(&config_path)
+            .expect("turning AI off should succeed");
+
+        assert!(!app.ai_profiles.enabled);
+        assert_eq!(app.ai_active_answer_count(), 0);
+        assert_eq!(app.ai_active_suggestion_count(), 1);
+        assert_eq!(app.ai_history.len(), 1);
+        assert_eq!(ai_status_lamp_label(&app), "AI REVIEW");
+        assert!(
+            app.status
+                .text
+                .contains("Kept 1 staged Review Suggestions item")
+        );
+
+        std::fs::remove_file(config_path).ok();
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_context_includes_recent_session_turns_for_followups() {
+        let map_path = temp_map_path("ai-chat-followup-context.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor,
+            "Product Idea",
+            "NVIDIA NIM",
+            "Summarize this branch.",
+            "It is a CLI-first planning branch.",
+        )
+        .expect("AI response should stage");
+
+        let context = app.ai_chat_context_for_prompt();
+
+        assert!(context.contains("User: Summarize this branch."));
+        assert!(context.contains("Assistant: It is a CLI-first planning branch."));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_branch_context_and_style_notes_include_local_mdmind_conventions() {
+        let document = parse_document(
+            "- Story Bible [id:story]\n  - Characters #cast @status:rough [id:story/characters]\n    | Keep character notes short and relationship-focused.\n    - Mira #cast @role:lead [id:story/characters/mira]\n    - Joss #cast @role:support [[rel:foils->story/characters/mira]]\n  - Research [archive](docs/archive.md)\n",
+        )
+        .document;
+        let root = &document.nodes[0];
+
+        let notes = ai_branch_style_notes(root);
+        assert!(notes.contains("Selected branch has 5 node(s)"));
+        assert!(notes.contains("Common tags: #cast (3)"));
+        assert!(notes.contains("Metadata keys: role (2), status (1)"));
+        assert!(notes.contains("Stable id examples: story, story/characters"));
+        assert!(notes.contains("Relation styles: rel:foils (1)"));
+        assert!(notes.contains("External refs: Markdown link (1)"));
+        assert!(notes.contains("Detail lines: 1 node(s)"));
+        assert!(notes.contains("smallest useful mdmind structure"));
+
+        let mut lines = Vec::new();
+        render_node_for_ai_context(root, 0, &mut lines);
+        let rendered = lines.join("\n");
+        assert!(rendered.contains("[archive](docs/archive.md)"));
+        assert!(rendered.contains("[[rel:foils->story/characters/mira]]"));
+    }
+
+    #[test]
+    fn ai_chat_metadata_includes_model_and_session_tokens() {
+        let map_path = temp_map_path("ai-chat-metadata.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:test".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor,
+            "Product Idea",
+            "NVIDIA NIM",
+            "Summarize the current branch.",
+            "This branch describes a CLI-first planning workflow with AI chat support.",
+        )
+        .expect("AI response should stage");
+
+        let (provider, model, tokens) = ai_session_provider_metadata(&app);
+
+        assert_eq!(provider, "NVIDIA NIM");
+        assert_eq!(model, "nvidia/llama-3.3-nemotron-super-49b-v1.5");
+        assert!(tokens.starts_with('~'));
+        assert_ne!(tokens, "~0");
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_only_stages_map_suggestions_for_explicit_edit_requests() {
+        assert!(!ai_chat_explicitly_requests_map_edits(
+            "What gaps do you see?"
+        ));
+        assert!(!ai_chat_explicitly_requests_map_edits(
+            "Clean up these rough notes."
+        ));
+        assert!(ai_chat_explicitly_requests_map_edits(
+            "Suggest map changes I can review."
+        ));
+        assert!(ai_chat_explicitly_requests_map_edits(
+            "Suggest branch edits."
+        ));
+        assert!(ai_chat_explicitly_requests_map_edits(
+            "Please suggest nodes for missing risks."
+        ));
+        assert!(ai_chat_explicitly_requests_map_edits(
+            "Suggest new characters."
+        ));
+        assert!(ai_chat_explicitly_requests_map_edits(
+            "Please suggest missing requirements."
+        ));
+        assert!(ai_chat_explicitly_requests_map_edits(
+            "Suggest a few new scenes."
+        ));
+        assert!(!ai_chat_explicitly_requests_map_edits(
+            "Suggest a better title."
+        ));
+        assert!(!ai_chat_explicitly_requests_map_edits(
+            "Suggest a new title."
+        ));
+        assert!(ai_chat_explicitly_requests_map_edits(
+            "Add child nodes for the missing risks."
+        ));
+    }
+
+    #[test]
+    fn explicit_ai_chat_edit_request_stages_review_suggestions() {
+        let map_path = temp_map_path("ai-chat-explicit-edit-suggestions.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor,
+            "Product Idea",
+            "NVIDIA NIM",
+            "Suggest map changes I can review.",
+            "I staged one suggestion.\n```mdmind-suggestions\n{\"changes\":[{\"operation\":\"add_child\",\"fragment\":\"Acceptance criteria #todo\",\"detail\":\"Define the success bar.\"}]}\n```",
+        )
+        .expect("AI response should stage");
+
+        assert_eq!(app.ai_review_item_count_for(AiReviewMode::History), 1);
+        assert_eq!(app.ai_active_suggestion_count(), 1);
+        let staged = app
+            .ai_suggestions
+            .iter()
+            .find(|suggestion| !suggestion.changes.is_empty())
+            .expect("reviewable suggestion should be staged");
+        assert!(
+            staged
+                .source
+                .as_ref()
+                .and_then(|source| source.reason.as_deref())
+                .is_some_and(|reason| reason.contains("reviewable map edits"))
+        );
+        assert!(app.ai_suggestions.iter().any(|suggestion| {
+            suggestion.is_conversational_answer()
+                && !suggestion
+                    .answer
+                    .as_deref()
+                    .unwrap_or_default()
+                    .contains("mdmind-suggestions")
+        }));
+        assert!(app.status.text.contains("Review Suggestions"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn explicit_ai_chat_invalid_suggestion_json_stays_chat_only_with_warning() {
+        let map_path = temp_map_path("ai-chat-invalid-edit-suggestions.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor,
+            "Product Idea",
+            "NVIDIA NIM",
+            "Suggest map changes I can review.",
+            "Here are edits.\n```mdmind-suggestions\n{\"changes\":[{\"operation\":\"add_child\"}]}\n```",
+        )
+        .expect("AI response should stage");
+
+        assert_eq!(app.ai_active_suggestion_count(), 0);
+        let answer = app
+            .ai_suggestions
+            .first()
+            .and_then(|suggestion| suggestion.answer.as_deref())
+            .expect("warning should remain visible in AI Chat");
+        assert!(answer.contains("Could not stage suggestions"));
+        assert!(app.status.text.contains("Could not stage suggestions"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ordinary_ai_chat_does_not_stage_model_suggestion_json() {
+        let map_path = temp_map_path("ai-chat-no-implicit-edit-suggestions.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor,
+            "Product Idea",
+            "NVIDIA NIM",
+            "What gaps do you see?",
+            "Consider acceptance criteria.\n```mdmind-suggestions\n{\"changes\":[{\"operation\":\"add_child\",\"fragment\":\"Acceptance criteria #todo\"}]}\n```",
+        )
+        .expect("AI response should stage");
+
+        assert_eq!(app.ai_review_item_count_for(AiReviewMode::History), 1);
+        assert_eq!(app.ai_active_suggestion_count(), 0);
+        assert!(app.status.text.contains("AI Chat"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_quick_prompt_four_opens_edit_suggestion_mode() {
+        let map_path = temp_map_path("ai-chat-quick-prompt-edit.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:test".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        app.open_ai_chat();
+        app.handle_key(KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE))
+            .expect("quick prompt should open the composer");
+
+        let prompt = app.prompt.as_ref().expect("composer should be open");
+        assert_eq!(prompt.mode, PromptMode::AiAskCurrentBranch);
+        assert!(prompt.value.contains("Suggest map edits"));
+        let assist = prompt_ai_ask_current_branch_assist(&app, &prompt.value);
+        assert!(
+            assist
+                .lines
+                .iter()
+                .any(|line| line.contains("Reviewable map edits"))
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_status_lamp_tracks_the_active_provider() {
+        let map_path = temp_map_path("ai-status-lamp.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles = AiProfilesConfig::default();
+        assert_eq!(ai_status_lamp_label(&app), "AI OFF");
+
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:nim".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        assert_eq!(ai_status_lamp_label(&app), "AI NIM");
+
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(CODEX_LOCAL_QUICK_ADD_ID, None).expect("Codex profile should build"),
+            true,
+        );
+        assert_eq!(ai_status_lamp_label(&app), "AI CODEX");
+
+        app.ai_profiles = AiProfilesConfig::default();
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(CODEX_LOCAL_QUICK_ADD_ID, None).expect("Codex profile should build"),
+            true,
+        );
+        assert_eq!(ai_status_lamp_label(&app), "AI CODEX");
+
+        let (_sender, receiver) = mpsc::channel();
+        app.ai_job = Some(AiRequestJob {
+            profile_label: "NVIDIA NIM".to_string(),
+            anchor_label: "Product Idea".to_string(),
+            question_preview: "What gaps do you see?".to_string(),
+            started_at: Instant::now(),
+            suggestion_index: None,
+            cancelled: Arc::new(AtomicBool::new(false)),
+            receiver,
+        });
+        assert_eq!(ai_status_lamp_label(&app), "AI WORKING");
+        app.ai_job = None;
+        app.ai_suggestions.push(AiSuggestion::new(
+            AiSuggestionTarget::new(vec![0], Some("product".to_string()), "Product Idea"),
+            "NVIDIA NIM",
+            "What gaps do you see?",
+            vec![AiSuggestedChange::AddChild {
+                target: None,
+                fragment: "Acceptance criteria #ai".to_string(),
+                detail: "Add acceptance criteria.".to_string(),
+            }],
+        ));
+        assert_eq!(ai_status_lamp_label(&app), "AI REVIEW");
+
+        app.ai_profiles.turn_off();
+        app.ai_suggestions.clear();
+        assert_eq!(ai_status_lamp_label(&app), "AI OFF");
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_job_completion_stages_conversational_answer() {
+        let map_path = temp_map_path("ai-job-completion.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        let (sender, receiver) = mpsc::channel();
+        app.ai_job = Some(AiRequestJob {
+            profile_label: "NVIDIA NIM".to_string(),
+            anchor_label: "Product Idea".to_string(),
+            question_preview: "What gaps do you see?".to_string(),
+            started_at: Instant::now(),
+            suggestion_index: None,
+            cancelled: Arc::new(AtomicBool::new(false)),
+            receiver,
+        });
+        sender
+            .send(AiRequestResult::Success {
+                anchor,
+                anchor_label: "Product Idea".to_string(),
+                profile_label: "NVIDIA NIM".to_string(),
+                question: "What gaps do you see?".to_string(),
+                answer: "Add acceptance criteria.".to_string(),
+            })
+            .expect("test AI result should send");
+
+        app.poll_ai_job()
+            .expect("AI completion should be staged for review");
+
+        assert!(app.ai_job.is_none());
+        assert_eq!(app.ai_suggestions.len(), 1);
+        let suggestion = app
+            .ai_suggestions
+            .first()
+            .expect("AI response should be staged");
+        assert!(suggestion.is_conversational_answer());
+        assert_eq!(
+            suggestion.answer.as_deref(),
+            Some("Add acceptance criteria.")
+        );
+        assert!(suggestion.changes.is_empty());
+        assert_eq!(
+            app.editor
+                .current()
+                .expect("focus should remain on branch")
+                .text,
+            "Product Idea"
+        );
+        assert!(!serialize_document(app.editor.document()).contains("AI Response #ai"));
+        assert!(app.status.text.contains("AI response ready"));
+
+        app.accept_next_ai_suggestion()
+            .expect("conversational AI response should not apply to the map");
+
+        assert_eq!(app.ai_suggestions.len(), 1);
+        assert!(!serialize_document(app.editor.document()).contains("AI Response #ai"));
+        assert!(app.status.text.contains("conversational answer"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_job_streaming_deltas_update_the_open_review_item() {
+        let map_path = temp_map_path("ai-job-streaming.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.ai_suggestions.push(AiSuggestion {
+            target: AiSuggestionTarget::new(anchor.path.clone(), anchor.id.clone(), "Product Idea"),
+            profile_label: "NVIDIA NIM".to_string(),
+            question: "What gaps do you see?".to_string(),
+            answer: Some(String::new()),
+            changes: Vec::new(),
+            source: None,
+        });
+        app.open_ai_review(AiReviewMode::History);
+
+        let (sender, receiver) = mpsc::channel();
+        app.ai_job = Some(AiRequestJob {
+            profile_label: "NVIDIA NIM".to_string(),
+            anchor_label: "Product Idea".to_string(),
+            question_preview: "What gaps do you see?".to_string(),
+            started_at: Instant::now(),
+            suggestion_index: Some(0),
+            cancelled: Arc::new(AtomicBool::new(false)),
+            receiver,
+        });
+
+        sender
+            .send(AiRequestResult::Delta {
+                content: "Add ".to_string(),
+            })
+            .expect("streaming delta should send");
+        app.poll_ai_job()
+            .expect("streaming delta should update staged item");
+        assert!(app.ai_job.is_some());
+        assert_eq!(app.ai_suggestions[0].answer.as_deref(), Some("Add "));
+        assert!(app.ai_review.is_some());
+
+        sender
+            .send(AiRequestResult::Delta {
+                content: "acceptance criteria.".to_string(),
+            })
+            .expect("second streaming delta should send");
+        app.poll_ai_job()
+            .expect("second streaming delta should update staged item");
+        assert_eq!(
+            app.ai_suggestions[0].answer.as_deref(),
+            Some("Add acceptance criteria.")
+        );
+
+        sender
+            .send(AiRequestResult::Success {
+                anchor,
+                anchor_label: "Product Idea".to_string(),
+                profile_label: "NVIDIA NIM".to_string(),
+                question: "What gaps do you see?".to_string(),
+                answer: "Add acceptance criteria.".to_string(),
+            })
+            .expect("streaming completion should send");
+        app.poll_ai_job()
+            .expect("streaming completion should finalize staged item");
+        assert!(app.ai_job.is_none());
+        assert_eq!(
+            app.ai_suggestions[0].answer.as_deref(),
+            Some("Add acceptance criteria.")
+        );
+        assert!(app.status.text.contains("AI response complete"));
+        assert!(app.ai_review.is_some());
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_review_overlay_applies_checked_add_suggestion() {
+        let map_path = temp_map_path("ai-review-apply.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.ai_suggestions.push(AiSuggestion::new(
+            AiSuggestionTarget::new(anchor.path, anchor.id, "Product Idea"),
+            "NVIDIA NIM",
+            "Suggest one edit.",
+            vec![AiSuggestedChange::AddChild {
+                target: None,
+                fragment: "Acceptance criteria #ai".to_string(),
+                detail: "Add acceptance criteria.".to_string(),
+            }],
+        ));
+
+        enable_ai_experiment(&mut app);
+        app.open_ai_panel();
+        app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE))
+            .expect("S should open AI suggestions review from the AI panel");
+        assert!(app.ai_review.is_some());
+        assert!(
+            app.ai_review
+                .as_ref()
+                .expect("AI review should be open")
+                .checked
+                .contains(&0)
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should apply checked AI review rows");
+
+        assert!(
+            app.ai_review.is_none(),
+            "Review suggestions should close when no staged map changes remain"
+        );
+        assert!(app.ai_suggestions.is_empty());
+        assert_eq!(app.ai_history.len(), 1);
+        assert_eq!(app.ai_history[0].disposition, AiHistoryDisposition::Applied);
+        let node = app
+            .editor
+            .current()
+            .expect("AI suggestion should be focused");
+        assert_eq!(node.text, "Acceptance criteria");
+        assert!(node.detail_text().contains("Add acceptance criteria."));
+        assert!(app.status.text.contains("Applied 1 AI suggestion row"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_add_child_suggestion_can_target_existing_descendant() {
+        let map_path = temp_map_path("ai-review-target-descendant.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.ai_suggestions.push(AiSuggestion::new(
+            AiSuggestionTarget::new(anchor.path, anchor.id, "Product Idea"),
+            "NVIDIA NIM",
+            "Suggest a child under Tasks.",
+            vec![AiSuggestedChange::AddChild {
+                target: Some(AiSuggestionTarget::new(Vec::new(), None, "Tasks")),
+                fragment: "Check spelling #ai".to_string(),
+                detail: "Review spelling before the next pass.".to_string(),
+            }],
+        ));
+
+        app.accept_next_ai_suggestion()
+            .expect("targeted add-child suggestion should apply");
+
+        assert!(app.ai_suggestions.is_empty());
+        assert_eq!(
+            app.editor
+                .current()
+                .expect("AI suggestion should focus the inserted child")
+                .text,
+            "Check spelling"
+        );
+        assert_eq!(
+            app.editor.breadcrumb(),
+            vec![
+                "Product Idea".to_string(),
+                "Tasks".to_string(),
+                "Check spelling".to_string()
+            ]
+        );
+        assert!(app.status.text.contains("under 'Tasks'"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_review_labels_show_where_add_child_suggestions_land() {
+        let suggestion = AiSuggestion::new(
+            AiSuggestionTarget::new(vec![0], Some("product".to_string()), "Product Idea"),
+            "NVIDIA NIM",
+            "Suggest map edits I can review.",
+            vec![
+                AiSuggestedChange::AddChild {
+                    target: None,
+                    fragment: "Acceptance criteria #ai".to_string(),
+                    detail: String::new(),
+                },
+                AiSuggestedChange::AddChild {
+                    target: Some(AiSuggestionTarget::new(
+                        vec![0, 1],
+                        Some("product/tasks".to_string()),
+                        "Tasks",
+                    )),
+                    fragment: "Spell check #ai".to_string(),
+                    detail: String::new(),
+                },
+            ],
+        );
+
+        assert_eq!(
+            ai_change_placement_label(&suggestion, &suggestion.changes[0]),
+            "Place under Product Idea"
+        );
+        assert_eq!(
+            ai_change_placement_label(&suggestion, &suggestion.changes[1]),
+            "Place under Tasks"
+        );
+        assert_eq!(
+            ai_suggestion_placement_summary(&suggestion),
+            "2 edit(s) across 2 targets: Product Idea, Tasks"
+        );
+    }
+
+    #[test]
+    fn ai_review_keeps_conversational_answers_out_of_the_tree() {
+        let map_path = temp_map_path("ai-review-answer.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor,
+            "Product Idea",
+            "NVIDIA NIM",
+            "What gaps do you see?",
+            "Add acceptance criteria.",
+        )
+        .expect("AI response should stage");
+        app.open_ai_review(AiReviewMode::History);
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should open the AI Chat composer");
+
+        assert_eq!(app.ai_suggestions.len(), 1);
+        assert!(app.ai_review.is_some());
+        assert!(app.prompt.is_some());
+        assert!(!serialize_document(app.editor.document()).contains("AI Response"));
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .expect("Esc should close the AI Chat composer");
+        assert!(app.prompt.is_none());
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE))
+            .expect("d should be ignored in AI Chat");
+        assert_eq!(app.ai_suggestions.len(), 1);
+        assert!(
+            app.ai_review.is_some(),
+            "AI Chat should stay open without archiving the active turn"
+        );
+        assert!(app.ai_history.is_empty());
+        assert!(app.status.text.contains("AI Chat keeps"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_clear_starts_new_conversation_and_keeps_review_suggestions() {
+        let map_path = temp_map_path("ai-chat-clear-session.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor.clone(),
+            "Product Idea",
+            "NVIDIA NIM",
+            "Summarize this branch.",
+            "It is a product idea.",
+        )
+        .expect("AI response should stage");
+        app.ai_history.push(AiHistoryEntry {
+            suggestion: AiSuggestion::answer(
+                AiSuggestionTarget::new(anchor.path.clone(), anchor.id.clone(), "Product Idea"),
+                "NVIDIA NIM",
+                "Earlier question?",
+                "Earlier answer.",
+            ),
+            disposition: AiHistoryDisposition::Cancelled,
+        });
+        app.ai_suggestions.push(AiSuggestion::new(
+            AiSuggestionTarget::new(anchor.path, anchor.id, "Product Idea"),
+            "NVIDIA NIM",
+            "Suggest map edits I can review.",
+            vec![AiSuggestedChange::AddChild {
+                target: None,
+                fragment: "Acceptance criteria #todo".to_string(),
+                detail: "Define done.".to_string(),
+            }],
+        ));
+        app.open_ai_review(AiReviewMode::History);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE))
+            .expect("C should clear AI Chat history");
+
+        assert!(app.ai_history.is_empty());
+        assert_eq!(app.ai_active_answer_count(), 0);
+        assert_eq!(app.ai_active_suggestion_count(), 1);
+        assert!(app.ai_chat_context_for_prompt().is_empty());
+        assert!(
+            app.ai_review
+                .as_ref()
+                .is_some_and(|review| review.mode == AiReviewMode::History)
+        );
+        assert!(app.status.text.contains("fresh AI Chat conversation"));
+        assert!(
+            app.status
+                .text
+                .contains("Staged Review Suggestions were kept")
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_review_scrolls_answers_and_browses_session_history() {
+        let map_path = temp_map_path("ai-review-history-scroll.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor.clone(),
+            "Product Idea",
+            "NVIDIA NIM",
+            "Summarize this branch.",
+            "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9",
+        )
+        .expect("AI response should stage");
+        app.stage_ai_response(
+            anchor.clone(),
+            "Product Idea",
+            "NVIDIA NIM",
+            "What is next?",
+            "Next answer.",
+        )
+        .expect("second AI response should stage");
+        app.stage_ai_response(
+            anchor,
+            "Product Idea",
+            "NVIDIA NIM",
+            "Any final handoff notes?",
+            "Final answer.",
+        )
+        .expect("third AI response should stage");
+        enable_ai_experiment(&mut app);
+        app.open_ai_panel();
+        app.handle_key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE))
+            .expect("H should open AI Chat from the AI panel");
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .item_index,
+            2
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE))
+            .expect("[ should move to the middle chat turn");
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .item_index,
+            1
+        );
+        assert!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .scroll
+                > 0,
+            "middle turn should be scrolled into view"
+        );
+        assert!(
+            !app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .follow_latest
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE))
+            .expect("[ should move to the first chat turn");
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .item_index,
+            0
+        );
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .scroll,
+            0
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Char(']'), KeyModifiers::NONE))
+            .expect("] should move to the middle chat turn");
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .item_index,
+            1
+        );
+        assert!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .scroll
+                > 0,
+            "middle turn should be scrolled into view"
+        );
+        assert!(
+            !app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .follow_latest
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Char(']'), KeyModifiers::NONE))
+            .expect("] should move to the latest chat turn");
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .item_index,
+            2
+        );
+        assert!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .follow_latest
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .expect("down should scroll a conversational answer");
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI review should stay open")
+                .scroll,
+            1
+        );
+        app.handle_key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE))
+            .expect("page down should scroll more");
+        assert!(
+            app.ai_review
+                .as_ref()
+                .expect("AI review should stay open")
+                .scroll
+                > 1
+        );
+        assert!(
+            !app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .follow_latest
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE))
+            .expect("Home should jump to the first chat turn");
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .item_index,
+            0
+        );
+        app.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE))
+            .expect("End should jump to the latest chat turn");
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .item_index,
+            2
+        );
+        assert!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .follow_latest
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_review_overlay_can_uncheck_add_suggestion() {
+        let map_path = temp_map_path("ai-review-uncheck.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.ai_suggestions.push(AiSuggestion::new(
+            AiSuggestionTarget::new(anchor.path, anchor.id, "Product Idea"),
+            "NVIDIA NIM",
+            "Suggest one edit.",
+            vec![AiSuggestedChange::AddChild {
+                target: None,
+                fragment: "Acceptance criteria #ai".to_string(),
+                detail: "Add acceptance criteria.".to_string(),
+            }],
+        ));
+        app.open_ai_review(AiReviewMode::Suggestions);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE))
+            .expect("space should toggle the selected AI review row");
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter should keep unchecked suggestions staged");
+
+        assert_eq!(app.ai_suggestions.len(), 1);
+        assert!(app.ai_review.is_some());
+        assert!(!serialize_document(app.editor.document()).contains("Acceptance criteria #ai"));
+        assert!(app.status.text.contains("No checked AI suggestion rows"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_job_error_clears_working_state_with_status() {
+        let map_path = temp_map_path("ai-job-error.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let (sender, receiver) = mpsc::channel();
+        app.ai_job = Some(AiRequestJob {
+            profile_label: "NVIDIA NIM".to_string(),
+            anchor_label: "Product Idea".to_string(),
+            question_preview: "What gaps do you see?".to_string(),
+            started_at: Instant::now(),
+            suggestion_index: None,
+            cancelled: Arc::new(AtomicBool::new(false)),
+            receiver,
+        });
+        sender
+            .send(AiRequestResult::Error {
+                profile_label: "NVIDIA NIM".to_string(),
+                message: "network timed out".to_string(),
+            })
+            .expect("test AI error should send");
+
+        app.poll_ai_job()
+            .expect("AI error should be handled as a status update");
+
+        assert!(app.ai_job.is_none());
+        assert_eq!(app.status.tone, StatusTone::Error);
+        assert!(
+            app.status
+                .text
+                .contains("AI request failed with NVIDIA NIM")
+        );
+        assert!(app.status.text.contains("network timed out"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_suggestion_can_be_dismissed_without_changing_the_map() {
+        let map_path = temp_map_path("ai-suggestion-dismiss.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.ai_suggestions.push(AiSuggestion::new(
+            AiSuggestionTarget::new(anchor.path, anchor.id, "Product Idea"),
+            "NVIDIA NIM",
+            "What gaps do you see?",
+            vec![AiSuggestedChange::AddChild {
+                target: None,
+                fragment: "Acceptance criteria #ai".to_string(),
+                detail: "No changes.".to_string(),
+            }],
+        ));
+
+        app.dismiss_ai_suggestion(0);
+
+        assert!(app.ai_suggestions.is_empty());
+        assert_eq!(app.ai_history.len(), 1);
+        assert!(!serialize_document(app.editor.document()).contains("Acceptance criteria #ai"));
+        assert!(
+            app.status
+                .text
+                .contains("Dismissed AI item from NVIDIA NIM")
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_update_suggestions_wait_for_review_ui_apply_support() {
+        let map_path = temp_map_path("ai-suggestion-unsupported-change.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        let target = AiSuggestionTarget::new(anchor.path, anchor.id, "Product Idea");
+        app.ai_suggestions.push(AiSuggestion::new(
+            target.clone(),
+            "NVIDIA NIM",
+            "Clean this up.",
+            vec![AiSuggestedChange::UpdateNode {
+                target,
+                fragment: Some("Updated Product Idea".to_string()),
+                detail: None,
+            }],
+        ));
+
+        app.accept_next_ai_suggestion()
+            .expect("unsupported AI suggestion should be reported, not applied");
+
+        assert_eq!(app.ai_suggestions.len(), 1);
+        assert_eq!(
+            app.editor
+                .current()
+                .expect("focus should remain on original branch")
+                .text,
+            "Product Idea"
+        );
+        assert_eq!(app.status.tone, StatusTone::Warning);
+        assert!(app.status.text.contains("applying them is not wired yet"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_panel_surfaces_provider_switching() {
+        let map_path = temp_map_path("palette-ai-provider-switch.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles = AiProfilesConfig::default();
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:nim".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(CODEX_LOCAL_QUICK_ADD_ID, None).expect("Codex profile should build"),
+            false,
+        );
+
+        let items = app.ai_panel_items();
+        let codex = items
+            .iter()
+            .find(|item| item.action == AiPanelAction::UseCodexLocal)
+            .expect("Codex provider switch should be discoverable in the AI panel");
+        assert_eq!(codex.title, "Use Codex Local");
+        assert!(codex.subtitle.contains("codex exec"));
+        assert!(codex.enabled);
+
+        let nvidia = items
+            .iter()
+            .find(|item| item.action == AiPanelAction::UseNvidiaNim)
+            .expect("NVIDIA provider switch should be discoverable in the AI panel");
+        assert_eq!(nvidia.title, "Active: NVIDIA NIM");
+        assert!(nvidia.subtitle.contains("using NVIDIA NIM"));
+        assert!(nvidia.enabled);
+
+        assert!(
+            app.palette_items("ai provider nvidia")
+                .into_iter()
+                .all(|item| !item.title.starts_with("AI Provider:")),
+            "provider switching should no longer appear as top-level palette commands"
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn switching_ai_providers_starts_fresh_chat_context() {
+        let map_path = temp_map_path("ai-provider-switch-clears-chat.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let config_path = temp_map_path("ai-provider-switch-profiles.json");
+        let mut profiles = AiProfilesConfig::default();
+        profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:nim".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        profiles.upsert_profile(
+            quick_add_profile(CODEX_LOCAL_QUICK_ADD_ID, None).expect("Codex profile should build"),
+            false,
+        );
+        save_ai_profiles_to_path(&config_path, &profiles)
+            .expect("test AI profiles should be saved");
+        app.ai_profiles = profiles;
+
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor.clone(),
+            "Product Idea",
+            "NVIDIA NIM",
+            "Summarize this branch.",
+            "It is a product idea.",
+        )
+        .expect("AI response should stage");
+        app.ai_history.push(AiHistoryEntry {
+            suggestion: AiSuggestion::answer(
+                AiSuggestionTarget::new(anchor.path.clone(), anchor.id.clone(), "Product Idea"),
+                "NVIDIA NIM",
+                "Earlier question?",
+                "Earlier answer.",
+            ),
+            disposition: AiHistoryDisposition::Cancelled,
+        });
+        app.ai_suggestions.push(AiSuggestion::new(
+            AiSuggestionTarget::new(anchor.path, anchor.id, "Product Idea"),
+            "NVIDIA NIM",
+            "Suggest map edits I can review.",
+            vec![AiSuggestedChange::AddChild {
+                target: None,
+                fragment: "Acceptance criteria #todo".to_string(),
+                detail: "Define done.".to_string(),
+            }],
+        ));
+        app.open_ai_review(AiReviewMode::History);
+
+        app.set_active_ai_profile_at_path(CODEX_LOCAL_QUICK_ADD_ID, &config_path)
+            .expect("provider switch should succeed");
+
+        assert_eq!(
+            app.ai_profiles.default_profile.as_deref(),
+            Some(CODEX_LOCAL_QUICK_ADD_ID)
+        );
+        assert!(app.ai_history.is_empty());
+        assert_eq!(app.ai_active_answer_count(), 0);
+        assert_eq!(app.ai_active_suggestion_count(), 1);
+        assert!(app.ai_chat_context_for_prompt().is_empty());
+        assert!(app.status.text.contains("fresh AI Chat conversation"));
+        assert!(
+            app.status
+                .text
+                .contains("Staged Review Suggestions were kept")
+        );
+
+        std::fs::remove_file(config_path).ok();
         cleanup_sidecars(&map_path);
     }
 
@@ -17342,6 +23647,21 @@ mod tests {
             "searching for 'backlink' should find the relations topic"
         );
 
+        assert!(
+            app.help_topics("ai")
+                .into_iter()
+                .all(|topic| topic != HelpTopic::Ai),
+            "AI help should stay hidden until experimental AI is enabled"
+        );
+        let mut app = app;
+        enable_ai_experiment(&mut app);
+        let ai_topics = app.help_topics("ai");
+        assert_eq!(
+            ai_topics.first().copied(),
+            Some(HelpTopic::Ai),
+            "searching for 'ai' should put the AI help topic first"
+        );
+
         let session_path =
             crate::session::session_path_for(&map_path).expect("session path should be derivable");
         if session_path.exists() {
@@ -17353,7 +23673,7 @@ mod tests {
     fn help_topics_default_to_a_guided_order_instead_of_alphabetical() {
         let map_path = temp_map_path("help-order.md");
         let document = sample_document();
-        let app = TuiApp::new(
+        let mut app = TuiApp::new(
             map_path.clone(),
             document,
             vec![0],
@@ -17369,9 +23689,21 @@ mod tests {
         assert_eq!(topics.get(3).copied(), Some(HelpTopic::Outliner));
         assert_eq!(topics.get(4).copied(), Some(HelpTopic::Agents));
         assert_eq!(topics.get(5).copied(), Some(HelpTopic::Navigation));
+
+        enable_ai_experiment(&mut app);
+        let experimental_topics = app.help_topics("");
+        assert_eq!(experimental_topics.get(5).copied(), Some(HelpTopic::Ai));
+        assert_eq!(
+            experimental_topics.get(6).copied(),
+            Some(HelpTopic::Navigation)
+        );
         assert!(
-            topics.iter().position(|topic| *topic == HelpTopic::Palette)
-                < topics.iter().position(|topic| *topic == HelpTopic::Themes),
+            experimental_topics
+                .iter()
+                .position(|topic| *topic == HelpTopic::Palette)
+                < experimental_topics
+                    .iter()
+                    .position(|topic| *topic == HelpTopic::Themes),
             "workflow topics should appear before surface-polish topics"
         );
 
@@ -18690,6 +25022,7 @@ mod tests {
             PromptMode::AddRoot,
             PromptMode::Edit,
             PromptMode::AttachFile,
+            PromptMode::AiAskCurrentBranch,
             PromptMode::OpenId,
             PromptMode::SaveView,
             PromptMode::SaveCheckpoint,

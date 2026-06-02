@@ -113,6 +113,75 @@
       - use checkpoints before large agent rewrites so you can compare outcomes
       - validate with mdm validate before trusting generated structure
       - inspect with mdm view, mdm find, or mdmind before handing the file to another tool
+  - AI Assistance #guide @section:ai [id:guide/ai]
+    - Current state #guide [id:guide/ai/current]
+      - AI assistance is experimental and hidden unless mdmind is launched with --experimental-ai or --experimental=ai
+      - when enabled, the header shows a warning-colored EXPERIMENTAL AI badge
+      - AI is optional and off until you set up a profile
+      - setup lives in the command palette, not in a separate developer workflow
+      - the header lamp shows the active provider, such as AI NIM or AI CODEX
+      - while a request is running, the header lamp switches to AI WORKING
+      - when suggestions are staged, the header lamp switches to AI REVIEW
+      - when AI has state to show, it appears on its own status row underneath the normal INFO message
+      - the global palette has one AI entry: AI: Open Panel
+      - the AI Panel owns provider setup, on/off, AI Chat, cancel response, Review Suggestions, Codex Local, and future hooks
+      - setup prompts keep the AI Panel open underneath, so Esc returns to the AI workspace instead of the map
+      - if multiple providers are configured, use the AI Panel to choose the active one
+      - switching providers starts a fresh AI Chat conversation so old turns are not sent to the new provider; staged Review Suggestions are kept
+      - use O in the AI Panel to stop AI activity without deleting provider profiles, stored keys, or staged Review Suggestions
+      - use X in the AI Panel or AI Chat to cancel a streaming response without turning AI off
+      - choose a provider in the AI Panel later to turn AI back on
+      - the first usable action is AI Chat from the AI Panel
+      - AI Chat and the AI Panel show the active provider, model name, and an estimated total token count for the current TUI session
+      - each message sends the selected branch, compact branch style notes, and recent chat context to the active provider
+      - AI Chat fills in text as the provider sends response chunks
+      - Review Suggestions are staged only when your message explicitly asks for map edits or staged suggestions
+      - use suggest with new, missing, or additional items, or with map/branch/node/outline edits, when you want AI to return staged Review Suggestions
+      - sending a new message while one is running cancels the previous response and keeps any partial output in AI Chat
+      - turning AI off also cancels any streaming response and keeps staged Review Suggestions available for review
+      - conversational answers stay in AI Chat for the TUI session instead of needing a dismiss action
+      - cancelled AI answers and applied or dismissed Review Suggestions move into in-memory session history that is available from AI Chat until the TUI exits
+      - use Review Suggestions from the AI Panel to inspect staged map-change suggestions, see the original Prompt line and Placement summary, toggle supported edit rows, apply checked rows, or dismiss the item
+      - in AI Chat, use Enter or A to compose, C to clear the chat and start a new conversation, Up/Down to scroll, PageUp/PageDown to jump, Tab or ] / [ to move through turns, and Home/End to jump to first/latest
+      - add-child suggestions can be applied today under the selected branch or an existing descendant target; update and remove suggestions are part of the review model but still need their patch applier
+      - background automation is a future slice
+    - NVIDIA NIM setup #guide [id:guide/ai/nvidia-nim]
+      - launch mdmind with --experimental-ai
+      - open the palette with : or Ctrl+P
+      - type ai
+      - choose AI: Open Panel
+      - press N
+      - get a key from https://build.nvidia.com/settings/api-keys
+      - paste it into the masked prompt
+      - mdmind stores the key outside the profile JSON and stores only a local secret reference in the profile
+    - Codex Local setup #guide [id:guide/ai/codex-local]
+      - install and sign in to the local codex CLI outside mdmind
+      - launch mdmind with --experimental-ai
+      - open the palette with : or Ctrl+P
+      - type ai
+      - choose AI: Open Panel
+      - press C
+      - mdmind records Codex Local as the active provider without asking for an API key
+      - AI Chat calls codex exec in read-only, ephemeral mode and sends the selected branch, compact branch style notes, and recent chat context through stdin
+    - Chat about a branch #recipe [id:guide/ai/chat-branch]
+      - launch mdmind with --experimental-ai
+      - focus the branch you want help with
+      - open the palette with : or Ctrl+P
+      - type ai
+      - choose AI: Open Panel
+      - press A
+      - press Enter to open the message composer
+      - if another response is streaming, the composer explains that Enter will cancel it before sending this message
+      - ask a concrete question, request cleanup, ask a follow-up, or ask for suggested changes
+      - say something like suggest new characters or suggest map changes I can review when you want applyable Review Suggestions
+      - if you opened AI Chat at the root, add-child Review Suggestions can target existing branches farther down when the model names a valid target
+      - Review Suggestions labels each row with Place under so you know exactly where checked add-child edits will land
+      - after submitting, AI Chat stays open on the streaming response
+      - watch response text appear in realtime
+      - conversational answers can be read there without changing the map
+      - press C in AI Chat to clear the in-memory transcript and stop sending those turns as conversation context
+      - for edit suggestions, open Review Suggestions, then press Space to toggle supported rows
+      - press Enter or A to apply checked edit rows, or D to dismiss without changing the map
   - Core Mental Model #guide @section:model [id:guide/model]
     - Focus is the center of the interface #guide [id:guide/model/focus]
       - the outline, focus card, spatial canvas, and visual map follow the current node

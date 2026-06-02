@@ -233,6 +233,9 @@ fn commands_json_lists_agent_command_catalog() {
         "examples list",
         "examples path",
         "examples copy",
+        "ai",
+        "ai presets",
+        "ai quick-add",
         "commands",
         "changelog",
         "open",
@@ -269,6 +272,85 @@ fn commands_json_lists_agent_command_catalog() {
             .unwrap()
             .contains(&"session_sidecars".into())
     );
+}
+
+#[test]
+fn ai_presets_list_nvidia_nim_and_codex_local() {
+    let output = run_mdm(&["ai", "presets"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+
+    assert!(stdout.contains("nvidia-nim"));
+    assert!(stdout.contains("NVIDIA NIM"));
+    assert!(stdout.contains("env:NVIDIA_API_KEY"));
+    assert!(stdout.contains("codex-local"));
+    assert!(stdout.contains("Codex Local"));
+}
+
+#[test]
+fn ai_presets_json_uses_an_envelope() {
+    let output = run_mdm(&["ai", "presets", "--json"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "ai presets");
+    assert_eq!(value["format"], "ai_quick_add_presets.v1");
+    assert!(value["summary"]["count"].as_u64().unwrap() >= 2);
+    assert!(
+        value["data"]
+            .as_array()
+            .expect("data should be an array")
+            .iter()
+            .any(|preset| preset["id"] == "nvidia-nim")
+    );
+}
+
+#[test]
+fn ai_quick_add_writes_nvidia_nim_profile_without_api_key() {
+    let config_path = temp_file("ai-profiles.json");
+    let output = run_mdm(&[
+        "ai",
+        "quick-add",
+        "nvidia-nim",
+        "--default",
+        "--config",
+        config_path.to_str().unwrap(),
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert_eq!(stdout(&output).trim(), config_path.to_string_lossy());
+
+    let contents = std::fs::read_to_string(&config_path).expect("config should be written");
+    assert!(contents.contains("\"default_profile\": \"nvidia-nim\""));
+    assert!(contents.contains("\"endpoint\": \"https://integrate.api.nvidia.com/v1\""));
+    assert!(contents.contains("\"secret_ref\": \"env:NVIDIA_API_KEY\""));
+    assert!(contents.contains("\"model\": \"nvidia/llama-3.3-nemotron-super-49b-v1.5\""));
+    assert!(contents.contains("\"max_tokens\": 65536"));
+    assert!(!contents.contains("nvapi-"));
+
+    std::fs::remove_file(config_path).ok();
+}
+
+#[test]
+fn ai_quick_add_writes_codex_local_profile() {
+    let config_path = temp_file("codex-ai-profiles.json");
+    let output = run_mdm(&[
+        "ai",
+        "quick-add",
+        "codex-local",
+        "--config",
+        config_path.to_str().unwrap(),
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+
+    let contents = std::fs::read_to_string(&config_path).expect("config should be written");
+    assert!(contents.contains("\"id\": \"codex-local\""));
+    assert!(contents.contains("\"command\": \"codex\""));
+    assert!(contents.contains("\"exec\""));
+    assert!(!contents.contains("secret_ref"));
+
+    std::fs::remove_file(config_path).ok();
 }
 
 #[test]

@@ -14,6 +14,10 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::APP_VERSION;
+use crate::ai::{
+    ai_profiles_path, load_ai_profiles_from_path, quick_add_presets, quick_add_profile,
+    save_ai_profiles_to_path,
+};
 use crate::app::{
     AppError, ClassifiedTarget, OpenTargetMode, classify_open_target, create_from_template,
     diagnostics_for_validate, diagnostics_have_errors, ensure_parseable, load_document,
@@ -29,7 +33,10 @@ use crate::examples::{
 };
 use crate::export::export_document;
 use crate::importer::import_document;
-use crate::interactive::{run_interactive_with_mode, run_key_diagnostics};
+use crate::interactive::{
+    TuiExperiment, TuiFeatureFlags, run_interactive_with_mode,
+    run_interactive_with_mode_and_features, run_key_diagnostics,
+};
 use crate::markdown_render::{ColorMode, RenderOptions, RenderTarget, render_markdown};
 use crate::model::{Document, ExternalRefKind, Node, Severity, TaskState};
 use crate::query::{
@@ -218,6 +225,11 @@ enum Commands {
         #[command(subcommand)]
         command: ExampleCommands,
     },
+    #[command(about = "Manage experimental AI provider profiles and quick-add presets.")]
+    Ai {
+        #[command(subcommand)]
+        command: AiCommands,
+    },
     #[command(
         name = "commands",
         about = "Print the mdm command catalog for agents and scripts."
@@ -285,6 +297,29 @@ enum ExampleCommands {
     },
 }
 
+#[derive(Debug, Subcommand)]
+enum AiCommands {
+    #[command(about = "List built-in AI quick-add presets.")]
+    Presets {
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(about = "Add a built-in AI profile preset to the local mdmind config.")]
+    QuickAdd {
+        #[arg(help = "Preset id, such as nvidia-nim or codex-local.")]
+        preset: String,
+        #[arg(
+            long,
+            help = "Secret reference, such as env:NVIDIA_API_KEY or keychain:mdmind.ai.nvidia-nim. Raw API keys are rejected."
+        )]
+        secret_ref: Option<String>,
+        #[arg(long, action = ArgAction::SetTrue, help = "Make the added profile the default.")]
+        default: bool,
+        #[arg(long, help = "Override the AI profile config path.")]
+        config: Option<PathBuf>,
+    },
+}
+
 #[derive(Debug, Parser)]
 #[command(
     name = "mdmind",
@@ -304,6 +339,19 @@ struct TuiPreviewCli {
     #[arg(long)]
     autosave: bool,
     #[arg(
+        long = "experimental",
+        value_enum,
+        value_delimiter = ',',
+        help = "Enable named experimental TUI features, such as ai."
+    )]
+    experimental: Vec<TuiExperimentalArg>,
+    #[arg(
+        long = "experimental-ai",
+        action = ArgAction::SetTrue,
+        help = "Enable the experimental in-TUI AI panel, chat, and review surfaces."
+    )]
+    experimental_ai: bool,
+    #[arg(
         long,
         help = "Show how this terminal reports keys to mdmind, including Alt+arrow compatibility."
     )]
@@ -316,6 +364,11 @@ struct TuiPreviewCli {
 enum TuiOpenAs {
     Map,
     Markdown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum TuiExperimentalArg {
+    Ai,
 }
 
 impl From<Option<TuiOpenAs>> for OpenTargetMode {
@@ -442,6 +495,12 @@ impl Cli {
             }),
             Commands::Catalog { json } if *json => Some(JsonContext {
                 command: "commands",
+                target: None,
+            }),
+            Commands::Ai {
+                command: AiCommands::Presets { json },
+            } if *json => Some(JsonContext {
+                command: "ai presets",
                 target: None,
             }),
             Commands::Changelog { version, json, .. } if *json => Some(JsonContext {
@@ -694,6 +753,7 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
             report,
         ),
         Commands::Examples { command } => dispatch_examples(command),
+        Commands::Ai { command } => dispatch_ai(command),
         Commands::Catalog { json } => dispatch_commands(json),
         Commands::Changelog {
             version,
@@ -1131,6 +1191,78 @@ fn dispatch_examples(command: ExampleCommands) -> Result<(), CliError> {
             Ok(())
         }
         ExampleCommands::Copy { name, to, force } => copy_examples(&name, to, force),
+    }
+}
+
+fn dispatch_ai(command: AiCommands) -> Result<(), CliError> {
+    match command {
+        AiCommands::Presets { json } => {
+            let presets = quick_add_presets();
+            if json {
+                print_json_envelope(
+                    "ai presets",
+                    None,
+                    "ai_quick_add_presets.v1",
+                    Some(count_summary(presets.len())),
+                    Some(&presets),
+                    None,
+                    Vec::new(),
+                );
+            } else {
+                println!("AI quick-add presets:");
+                for preset in presets {
+                    println!(
+                        "- {:<14} {:<20} {}",
+                        preset.id, preset.label, preset.summary
+                    );
+                    if let Some(model) = preset.default_model {
+                        println!("  model: {model}");
+                    }
+                    if let Some(secret_ref) = preset.default_secret_ref {
+                        println!("  secret: {secret_ref}");
+                    }
+                    if let Some(docs_url) = preset.docs_url {
+                        println!("  keys: {docs_url}");
+                    }
+                }
+            }
+            Ok(())
+        }
+        AiCommands::QuickAdd {
+            preset,
+            secret_ref,
+            default,
+            config,
+        } => {
+            let config_path = match config {
+                Some(path) => path,
+                None => ai_profiles_path().map_err(CliError::from_app)?,
+            };
+            let mut profiles =
+                load_ai_profiles_from_path(&config_path).map_err(CliError::from_app)?;
+            let profile = quick_add_profile(&preset, secret_ref).map_err(CliError::from_app)?;
+            let profile_id = profile.id.clone();
+            let profile_label = profile.label.clone();
+            let secret_ref = profile.secret_ref.clone();
+
+            profiles.upsert_profile(profile, default);
+            save_ai_profiles_to_path(&config_path, &profiles).map_err(CliError::from_app)?;
+
+            eprintln!(
+                "Added AI profile '{}' ({}) to '{}'.",
+                profile_label,
+                profile_id,
+                config_path.display()
+            );
+            if profile_id == "nvidia-nim" {
+                eprintln!(
+                    "NVIDIA NIM uses {}. Set NVIDIA_API_KEY from https://build.nvidia.com/settings/api-keys before use.",
+                    secret_ref.as_deref().unwrap_or("env:NVIDIA_API_KEY")
+                );
+            }
+            println!("{}", config_path.display());
+            Ok(())
+        }
     }
 }
 
@@ -1685,6 +1817,52 @@ fn command_catalog() -> CommandCatalog {
                 ],
             ),
             command_info!(
+                "ai",
+                "Manage experimental AI provider profiles and quick-add presets.",
+                &["ai_config"],
+                &["ai_config"],
+                false,
+                false,
+                &["pretty"],
+                &[],
+                &[],
+                &[],
+                &["mdm ai presets", "mdm ai quick-add nvidia-nim"],
+            ),
+            command_info!(
+                "ai presets",
+                "List built-in AI quick-add profile presets.",
+                &["bundled_ai_presets"],
+                &[],
+                false,
+                false,
+                &["pretty", "json"],
+                &[],
+                &[flag("--json")],
+                &["ai_quick_add_presets.v1"],
+                &["mdm ai presets --json"],
+            ),
+            command_info!(
+                "ai quick-add",
+                "Add a built-in AI profile preset to the local mdmind config.",
+                &["ai_config", "bundled_ai_presets"],
+                &["ai_config"],
+                false,
+                false,
+                &["path"],
+                &[arg("preset", true)],
+                &[
+                    flag_value("--secret-ref", &["secret-ref"]),
+                    flag("--default"),
+                    flag_value("--config", &["path"]),
+                ],
+                &[],
+                &[
+                    "mdm ai quick-add nvidia-nim --secret-ref env:NVIDIA_API_KEY --default",
+                    "mdm ai quick-add codex-local --default",
+                ],
+            ),
+            command_info!(
                 "commands",
                 "Print the mdm command catalog for agents and scripts.",
                 &[],
@@ -1854,6 +2032,7 @@ fn dispatch_tui_preview(cli: TuiPreviewCli) -> Result<(), CliError> {
         return run_key_diagnostics().map_err(CliError::from_app);
     }
 
+    let feature_flags = tui_feature_flags(&cli);
     let target = match cli.target {
         Some(target) => target,
         None => {
@@ -1871,8 +2050,22 @@ fn dispatch_tui_preview(cli: TuiPreviewCli) -> Result<(), CliError> {
     if cli.preview {
         render_mdmind_preview(&target, open_mode, cli.max_depth)
     } else {
-        run_interactive_with_mode(&target, cli.autosave, open_mode).map_err(CliError::from_app)
+        run_interactive_with_mode_and_features(&target, cli.autosave, open_mode, feature_flags)
+            .map_err(CliError::from_app)
     }
+}
+
+fn tui_feature_flags(cli: &TuiPreviewCli) -> TuiFeatureFlags {
+    let mut flags = TuiFeatureFlags::new();
+    if cli.experimental_ai {
+        flags.enable(TuiExperiment::Ai);
+    }
+    for experiment in &cli.experimental {
+        match experiment {
+            TuiExperimentalArg::Ai => flags.enable(TuiExperiment::Ai),
+        }
+    }
+    flags
 }
 
 fn render_mdmind_preview(
@@ -2241,6 +2434,7 @@ fn raw_args_json_context() -> Option<JsonContext> {
         Some("refs") => "refs",
         Some("relations") => "relations",
         Some("validate") => "validate",
+        Some("ai") if args.get(1).is_some_and(|arg| arg == "presets") => "ai presets",
         Some("commands") => "commands",
         Some("version") => "version",
         Some("open") => "open",

@@ -163,6 +163,24 @@ impl Editor {
         }
 
         let node = parse_fragment(fragment)?;
+        self.add_child_node(node)
+    }
+
+    pub fn add_child_with_detail(&mut self, fragment: &str, detail: &str) -> Result<(), AppError> {
+        let mut node = parse_fragment(fragment)?;
+        node.detail = normalize_detail(detail);
+        if self.focus_path.is_empty() && self.document.nodes.is_empty() {
+            let next_index = self.document.nodes.len();
+            return self.apply_change(move |document| {
+                document.nodes.push(node);
+                vec![next_index]
+            });
+        }
+
+        self.add_child_node(node)
+    }
+
+    fn add_child_node(&mut self, node: Node) -> Result<(), AppError> {
         let focus_path = self.focus_path.clone();
         self.apply_change(move |document| {
             let parent = get_node_mut(&mut document.nodes, &focus_path)
