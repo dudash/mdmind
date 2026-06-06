@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="mdmind">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -25,28 +25,9 @@
           <nav class="site-nav">
             <a href="#features">Features</a>
             <a href="#workflows">Workflows</a>
-            <a href="#agent-skills">Agents</a>
             <a href="#downloads">Downloads</a>
             <a href="https://github.com/dudash/mdmind" target="_blank" rel="noreferrer">GitHub</a>
           </nav>
-          <button class="theme-cycler" type="button" data-theme-button aria-label="Switch color theme" title="Switch color theme">
-            <span class="theme-choice theme-choice-blueprint is-active" data-theme-option="blueprint" aria-hidden="true">
-              <span class="theme-led"></span>
-              <span class="theme-icon">□</span>
-            </span>
-            <span class="theme-choice theme-choice-terminal" data-theme-option="terminal" aria-hidden="true">
-              <span class="theme-led"></span>
-              <span class="theme-icon">#</span>
-            </span>
-            <span class="theme-choice theme-choice-paper" data-theme-option="paper" aria-hidden="true">
-              <span class="theme-led"></span>
-              <span class="theme-icon">☀</span>
-            </span>
-            <span class="theme-choice theme-choice-night" data-theme-option="night" aria-hidden="true">
-              <span class="theme-led"></span>
-              <span class="theme-icon">☾</span>
-            </span>
-          </button>
         </div>
       </header>
 
@@ -370,29 +351,18 @@ brew install mdmind</code></pre>
             </article>
           </div>
 
-          <div class="section-heading" id="agent-skills">
+          <div class="section-heading agent-install" id="agent-skills">
             <div class="eyebrow">Agent mode</div>
             <h2>Install mdmind for your coding agents.</h2>
             <p>
               Teach agents to write native mdmind maps and inspect them with <code>mdm</code>.
               Run the skills installer and choose the agent or agents you want to use.
             </p>
-          </div>
-
-          <div class="downloads-grid">
-            <article class="download-card">
-              <div class="eyebrow">Skills CLI</div>
-              <h3>Add the mdmind skills</h3>
-              <p>
-                <code>mdmind-map-authoring</code> teaches agents to write clean native maps.
-                <code>mdm-cli-inspection</code> teaches them to validate, inspect, and export existing maps.
-              </p>
-              <div class="copyable-command">
-                <button class="copy-button" type="button">Copy</button>
-                <pre><code>npx skills add dudash/mdmind</code></pre>
-              </div>
-              <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/plugins/mdmind/README.md" target="_blank" rel="noreferrer">Open the skills README</a>
-            </article>
+            <div class="copyable-command">
+              <button class="copy-button" type="button">Copy</button>
+              <pre><code>npx skills add dudash/mdmind</code></pre>
+            </div>
+            <a class="text-link" href="https://github.com/dudash/mdmind/blob/main/plugins/mdmind/README.md" target="_blank" rel="noreferrer">Open the skills README</a>
           </div>
         </section>
 
@@ -409,54 +379,6 @@ brew install mdmind</code></pre>
       </main>
     </div>
     <script>
-      const themes = [
-        { id: "blueprint", label: "Blueprint" },
-        { id: "terminal", label: "Terminal" },
-        { id: "night", label: "Night" },
-        { id: "paper", label: "Paper" },
-      ];
-      const themeButton = document.querySelector("[data-theme-button]");
-      const themeChoices = document.querySelectorAll("[data-theme-option]");
-      const themeAliases = {
-        techies: "terminal",
-        writers: "paper",
-        planners: "night",
-        researchers: "blueprint",
-        hacker: "terminal",
-        terminal: "terminal",
-        paper: "paper",
-        night: "night",
-        grove: "blueprint",
-        blueprint: "blueprint",
-        research: "blueprint",
-        layer: "terminal",
-        ember: "terminal",
-      };
-      const searchParams = new URLSearchParams(window.location.search);
-      const requestedTheme =
-        themeAliases[searchParams.get("theme")] ||
-        themeAliases[searchParams.get("audience")] ||
-        themeAliases[searchParams.get("mode")];
-      let activeThemeIndex = themes.findIndex((theme) => theme.id === (requestedTheme || "blueprint"));
-      if (activeThemeIndex < 0) activeThemeIndex = 0;
-
-      const applyTheme = (index) => {
-        const theme = themes[index];
-
-        document.documentElement.dataset.theme = theme.id;
-        themeChoices.forEach((choice) => {
-          choice.classList.toggle("is-active", choice.dataset.themeOption === theme.id);
-        });
-
-        if (themeButton) {
-          themeButton.setAttribute("aria-label", `Switch color theme. Current theme: ${theme.label}`);
-          themeButton.title = `${theme.label} theme`;
-        }
-
-      };
-
-      applyTheme(activeThemeIndex);
-
       const scrollToHashTarget = () => {
         if (!window.location.hash) return;
         document
@@ -470,11 +392,6 @@ brew install mdmind</code></pre>
         window.setTimeout(scrollToHashTarget, 160);
         window.setTimeout(scrollToHashTarget, 700);
       }
-
-      themeButton?.addEventListener("click", () => {
-        activeThemeIndex = (activeThemeIndex + 1) % themes.length;
-        applyTheme(activeThemeIndex);
-      });
 
       const siteHeader = document.querySelector(".site-header");
 

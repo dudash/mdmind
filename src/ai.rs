@@ -333,7 +333,7 @@ impl AiSuggestedChange {
 }
 
 pub fn map_assistant_system_prompt() -> &'static str {
-    "You are helping inside mdmind, a local-first TUI for structured maps. Be concise, practical, and map-aware. Do not claim you changed the map directly. Default to conversational answers. The word \"suggest\" is an explicit signal when paired with map, branch, outline, node, edit, change, apply, review, or stage language, or when the user asks for new, additional, more, or missing items to add. Only propose reviewable map edits when the user explicitly asks for suggested map/branch/node/outline changes, additive suggestions such as \"suggest new characters\", reviewable map edits, staged suggestions, or changes they can apply. When proposing map edits, match the supplied branch's local conventions for labels, task markers, tags, metadata keys, ids, detail lines, relations, and external references."
+    "You are helping inside mdmind, a local-first TUI for structured maps. Be concise, practical, and map-aware. Do not claim you changed the map directly. Default to conversational answers. The word \"suggest\" is an explicit signal when paired with map, branch, outline, node, edit, change, apply, review, or stage language, or when the user asks for new, additional, more, or missing items to add. Only propose reviewable map edits when the user explicitly asks for suggested map/branch/node/outline changes, additive suggestions such as \"suggest new characters\", reviewable map edits, staged suggestions, or changes they can apply. When proposing map edits, match the supplied chat context branch's local conventions for labels, task markers, tags, metadata keys, ids, detail lines, relations, and external references. Prefer repairing or enriching existing nodes over adding duplicate parallel structure."
 }
 
 pub fn reviewable_map_suggestion_contract() -> &'static str {
@@ -347,11 +347,25 @@ This fenced mdmind-suggestions block is mdmind's structured suggestion channel a
       "target": {"id": "existing-node-id", "label": "Existing branch"},
       "fragment": "Short node label #optional-tag @optional:key",
       "detail": "Optional detail text."
+    },
+    {
+      "operation": "update_node",
+      "target": {"id": "existing-node-id", "label": "Existing branch"},
+      "fragment": "Improved node label #optional-tag",
+      "detail": "Optional replacement detail text."
+    },
+    {
+      "operation": "remove_node",
+      "target": {"id": "duplicate-or-obsolete-node-id", "label": "Duplicate or obsolete branch"}
     }
   ]
 }
 ```
-Only use add_child operations for now. Omit target to stage the new node under the selected branch. Include target when the new node belongs under an existing descendant or the selected branch; prefer a stable id from the provided mdmind context, and include a readable label.
+Choose the smallest honest operation for each useful edit:
+- use add_child for missing branches, tasks, risks, examples, or supporting structure;
+- use update_node when an existing node should be renamed, retagged, retasked, re-id'd, or have its detail text replaced;
+- use remove_node only for clearly duplicate, obsolete, empty, or misleading nodes.
+Before adding a child, check whether the supplied map context already has a node that should be updated instead. Do not express every idea as add_child. Omit target only for add_child rows that should land under the chat context branch. Include target for add_child rows that belong under an existing descendant, and always include target for update_node and remove_node rows. Prefer a stable id from the provided mdmind context, and include a readable label. Do not invent ids for targets.
 
 Authoring style:
 - Build a readable tree first; keep node labels short, scannable, and map-native.
@@ -392,13 +406,11 @@ pub fn split_reviewable_map_suggestions_with_warning(
 ) -> ReviewableSuggestionExtraction {
     let trimmed = answer.trim();
     if let Ok(changes) = parse_reviewable_map_suggestions(trimmed) {
-        if !changes.is_empty() {
-            return ReviewableSuggestionExtraction {
-                answer: String::new(),
-                changes,
-                warning: None,
-            };
-        }
+        return ReviewableSuggestionExtraction {
+            answer: String::new(),
+            changes,
+            warning: None,
+        };
     }
 
     let mut cleaned = Vec::new();
@@ -430,15 +442,8 @@ pub fn split_reviewable_map_suggestions_with_warning(
 
         if closed {
             match parse_reviewable_map_suggestions(&block) {
-                Ok(parsed) if !parsed.is_empty() => {
+                Ok(parsed) => {
                     changes.extend(parsed);
-                    continue;
-                }
-                Ok(_) => {
-                    warning = Some(
-                        "Could not stage suggestions because the suggestion block was empty."
-                            .to_string(),
-                    );
                     continue;
                 }
                 Err(error) => {
@@ -461,7 +466,7 @@ pub fn split_reviewable_map_suggestions_with_warning(
         if !answer.is_empty() {
             answer.push_str("\n\n");
         }
-        answer.push_str("[");
+        answer.push('[');
         answer.push_str(warning_text);
         answer.push_str(" Ask \"stage these as map edits\" to retry.]");
     }
@@ -823,6 +828,41 @@ impl AiProfile {
         profile
     }
 
+    pub fn claude_local() -> Self {
+        let mut profile = Self::local_cli("claude-local", "Claude Local", "claude");
+        profile.command_args = vec!["-p".to_string()];
+        profile.capabilities.filesystem_access = false;
+        profile
+    }
+
+    pub fn ollama_local(model: impl Into<String>) -> Self {
+        Self {
+            id: OLLAMA_LOCAL_QUICK_ADD_ID.to_string(),
+            label: "Ollama Local".to_string(),
+            adapter_type: AiAdapterType::LocalHttp,
+            auth_scheme: AiAuthScheme::None,
+            endpoint: Some(OLLAMA_OPENAI_COMPAT_ENDPOINT.to_string()),
+            command: None,
+            command_args: Vec::new(),
+            model: Some(model.into()),
+            small_model: None,
+            secret_ref: None,
+            headers: BTreeMap::new(),
+            env: BTreeMap::new(),
+            cwd: None,
+            enabled: true,
+            capabilities: AiCapabilities {
+                streaming: true,
+                local_execution: true,
+                ..AiCapabilities::default()
+            },
+            model_parameters: AiModelParameters {
+                temperature: Some("0.2".to_string()),
+                ..AiModelParameters::default()
+            },
+        }
+    }
+
     pub fn has_secret_material(&self) -> bool {
         self.headers
             .keys()
@@ -859,7 +899,12 @@ pub struct AiQuickAddPreset {
 
 pub const NVIDIA_NIM_QUICK_ADD_ID: &str = "nvidia-nim";
 pub const CODEX_LOCAL_QUICK_ADD_ID: &str = "codex-local";
+pub const CLAUDE_LOCAL_QUICK_ADD_ID: &str = "claude-local";
+pub const OLLAMA_LOCAL_QUICK_ADD_ID: &str = "ollama-local";
 pub const NVIDIA_NIM_LOCAL_SECRET_ID: &str = "mdmind.ai.nvidia-nim";
+pub const OLLAMA_DEFAULT_BASE_URL: &str = "http://127.0.0.1:11434";
+pub const OLLAMA_OPENAI_COMPAT_ENDPOINT: &str = "http://127.0.0.1:11434/v1";
+pub const OLLAMA_FALLBACK_MODEL: &str = "llama3.2:latest";
 
 pub fn local_ai_secret_ref(secret_id: &str) -> String {
     format!("local:{secret_id}")
@@ -885,6 +930,24 @@ pub fn quick_add_presets() -> Vec<AiQuickAddPreset> {
             default_secret_ref: None,
             docs_url: None,
         },
+        AiQuickAddPreset {
+            id: CLAUDE_LOCAL_QUICK_ADD_ID,
+            label: "Claude Local",
+            summary: "Use an installed local `claude -p` command as a constrained CLI bridge.",
+            adapter_type: AiAdapterType::LocalCli,
+            default_model: None,
+            default_secret_ref: None,
+            docs_url: Some("https://code.claude.com/docs/en/cli-reference"),
+        },
+        AiQuickAddPreset {
+            id: OLLAMA_LOCAL_QUICK_ADD_ID,
+            label: "Ollama Local",
+            summary: "Use a running local Ollama server and one of its installed chat models.",
+            adapter_type: AiAdapterType::LocalHttp,
+            default_model: Some(OLLAMA_FALLBACK_MODEL),
+            default_secret_ref: None,
+            docs_url: Some("https://docs.ollama.com/api"),
+        },
     ]
 }
 
@@ -898,6 +961,22 @@ pub fn quick_add_profile(id: &str, secret_ref: Option<String>) -> Result<AiProfi
                 ));
             }
             Ok(AiProfile::codex_local())
+        }
+        CLAUDE_LOCAL_QUICK_ADD_ID => {
+            if secret_ref.is_some() {
+                return Err(AppError::new(
+                    "The Claude Local quick-add does not use an mdmind API secret.",
+                ));
+            }
+            Ok(AiProfile::claude_local())
+        }
+        OLLAMA_LOCAL_QUICK_ADD_ID => {
+            if secret_ref.is_some() {
+                return Err(AppError::new(
+                    "The Ollama Local quick-add does not use an mdmind API secret.",
+                ));
+            }
+            Ok(AiProfile::ollama_local(OLLAMA_FALLBACK_MODEL))
         }
         _ => Err(AppError::new(format!(
             "Unknown AI quick-add preset '{id}'. Run `mdm ai presets` to list available presets."
@@ -928,10 +1007,50 @@ fn command_name_is_codex(command: &str) -> bool {
         .unwrap_or(false)
 }
 
+pub fn ai_profile_is_claude_local_bridge(profile: &AiProfile) -> bool {
+    let first_arg_is_print = profile
+        .command_args
+        .first()
+        .map(|arg| arg == "-p" || arg == "--print")
+        .unwrap_or(true);
+    profile.enabled
+        && profile.adapter_type == AiAdapterType::LocalCli
+        && profile
+            .command
+            .as_deref()
+            .is_some_and(command_name_is_claude)
+        && first_arg_is_print
+}
+
+fn command_name_is_claude(command: &str) -> bool {
+    Path::new(command)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name == "claude" || name == "claude.exe")
+        .unwrap_or(false)
+}
+
+pub fn ai_profile_is_ollama_local(profile: &AiProfile) -> bool {
+    profile.enabled
+        && profile.id == OLLAMA_LOCAL_QUICK_ADD_ID
+        && profile.adapter_type == AiAdapterType::LocalHttp
+        && profile.endpoint.as_deref().is_some_and(|endpoint| {
+            let endpoint = endpoint.trim_end_matches('/');
+            endpoint.ends_with("/v1") && is_local_http_url(endpoint)
+        })
+}
+
+pub fn ai_profile_uses_chat_completions_http(profile: &AiProfile) -> bool {
+    matches!(
+        profile.adapter_type,
+        AiAdapterType::OpenAiCompatibleHttp | AiAdapterType::LocalHttp
+    )
+}
+
 pub fn openai_compatible_chat_url(profile: &AiProfile) -> Result<String, AppError> {
-    if profile.adapter_type != AiAdapterType::OpenAiCompatibleHttp {
+    if !ai_profile_uses_chat_completions_http(profile) {
         return Err(AppError::new(format!(
-            "AI profile '{}' is not an OpenAI-compatible HTTP profile.",
+            "AI profile '{}' is not a chat-completions HTTP profile.",
             profile.label
         )));
     }
@@ -941,7 +1060,279 @@ pub fn openai_compatible_chat_url(profile: &AiProfile) -> Result<String, AppErro
         .as_deref()
         .ok_or_else(|| AppError::new(format!("AI profile '{}' has no endpoint.", profile.label)))?
         .trim_end_matches('/');
+    if profile.adapter_type == AiAdapterType::LocalHttp && !is_local_http_url(endpoint) {
+        return Err(AppError::new(format!(
+            "AI profile '{}' is marked local-http, but its endpoint is not local.",
+            profile.label
+        )));
+    }
     Ok(format!("{endpoint}/chat/completions"))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct AiLocalProviderDetection {
+    pub ollama: Option<AiOllamaDiscovery>,
+    pub codex_cli: bool,
+    pub claude_cli: bool,
+}
+
+impl AiLocalProviderDetection {
+    pub fn has_ollama_chat_model(&self) -> bool {
+        self.ollama
+            .as_ref()
+            .and_then(|ollama| ollama.recommended_model.as_deref())
+            .is_some()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiOllamaDiscovery {
+    pub base_url: String,
+    pub openai_endpoint: String,
+    pub models: Vec<AiOllamaModel>,
+    pub recommended_model: Option<String>,
+}
+
+impl AiOllamaDiscovery {
+    pub fn profile(&self) -> Option<AiProfile> {
+        let model = self.recommended_model.as_deref()?;
+        let mut profile = AiProfile::ollama_local(model);
+        profile.endpoint = Some(self.openai_endpoint.clone());
+        Some(profile)
+    }
+
+    pub fn model_count(&self) -> usize {
+        self.models.len()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiOllamaModel {
+    pub name: String,
+    pub size: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaTagsResponse {
+    #[serde(default)]
+    models: Vec<OllamaTagsModel>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaTagsModel {
+    name: Option<String>,
+    model: Option<String>,
+    size: Option<u64>,
+}
+
+pub fn discover_local_ai_providers() -> AiLocalProviderDetection {
+    AiLocalProviderDetection {
+        ollama: discover_local_ollama(),
+        codex_cli: local_command_available("codex"),
+        claude_cli: local_command_available("claude"),
+    }
+}
+
+pub fn discover_local_ollama() -> Option<AiOllamaDiscovery> {
+    let base_url = ollama_base_url();
+    let tags_url = format!("{}/api/tags", base_url.trim_end_matches('/'));
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_millis(450))
+        .build()
+        .ok()?;
+    let response = client.get(&tags_url).send().ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let text = response.text().ok()?;
+    let payload: OllamaTagsResponse = serde_json::from_str(&text).ok()?;
+    let mut models = Vec::new();
+    for model in payload.models {
+        let Some(name) = model.name.or(model.model) else {
+            continue;
+        };
+        let name = name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        models.push(AiOllamaModel {
+            name: name.to_string(),
+            size: model.size,
+        });
+    }
+    let recommended_model =
+        recommended_ollama_model(models.iter().map(|model| model.name.as_str()));
+    Some(AiOllamaDiscovery {
+        openai_endpoint: format!("{}/v1", base_url.trim_end_matches('/')),
+        base_url,
+        models,
+        recommended_model,
+    })
+}
+
+fn ollama_base_url() -> String {
+    std::env::var("OLLAMA_HOST")
+        .ok()
+        .and_then(|host| normalize_local_ollama_host(&host))
+        .unwrap_or_else(|| OLLAMA_DEFAULT_BASE_URL.to_string())
+}
+
+fn normalize_local_ollama_host(raw: &str) -> Option<String> {
+    let trimmed = raw.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return None;
+    }
+    let with_scheme = if trimmed.contains("://") {
+        trimmed.to_string()
+    } else {
+        format!("http://{trimmed}")
+    };
+    is_local_http_url(&with_scheme).then_some(with_scheme)
+}
+
+fn is_local_http_url(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    local_http_host_matches(&lower, "localhost")
+        || lower.starts_with("http://127.")
+        || local_http_host_matches(&lower, "[::1]")
+        || local_http_host_matches(&lower, "0.0.0.0")
+}
+
+fn local_http_host_matches(url: &str, host: &str) -> bool {
+    let prefix = format!("http://{host}");
+    let Some(rest) = url.strip_prefix(&prefix) else {
+        return false;
+    };
+    rest.is_empty() || rest.starts_with(':') || rest.starts_with('/')
+}
+
+pub fn recommended_ollama_model<'a>(models: impl IntoIterator<Item = &'a str>) -> Option<String> {
+    let mut best: Option<(i32, String)> = None;
+    for model in models {
+        let model = model.trim();
+        if model.is_empty() {
+            continue;
+        }
+        let score = ollama_model_score(model);
+        if score < 0 {
+            continue;
+        }
+        match &best {
+            Some((best_score, _)) if *best_score >= score => {}
+            _ => best = Some((score, model.to_string())),
+        }
+    }
+    best.map(|(_, model)| model)
+}
+
+fn ollama_model_score(model: &str) -> i32 {
+    let lower = model.to_ascii_lowercase();
+    let mut score = 10;
+
+    if [
+        "embed",
+        "embedding",
+        "nomic-embed",
+        "all-minilm",
+        "bge-",
+        "mxbai",
+        "rerank",
+        "whisper",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+    {
+        return -1000;
+    }
+
+    for (needle, weight) in [
+        ("qwen3", 90),
+        ("qwen2.5", 82),
+        ("llama3.3", 80),
+        ("llama3.2", 76),
+        ("llama3.1", 74),
+        ("llama3", 70),
+        ("mistral", 66),
+        ("gemma3", 64),
+        ("gemma2", 58),
+        ("phi4", 56),
+        ("deepseek", 54),
+        ("mixtral", 52),
+        ("codellama", 42),
+        ("llava", 30),
+    ] {
+        if lower.contains(needle) {
+            score += weight;
+            break;
+        }
+    }
+
+    if lower.contains("instruct") {
+        score += 20;
+    }
+    if lower.contains("chat") {
+        score += 16;
+    }
+    if lower.contains(":latest") {
+        score += 4;
+    }
+    if lower.contains(":70b") || lower.contains(":72b") || lower.contains(":90b") {
+        score -= 8;
+    }
+    if lower.contains(":1b") || lower.contains(":0.") {
+        score -= 6;
+    }
+
+    score
+}
+
+pub fn local_command_available(command: &str) -> bool {
+    let command = command.trim();
+    if command.is_empty() {
+        return false;
+    }
+    let command_path = Path::new(command);
+    if command_path.components().count() > 1 {
+        return executable_file_exists(command_path);
+    }
+
+    let Some(paths) = std::env::var_os("PATH") else {
+        return false;
+    };
+
+    std::env::split_paths(&paths).any(|directory| {
+        let candidate = directory.join(command);
+        if executable_file_exists(&candidate) {
+            return true;
+        }
+        #[cfg(windows)]
+        {
+            if candidate.extension().is_none() {
+                return ["exe", "cmd", "bat"]
+                    .iter()
+                    .any(|extension| executable_file_exists(&candidate.with_extension(extension)));
+            }
+        }
+        false
+    })
+}
+
+fn executable_file_exists(path: &Path) -> bool {
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
 }
 
 pub fn openai_compatible_chat_body(
@@ -1136,13 +1527,15 @@ pub fn send_ai_chat_streaming_cancellable(
     is_cancelled: impl FnMut() -> bool,
 ) -> Result<String, AppError> {
     match profile.adapter_type {
-        AiAdapterType::OpenAiCompatibleHttp => send_openai_compatible_chat_streaming_cancellable(
-            profile,
-            system_prompt,
-            user_prompt,
-            on_delta,
-            is_cancelled,
-        ),
+        AiAdapterType::OpenAiCompatibleHttp | AiAdapterType::LocalHttp => {
+            send_openai_compatible_chat_streaming_cancellable(
+                profile,
+                system_prompt,
+                user_prompt,
+                on_delta,
+                is_cancelled,
+            )
+        }
         AiAdapterType::LocalCli if ai_profile_is_codex_local_bridge(profile) => {
             send_codex_local_chat_streaming_cancellable(
                 profile,
@@ -1153,8 +1546,18 @@ pub fn send_ai_chat_streaming_cancellable(
                 is_cancelled,
             )
         }
+        AiAdapterType::LocalCli if ai_profile_is_claude_local_bridge(profile) => {
+            send_claude_local_chat_streaming_cancellable(
+                profile,
+                system_prompt,
+                user_prompt,
+                workspace_cwd,
+                on_delta,
+                is_cancelled,
+            )
+        }
         AiAdapterType::LocalCli => Err(AppError::new(format!(
-            "AI profile '{}' is a Local CLI profile, but only the Codex Local bridge is callable from AI Chat right now.",
+            "AI profile '{}' is a Local CLI profile, but only the Codex Local and Claude Local bridges are callable from AI Chat right now.",
             profile.label
         ))),
         _ => Err(AppError::new(format!(
@@ -1216,6 +1619,47 @@ pub fn codex_local_exec_args(
     Ok(args)
 }
 
+pub fn claude_local_exec_args(profile: &AiProfile) -> Result<Vec<String>, AppError> {
+    if !ai_profile_is_claude_local_bridge(profile) {
+        return Err(AppError::new(format!(
+            "AI profile '{}' is not a Claude Local bridge.",
+            profile.label
+        )));
+    }
+    reject_dangerous_claude_args(profile)?;
+
+    let mut args = if profile.command_args.is_empty() {
+        vec!["-p".to_string()]
+    } else {
+        profile.command_args.clone()
+    };
+    args.extend([
+        "--output-format".to_string(),
+        "stream-json".to_string(),
+        "--verbose".to_string(),
+        "--include-partial-messages".to_string(),
+        "--permission-mode".to_string(),
+        "plan".to_string(),
+        "--tools".to_string(),
+        String::new(),
+        "--max-turns".to_string(),
+        "1".to_string(),
+        "--no-session-persistence".to_string(),
+    ]);
+    if let Some(model) = profile
+        .model
+        .as_deref()
+        .filter(|model| !model.trim().is_empty())
+    {
+        args.extend(["--model".to_string(), model.trim().to_string()]);
+    }
+    args.push(
+        "Answer the mdmind AI Chat prompt supplied on stdin. Return only the response that should appear in AI Chat."
+            .to_string(),
+    );
+    Ok(args)
+}
+
 fn reject_dangerous_codex_args(profile: &AiProfile) -> Result<(), AppError> {
     let mut args = profile.command_args.iter().map(String::as_str).peekable();
     while let Some(arg) = args.next() {
@@ -1250,11 +1694,74 @@ fn reject_dangerous_codex_args(profile: &AiProfile) -> Result<(), AppError> {
     Ok(())
 }
 
+fn reject_dangerous_claude_args(profile: &AiProfile) -> Result<(), AppError> {
+    let mut args = profile.command_args.iter().map(String::as_str).peekable();
+    while let Some(arg) = args.next() {
+        if matches!(
+            arg,
+            "--dangerously-skip-permissions" | "--allow-dangerously-skip-permissions"
+        ) {
+            return Err(AppError::new(format!(
+                "AI profile '{}' uses dangerous Claude flags. Remove {arg} before using it in mdmind.",
+                profile.label
+            )));
+        }
+        if arg == "--permission-mode" {
+            let Some(value) = args.next() else {
+                continue;
+            };
+            if value != "plan" {
+                return Err(AppError::new(format!(
+                    "AI profile '{}' sets Claude permission mode to {value}. mdmind only allows Claude Local chat in plan mode.",
+                    profile.label
+                )));
+            }
+        } else if let Some(value) = arg.strip_prefix("--permission-mode=")
+            && value != "plan"
+        {
+            return Err(AppError::new(format!(
+                "AI profile '{}' sets Claude permission mode to {value}. mdmind only allows Claude Local chat in plan mode.",
+                profile.label
+            )));
+        }
+        if arg == "--tools" {
+            let Some(value) = args.next() else {
+                continue;
+            };
+            if !value.is_empty() {
+                return Err(AppError::new(format!(
+                    "AI profile '{}' customizes Claude tools. mdmind only allows Claude Local chat with tools disabled.",
+                    profile.label
+                )));
+            }
+        } else if let Some(value) = arg.strip_prefix("--tools=")
+            && !value.is_empty()
+        {
+            return Err(AppError::new(format!(
+                "AI profile '{}' customizes Claude tools. mdmind only allows Claude Local chat with tools disabled.",
+                profile.label
+            )));
+        }
+    }
+    Ok(())
+}
+
 pub fn local_codex_bridge_prompt(system_prompt: &str, user_prompt: &str) -> String {
     format!(
         "You are Codex Local running as a read-only AI Chat provider inside mdmind.\n\
 Do not modify files, write patches, run destructive commands, or claim you changed the map.\n\
 Use the mdmind branch and chat context supplied below as the source of truth.\n\
+Return only the response that should appear in AI Chat. If the user explicitly asks you to suggest map, branch, node, or outline edits, or asks for additive suggestions such as new, additional, more, or missing items, follow the mdmind-suggestions contract in the prompt.\n\n\
+mdmind system instruction:\n{system_prompt}\n\n\
+mdmind user/context payload:\n{user_prompt}\n"
+    )
+}
+
+pub fn local_claude_bridge_prompt(system_prompt: &str, user_prompt: &str) -> String {
+    format!(
+        "You are Claude Local running as a constrained AI Chat provider inside mdmind.\n\
+Do not modify files, write patches, run commands, or claim you changed the map.\n\
+Use only the mdmind branch and chat context supplied below as the source of truth.\n\
 Return only the response that should appear in AI Chat. If the user explicitly asks you to suggest map, branch, node, or outline edits, or asks for additive suggestions such as new, additional, more, or missing items, follow the mdmind-suggestions contract in the prompt.\n\n\
 mdmind system instruction:\n{system_prompt}\n\n\
 mdmind user/context payload:\n{user_prompt}\n"
@@ -1327,8 +1834,13 @@ fn send_codex_local_chat_streaming_cancellable(
     });
 
     let (line_sender, line_receiver) = mpsc::channel();
-    spawn_local_cli_reader(stdout, line_sender.clone(), LocalCliStream::Stdout);
-    spawn_local_cli_reader(stderr, line_sender, LocalCliStream::Stderr);
+    spawn_local_cli_reader(
+        stdout,
+        line_sender.clone(),
+        LocalCliStream::Stdout,
+        "Codex Local",
+    );
+    spawn_local_cli_reader(stderr, line_sender, LocalCliStream::Stderr, "Codex Local");
 
     let mut answer = String::new();
     let mut stderr_text = String::new();
@@ -1428,6 +1940,160 @@ fn send_codex_local_chat_streaming_cancellable(
     Ok(answer)
 }
 
+fn send_claude_local_chat_streaming_cancellable(
+    profile: &AiProfile,
+    system_prompt: &str,
+    user_prompt: &str,
+    workspace_cwd: Option<&Path>,
+    mut on_delta: impl FnMut(&str),
+    mut is_cancelled: impl FnMut() -> bool,
+) -> Result<String, AppError> {
+    let command_name = profile.command.as_deref().ok_or_else(|| {
+        AppError::new(format!(
+            "AI profile '{}' has no local command configured.",
+            profile.label
+        ))
+    })?;
+    let args = claude_local_exec_args(profile)?;
+    let prompt = local_claude_bridge_prompt(system_prompt, user_prompt);
+
+    let mut command = Command::new(command_name);
+    command
+        .args(&args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(cwd) = profile
+        .cwd
+        .as_deref()
+        .map(PathBuf::from)
+        .or_else(|| workspace_cwd.map(Path::to_path_buf))
+    {
+        command.current_dir(cwd);
+    }
+    for (key, value) in &profile.env {
+        command.env(key, value);
+    }
+
+    let mut child = command.spawn().map_err(|error| {
+        AppError::new(format!(
+            "Could not start Claude Local bridge '{}': {error}",
+            command_name
+        ))
+    })?;
+    let mut stdin = child.stdin.take().ok_or_else(|| {
+        AppError::new(format!(
+            "Could not open stdin for Claude Local bridge '{}'.",
+            profile.label
+        ))
+    })?;
+    let stdout = child.stdout.take().ok_or_else(|| {
+        AppError::new(format!(
+            "Could not read stdout from Claude Local bridge '{}'.",
+            profile.label
+        ))
+    })?;
+    let stderr = child.stderr.take().ok_or_else(|| {
+        AppError::new(format!(
+            "Could not read stderr from Claude Local bridge '{}'.",
+            profile.label
+        ))
+    })?;
+
+    thread::spawn(move || {
+        let _ = stdin.write_all(prompt.as_bytes());
+    });
+
+    let (line_sender, line_receiver) = mpsc::channel();
+    spawn_local_cli_reader(
+        stdout,
+        line_sender.clone(),
+        LocalCliStream::Stdout,
+        "Claude Local",
+    );
+    spawn_local_cli_reader(stderr, line_sender, LocalCliStream::Stderr, "Claude Local");
+
+    let mut answer = String::new();
+    let mut stderr_text = String::new();
+    let mut stdout_done = false;
+    let mut stderr_done = false;
+    let mut exit_status = None;
+
+    loop {
+        if is_cancelled() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(AppError::new("AI request was cancelled."));
+        }
+
+        match line_receiver.recv_timeout(Duration::from_millis(80)) {
+            Ok(LocalCliLine::Stdout(line)) => {
+                if let Some(delta) = claude_code_stream_json_event_text(&line)
+                    && !delta.is_empty()
+                {
+                    on_delta(&delta);
+                    answer.push_str(&delta);
+                }
+            }
+            Ok(LocalCliLine::Stderr(line)) => {
+                if !stderr_text.is_empty() {
+                    stderr_text.push('\n');
+                }
+                stderr_text.push_str(&line);
+            }
+            Ok(LocalCliLine::Done(LocalCliStream::Stdout)) => stdout_done = true,
+            Ok(LocalCliLine::Done(LocalCliStream::Stderr)) => stderr_done = true,
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                stdout_done = true;
+                stderr_done = true;
+            }
+        }
+
+        if exit_status.is_none() {
+            exit_status = child.try_wait().map_err(|error| {
+                AppError::new(format!("Could not poll Claude Local bridge: {error}"))
+            })?;
+        }
+        if exit_status.is_some() && stdout_done && stderr_done {
+            break;
+        }
+    }
+
+    let status = exit_status.unwrap_or_else(|| {
+        child
+            .wait()
+            .expect("Claude Local bridge should be waitable after spawn")
+    });
+
+    if !status.success() {
+        let detail = if !stderr_text.trim().is_empty() {
+            stderr_text.trim()
+        } else if !answer.trim().is_empty() {
+            answer.trim()
+        } else {
+            "Claude exited without a diagnostic."
+        };
+        return Err(AppError::new(format!(
+            "Claude Local bridge failed with status {status}: {}",
+            truncate_for_error(detail, 700)
+        )));
+    }
+
+    let answer = answer.trim().to_string();
+    if answer.is_empty() {
+        let suffix = if stderr_text.trim().is_empty() {
+            String::new()
+        } else {
+            format!(" Stderr: {}", truncate_for_error(stderr_text.trim(), 300))
+        };
+        return Err(AppError::new(format!(
+            "Claude Local bridge returned an empty response.{suffix}"
+        )));
+    }
+    Ok(answer)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LocalCliStream {
     Stdout,
@@ -1441,8 +2107,12 @@ enum LocalCliLine {
     Done(LocalCliStream),
 }
 
-fn spawn_local_cli_reader<R>(reader: R, sender: mpsc::Sender<LocalCliLine>, stream: LocalCliStream)
-where
+fn spawn_local_cli_reader<R>(
+    reader: R,
+    sender: mpsc::Sender<LocalCliLine>,
+    stream: LocalCliStream,
+    label: &'static str,
+) where
     R: std::io::Read + Send + 'static,
 {
     thread::spawn(move || {
@@ -1459,7 +2129,7 @@ where
                 }
                 Err(error) => {
                     let _ = sender.send(LocalCliLine::Stderr(format!(
-                        "Could not read Codex Local output: {error}"
+                        "Could not read {label} output: {error}"
                     )));
                     break;
                 }
@@ -1515,6 +2185,23 @@ pub fn codex_exec_json_event_text(line: &str) -> Option<String> {
     .find_map(collect_json_text)
     .map(|text| text.to_string())
     .filter(|text| !text.is_empty())
+}
+
+pub fn claude_code_stream_json_event_text(line: &str) -> Option<String> {
+    let value: Value = serde_json::from_str(line).ok()?;
+    let event = value.get("event").unwrap_or(&value);
+    if event.get("type").and_then(Value::as_str) != Some("content_block_delta") {
+        return None;
+    }
+    let delta = event.get("delta")?;
+    if delta.get("type").and_then(Value::as_str) != Some("text_delta") {
+        return None;
+    }
+    delta
+        .get("text")
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .filter(|text| !text.is_empty())
 }
 
 fn codex_event_type(value: &Value) -> String {
@@ -1676,6 +2363,48 @@ pub struct AiProfilesConfig {
     pub profiles: Vec<AiProfile>,
 }
 
+#[derive(Debug, Deserialize)]
+struct LegacyAiProfilesConfig {
+    #[serde(default = "ai_profiles_enabled_default")]
+    enabled: bool,
+    #[serde(default)]
+    default_profile: Option<String>,
+    #[serde(default)]
+    active_profile_id: Option<String>,
+    #[serde(default)]
+    profiles: Vec<LegacyAiProfile>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LegacyAiProfile {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    label: Option<String>,
+    #[serde(default)]
+    provider: Option<String>,
+    #[serde(default)]
+    endpoint: Option<String>,
+    #[serde(default)]
+    command: Option<String>,
+    #[serde(default)]
+    command_args: Vec<String>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    small_model: Option<String>,
+    #[serde(default)]
+    secret_ref: Option<String>,
+    #[serde(default)]
+    headers: BTreeMap<String, String>,
+    #[serde(default)]
+    env: BTreeMap<String, String>,
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default = "ai_profiles_enabled_default")]
+    enabled: bool,
+}
+
 impl Default for AiProfilesConfig {
     fn default() -> Self {
         Self {
@@ -1785,6 +2514,226 @@ pub fn ai_secrets_path() -> Result<PathBuf, AppError> {
     ))
 }
 
+fn migrate_legacy_ai_profiles_config(contents: &str) -> Result<AiProfilesConfig, String> {
+    let legacy: LegacyAiProfilesConfig =
+        serde_json::from_str(contents).map_err(|error| error.to_string())?;
+    let original_profile_count = legacy.profiles.len();
+    let mut profiles = Vec::new();
+
+    for legacy_profile in legacy.profiles {
+        let Some(profile) = legacy_ai_profile_to_current(legacy_profile) else {
+            continue;
+        };
+        match profiles
+            .iter()
+            .position(|existing: &AiProfile| existing.id == profile.id)
+        {
+            Some(index) => profiles[index] = profile,
+            None => profiles.push(profile),
+        }
+    }
+
+    if original_profile_count > 0 && profiles.is_empty() {
+        return Err("no recognizable legacy AI profiles".to_string());
+    }
+
+    let requested_default = non_empty_legacy_string(legacy.default_profile)
+        .or_else(|| non_empty_legacy_string(legacy.active_profile_id));
+    let default_profile = legacy_default_profile_id(requested_default.as_deref(), &profiles)
+        .or_else(|| {
+            profiles
+                .iter()
+                .find(|profile| profile.enabled)
+                .map(|profile| profile.id.clone())
+        })
+        .or_else(|| profiles.first().map(|profile| profile.id.clone()));
+
+    Ok(AiProfilesConfig {
+        enabled: legacy.enabled,
+        default_profile,
+        profiles,
+    })
+}
+
+fn legacy_ai_profile_to_current(legacy: LegacyAiProfile) -> Option<AiProfile> {
+    let LegacyAiProfile {
+        id,
+        label,
+        provider,
+        endpoint,
+        command,
+        command_args,
+        model,
+        small_model,
+        secret_ref,
+        headers,
+        env,
+        cwd,
+        enabled,
+    } = legacy;
+
+    let provider = non_empty_legacy_string(provider);
+    let id = non_empty_legacy_string(id).or_else(|| provider.clone())?;
+    let label = non_empty_legacy_string(label);
+    let endpoint = non_empty_legacy_string(endpoint);
+    let command = non_empty_legacy_string(command);
+    let model = non_empty_legacy_string(model);
+    let small_model = non_empty_legacy_string(small_model);
+    let secret_ref = non_empty_legacy_string(secret_ref);
+    let cwd = non_empty_legacy_string(cwd);
+
+    let id_key = legacy_profile_key(&id);
+    let provider_key = provider.as_deref().map(legacy_profile_key);
+    let command_is_codex = command.as_deref().is_some_and(command_name_is_codex)
+        || endpoint
+            .as_deref()
+            .filter(|value| !legacy_string_looks_like_url(value))
+            .is_some_and(command_name_is_codex);
+    let command_is_claude = command.as_deref().is_some_and(command_name_is_claude)
+        || endpoint
+            .as_deref()
+            .filter(|value| !legacy_string_looks_like_url(value))
+            .is_some_and(command_name_is_claude);
+
+    let mut profile = if legacy_profile_matches(&id_key, provider_key.as_deref(), "codex-local")
+        || legacy_profile_matches(&id_key, provider_key.as_deref(), "codex")
+        || command_is_codex
+    {
+        let mut profile = AiProfile::codex_local();
+        if let Some(command) = command.or_else(|| {
+            endpoint
+                .clone()
+                .filter(|value| !legacy_string_looks_like_url(value))
+        }) {
+            profile.command = Some(command);
+        }
+        if !command_args.is_empty() {
+            profile.command_args = command_args;
+        }
+        profile
+    } else if legacy_profile_matches(&id_key, provider_key.as_deref(), "claude-local")
+        || legacy_profile_matches(&id_key, provider_key.as_deref(), "claude")
+        || command_is_claude
+    {
+        let mut profile = AiProfile::claude_local();
+        if let Some(command) = command.or_else(|| {
+            endpoint
+                .clone()
+                .filter(|value| !legacy_string_looks_like_url(value))
+        }) {
+            profile.command = Some(command);
+        }
+        if !command_args.is_empty() {
+            profile.command_args = command_args;
+        }
+        profile
+    } else if legacy_profile_matches(&id_key, provider_key.as_deref(), OLLAMA_LOCAL_QUICK_ADD_ID)
+        || legacy_profile_matches(&id_key, provider_key.as_deref(), "ollama")
+    {
+        let mut profile = AiProfile::ollama_local(
+            model
+                .clone()
+                .unwrap_or_else(|| OLLAMA_FALLBACK_MODEL.to_string()),
+        );
+        if let Some(endpoint) = endpoint
+            .clone()
+            .filter(|value| legacy_string_looks_like_url(value))
+        {
+            profile.endpoint = Some(legacy_ollama_openai_endpoint(&endpoint));
+        }
+        profile
+    } else if legacy_profile_matches(&id_key, provider_key.as_deref(), NVIDIA_NIM_QUICK_ADD_ID)
+        || legacy_profile_matches(&id_key, provider_key.as_deref(), "nvidia")
+        || legacy_profile_matches(&id_key, provider_key.as_deref(), "nim")
+    {
+        let mut profile = AiProfile::nvidia_nim(secret_ref.clone());
+        if let Some(endpoint) = endpoint
+            .clone()
+            .filter(|value| legacy_string_looks_like_url(value))
+        {
+            profile.endpoint = Some(endpoint);
+        }
+        if let Some(model) = model.clone() {
+            profile.model = Some(model);
+        }
+        profile
+    } else {
+        let endpoint = endpoint.filter(|value| legacy_string_looks_like_url(value))?;
+        let mut profile = AiProfile::openai_compatible(
+            id,
+            label.clone().unwrap_or_else(|| "AI Provider".to_string()),
+            endpoint,
+            model.clone().unwrap_or_default(),
+        );
+        if model.is_none() {
+            profile.model = None;
+        }
+        profile
+    };
+
+    if let Some(label) = label {
+        profile.label = label;
+    }
+    profile.small_model = small_model;
+    profile.secret_ref = secret_ref.or(profile.secret_ref);
+    profile.headers = headers;
+    profile.env = env;
+    profile.cwd = cwd;
+    profile.enabled = enabled;
+
+    Some(profile)
+}
+
+fn non_empty_legacy_string(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
+}
+
+fn legacy_profile_key(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace(['_', ' '], "-")
+}
+
+fn legacy_profile_matches(id_key: &str, provider_key: Option<&str>, expected: &str) -> bool {
+    id_key == expected || provider_key == Some(expected)
+}
+
+fn legacy_default_profile_id(requested: Option<&str>, profiles: &[AiProfile]) -> Option<String> {
+    let requested = requested?;
+    if let Some(profile) = profiles.iter().find(|profile| profile.id == requested) {
+        return Some(profile.id.clone());
+    }
+
+    let requested_key = legacy_profile_key(requested);
+    let canonical_id = match requested_key.as_str() {
+        "codex" | CODEX_LOCAL_QUICK_ADD_ID => Some(CODEX_LOCAL_QUICK_ADD_ID),
+        "claude" | CLAUDE_LOCAL_QUICK_ADD_ID => Some(CLAUDE_LOCAL_QUICK_ADD_ID),
+        "ollama" | OLLAMA_LOCAL_QUICK_ADD_ID => Some(OLLAMA_LOCAL_QUICK_ADD_ID),
+        "nvidia" | "nim" | NVIDIA_NIM_QUICK_ADD_ID => Some(NVIDIA_NIM_QUICK_ADD_ID),
+        _ => None,
+    }?;
+
+    profiles
+        .iter()
+        .find(|profile| profile.id == canonical_id)
+        .map(|profile| profile.id.clone())
+}
+
+fn legacy_string_looks_like_url(value: &str) -> bool {
+    let lower = value.trim().to_ascii_lowercase();
+    lower.starts_with("http://") || lower.starts_with("https://")
+}
+
+fn legacy_ollama_openai_endpoint(endpoint: &str) -> String {
+    let trimmed = endpoint.trim().trim_end_matches('/');
+    if trimmed.ends_with("/v1") {
+        trimmed.to_string()
+    } else {
+        format!("{trimmed}/v1")
+    }
+}
+
 pub fn load_ai_profiles_from_path(path: &Path) -> Result<AiProfilesConfig, AppError> {
     if !path.exists() {
         return Ok(AiProfilesConfig::default());
@@ -1797,12 +2746,15 @@ pub fn load_ai_profiles_from_path(path: &Path) -> Result<AiProfilesConfig, AppEr
         ))
     })?;
 
-    serde_json::from_str(&contents).map_err(|error| {
-        AppError::new(format!(
-            "Could not parse AI profiles '{}': {error}",
-            path.display()
-        ))
-    })
+    match serde_json::from_str(&contents) {
+        Ok(config) => Ok(config),
+        Err(error) => migrate_legacy_ai_profiles_config(&contents).map_err(|_| {
+            AppError::new(format!(
+                "Could not parse AI profiles '{}': {error}",
+                path.display()
+            ))
+        }),
+    }
 }
 
 pub fn save_ai_profiles_to_path(path: &Path, config: &AiProfilesConfig) -> Result<(), AppError> {

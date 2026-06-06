@@ -183,8 +183,8 @@ It should be:
 
 ```text
 Select a messy branch.
-Press AI Help.
-mdmind says: “This looks like rough product planning. Want help finding gaps, extracting tasks, or cleaning it up?”
+Open AI Chat.
+mdmind says: “I’m looking at this map context. Ask a question, find gaps, or request reviewable map edits.”
 ```
 
 That is the magic: the system understands the shape of the work without taking over.
@@ -196,18 +196,11 @@ There should not be a long list of AI commands in the command palette.
 The primary entry should be simple:
 
 ```text
-AI: Help here
+AI: Open Chat
 ```
 
-Possible alternatives:
-
-```text
-AI: Assist here
-AI: Think with me
-AI: Suggest next steps
-```
-
-Recommendation: use **AI: Help here** for v1. It is plain, calm, and clear.
+AI Chat is the obvious door. AI Settings is nearby for setup, providers, and
+review controls, but those choices should not become separate global commands.
 
 ### 3. Smart suggestions, not command overload
 
@@ -246,7 +239,7 @@ The user should never wonder, “What did it send?”
 
 The review experience is where trust is earned.
 
-AI output should appear as proposed map changes, not just prose.
+AI output should appear as proposed map edits, not just prose.
 
 Good:
 
@@ -293,12 +286,12 @@ Not from animations, avatars, or novelty.
 
 ```text
 1. User selects a node or branch.
-2. User invokes “AI: Help here.”
-3. mdmind determines context scope.
-4. AI classifies map type, branch state, and likely intent.
-5. mdmind shows contextual suggestions.
-6. User chooses one suggestion.
-7. AI returns structured output.
+2. User invokes “AI: Open Chat.”
+3. mdmind opens AI Chat, or AI Settings first when setup is needed.
+4. AI Chat shows provider, model, token estimate, and the active map context.
+5. User asks a freeform question or chooses a quick prompt.
+6. Conversational answers stay in AI Chat.
+7. Explicit edit requests return structured suggestions.
 8. mdmind validates the output.
 9. User reviews proposed changes.
 10. User accepts, partially accepts, rejects, or refines.
@@ -484,63 +477,66 @@ This keeps the experience useful without pretending.
 
 ## AI Surfaces
 
-### 1. Status Lamp
+### 1. Panel State And Status Row
 
-A small status indicator should show the AI state.
+AI state should live in AI Settings, AI Chat/Review headers, and the normal
+status area when there is active work to explain. The main map header should not
+show ordinary provider/chat/review lamps.
 
-Examples:
+Panel/status examples:
 
 ```text
-AI: Off
-AI: NIM
-AI: Codex
-AI: Working
-AI: Review
-AI: Error
+Provider Ollama Local
+Provider NVIDIA NIM
+Provider Codex Local
+Provider Claude Local
+NIM response · "Find gaps..."
+Review Suggestions · 3 staged map edits
+NIM request timed out
 ```
 
-The status lamp should be subtle. It should not dominate the UI.
+The status row should be subtle. It should not dominate the UI.
 
-For the first implementation slice, the lamp should show the active provider,
-not just a generic ready state. If both NVIDIA NIM and Codex Local are
-configured, the active/default profile decides which provider AI actions use.
-Users can switch explicitly inside the AI Panel:
+The active/default profile decides which provider AI actions use. Users switch
+explicitly inside AI Settings:
 
 ```text
+Use Ollama Local
 Use NVIDIA NIM
 Use Codex Local
+Use Claude Local
 ```
 
 Recommendation:
 
-* show `AI: Off` only in settings or when relevant;
-* show the active provider subtly after configuration;
-* show `AI: Working` only during an active request;
-* show `AI: Review` when suggestions are waiting.
+* show off/provider state inside AI Settings, not as a persistent main-header lamp;
+* show active request/review context in AI Chat, Review Suggestions, or the status row.
 
-### 2. Help Overlay
+### 2. AI Chat Overlay
 
-Invoking `AI: Help here` opens a compact overlay.
+Invoking `AI: Open Chat` opens a compact transcript overlay. If no callable
+provider is ready yet, AI Settings opens first and focuses provider setup.
 
 It should show:
 
-* detected context;
-* selected scope;
-* suggested actions;
+* active chat context;
+* current focus context summary;
+* quick prompts;
 * provider/model indicator;
-* option to preview context;
+* review-action entry when staged edits exist;
+* settings entry for provider setup and on/off;
 * option to cancel.
 
 Example:
 
 ```text
-AI Help
+AI Chat
 
-Scope: Current branch
+Context: Root
 Provider: local-llama
-Detected: rough product planning
+Sends: whole map on the first turn when it fits; focus, context, and recent chat every turn
 
-Useful next steps:
+Quick prompts:
 › Find missing requirements
   Clean up structure
   Extract open questions
@@ -661,7 +657,7 @@ This should feel honest, not broken.
 * AI off by default
 * AI configuration flow
 * Provider profile support
-* One primary command: `AI: Help here`
+* One primary command: `AI: Open Chat`
 * Context detection for selected scope
 * Dynamic suggested actions
 * Context preview for networked providers
@@ -822,42 +818,46 @@ Initial quick-add profiles:
 | Profile | Type | Defaults | Secret handling |
 | --- | --- | --- | --- |
 | NVIDIA NIM | OpenAI-compatible HTTP | `https://integrate.api.nvidia.com/v1`, `nvidia/llama-3.3-nemotron-super-49b-v1.5`, Chat Completions defaults from NVIDIA's example request | Use `env:NVIDIA_API_KEY` by default; get keys from <https://build.nvidia.com/settings/api-keys>; never store the raw key in mdmind config |
+| Ollama Local | Local HTTP | detect running local Ollama, list `/api/tags`, choose a chat-capable installed model, use `http://127.0.0.1:11434/v1` | No mdmind API key |
 | Codex Local | Local agent CLI | `codex exec` | No mdmind API key; relies on the installed Codex CLI's own auth/config |
+| Claude Local | Local agent CLI | `claude -p` in stream-json mode with plan permissions, disabled tools, one turn, and no session persistence | No mdmind API key; relies on the installed Claude CLI's own auth/config |
 
 TUI-first slice:
 
 ```text
-AI: Open Panel
+AI: Open Chat
+› Use Ollama Local
 › Set up NVIDIA NIM
   Use Codex Local
+  Use Claude Local
   Use NVIDIA NIM
-  Automation hooks
 ```
 
 The command palette has one AI entry point. A user should be able to enable AI
 without knowing that `mdm ai` exists, but AI-specific choices should happen in
-the AI Panel rather than scattered through the global palette.
+AI Chat or AI Settings rather than scattered through the global palette.
 
 Initial palette/menu entries:
 
 ```text
-AI: Open Panel
+AI: Open Chat
 ```
 
-Initial AI Panel actions:
+Initial AI Settings actions:
 
 ```text
 Chat
   Open AI Chat
+  Context
   Cancel response
-Suggestions
-  Review suggestions
+Map edits
+  Review map edits
 Providers
+  Use Ollama Local
   Set up NVIDIA NIM
   Use NVIDIA NIM
   Use Codex Local
-Automation
-  Automation hooks
+  Use Claude Local
 Settings
   Turn AI off
 ```
@@ -866,9 +866,10 @@ Setup actions should write only non-secret profile config. NVIDIA NIM
 should open a small masked input prompt that links to
 <https://build.nvidia.com/settings/api-keys>, accepts a pasted API key, stores
 the key outside the profile JSON, and points the profile at a local secret
-reference such as `local:mdmind.ai.nvidia-nim`. Codex Local should not need a
-separate setup action; choosing it inside the AI Panel should record/select
-that profile because it relies on the installed Codex CLI's own auth/config.
+reference such as `local:mdmind.ai.nvidia-nim`. Codex Local and Claude Local
+should not need separate setup actions; choosing either inside AI Settings
+should record/select that profile because it relies on the installed CLI's own
+auth/config.
 
 CLI support may still exist for scripts, tests, and debugging:
 
@@ -891,28 +892,31 @@ mechanism without sharing AI-specific state.
 First usable TUI slice:
 
 ```text
-AI: Open Panel
-  A Open AI Chat
+AI: Open Chat
+  P Open AI Settings
   X Cancel response
-  S Review suggestions
+  S Review map edits
+  T Change chat context in AI Chat
 ```
 
 AI Chat should be a session surface, not a single Q/A review bin. Opening it
 shows the current chat transcript for this TUI session. Pressing Enter opens a
-compact composer above the chat; submitting sends the selected branch, the new
-message, and recent chat turns to the active provider.
+compact composer inside the chat; submitting sends the new message, recent chat
+turns, current focus branch, and chat context to the active provider. On the
+first turn, it also sends the whole map when the map is reasonably sized; large
+maps get an omission note instead of spending the token budget on the full tree.
 The chat header should show the active provider, model name, and estimated total
 tokens for the current TUI session, so `NVIDIA NIM` is not ambiguous once
 multiple models or providers exist.
 Responses stream back into AI Chat. Conversational answers stay in the panel.
 Structured edit suggestions become Review Suggestions rows only when the user
-explicitly asks for map edits, staged suggestions, or changes they can apply.
+explicitly asks for map edits or changes they can review and apply.
 The chat composer should teach stable phrases: use `suggest new ...`,
 `suggest missing ...`, or `suggest` with map, branch, node, or outline edits
 when the user wants staged Review Suggestions.
-The AI Chat footer should call the selected answer action `suggest`, not
-`convert`; the action asks the model for staged edit suggestions based on that
-answer.
+The AI Chat selected-turn action should live in the highlighted action strip,
+not the footer, and call the action `suggest`, not `convert`; the action asks
+the model for staged edit suggestions based on that answer.
 Review Suggestions should display the triggering prompt as a distinct
 `Prompt > ...` provenance line so users can tell whether they are reviewing the
 right request.
@@ -932,22 +936,27 @@ the new request. Pressing Esc closes only the composer and leaves the current
 response running.
 
 The TUI must never block while waiting for a provider. When a chat response
-starts, `mdmind` should keep the AI Panel and AI Chat open, show `AI WORKING` in
-the header, stream answer text into the chat body, and keep the status line
-available. When the response completes, it should stay staged under the branch
-that was originally asked about, and the user should review, accept, or dismiss
-it before the map changes. Failures should clear the working state and explain
-which provider failed.
+starts, `mdmind` should keep AI Chat open, stream answer text into the chat
+body, and keep the status line available. The header should not
+add provider, working, or review lamps for ordinary AI Chat. When the response
+completes, it should stay staged under the branch that was originally asked
+about, and the user should review, accept, or dismiss it before the map changes.
+Failures should clear the working state and explain which provider failed.
 
 Provider selection:
 
 * the active provider is stored as the default profile in `ai-profiles.json`;
 * setup may add multiple profiles, but only one is active at a time;
+* if the active local provider becomes unavailable, AI Chat should not silently
+  fall back to a different configured provider;
 * switching active providers starts a fresh AI Chat conversation so prior chat
   turns are not sent to a different provider; staged Review Suggestions are kept;
 * AI Chat uses the active callable profile;
 * Codex Local is callable through `codex exec` in read-only, ephemeral mode and
-  receives the same prompt contract through stdin.
+  receives the same prompt contract through stdin;
+* Claude Local is callable through `claude -p` in stream-json mode with plan
+  permissions, disabled tools, one turn, no session persistence, and the same
+  prompt contract through stdin.
 
 ## AI UI Flows
 
@@ -973,66 +982,75 @@ ai    NIM answer · "Find gaps..."
 
 This prevents AI from feeling like it has taken over normal interface feedback.
 
-Turn Off should be an explicit AI Panel action. Turning AI off should:
+Turn Off should be an explicit AI Settings action. Turning AI off should:
 
 * stop any in-flight TUI AI job;
 * mark the active job as cancelled so late chunks/results are ignored;
 * clear active AI Chat state while keeping staged Review Suggestions available;
-* show `AI REVIEW` when staged suggestions remain, otherwise return to `AI OFF`;
+* keep staged Review Suggestions available without lighting the main header;
 * keep provider profiles and stored keys intact;
-* allow users to turn AI back on by choosing a provider inside the AI Panel.
+* allow users to turn AI back on by choosing a provider inside AI Settings.
 
 ### Provider Setup Flow
 
-1. User opens the palette and chooses `AI: Open Panel`.
-2. Inside the panel, the user chooses setup or provider actions.
-3. For NVIDIA NIM, mdmind opens a masked key prompt with a visible link to
-   <https://build.nvidia.com/settings/api-keys>.
+1. User opens the palette and chooses `AI: Open Chat`; because setup is needed,
+   AI Settings opens first.
+2. Inside settings, the user chooses setup or provider actions.
+3. For NVIDIA NIM, mdmind opens a masked key prompt with one visible key-page
+   link: <https://build.nvidia.com/settings/api-keys>.
 4. On save, mdmind writes the key to the local secret store, writes only a
    `local:...` secret reference into the profile JSON, and activates the
    provider.
-5. The header/status strip changes from `AI OFF` to `AI NIM`.
+5. AI Settings marks NVIDIA NIM as active; the main header remains quiet.
 
-Codex Local and future Claude Code-style providers should be selected through
-the AI Panel, not separate global commands. Codex Local should not require an
-mdmind API key; it relies on the installed Codex CLI's own auth/config. When it
-is active, the status should be explicit:
+Codex Local and Claude Local should be selected through AI Settings, not
+separate global commands. They should not require an mdmind API key; they rely
+on the installed CLI's own auth/config. When a local CLI bridge is active, the
+AI Settings and AI Chat metadata should be explicit:
 
 ```text
-AI CODEX | Codex Local ready
+Provider Codex Local | Model Codex CLI default
+Provider Claude Local | Model Claude CLI default
 ```
 
 ### AI Chat Flow
 
-1. User focuses a branch, opens `AI: Open Panel`, and presses A for AI Chat.
-2. AI Chat opens as a transcript. Pressing Enter opens a compact composer that
-   shows scope and provider:
+1. User focuses a branch and opens `AI: Open Chat`.
+2. Optionally, the user presses T in AI Chat to pin AI Chat to
+   another branch. The target prompt accepts partial names, ids, breadcrumbs,
+   tags, and small typos; Tab completes the best match to a stable id when
+   available.
+   Without an explicit target, AI Chat uses the current root. Empty input keeps
+   the root default; `.` pins the currently selected node.
+3. AI Chat opens as a transcript. Pressing Enter opens a compact composer that
+   shows target and provider:
 
 ```text
-Provider: NVIDIA NIM or Codex Local
-Scope: Current branch
+Provider: Ollama Local, NVIDIA NIM, Codex Local, or Claude Local
+Context: Current chat context
 Message:
 [________________________________________]
 ```
 
-3. Submit returns immediately to AI Chat on a streaming response. The thin AI
-   strip shows the provider, target, and activity:
+4. Submit returns immediately to AI Chat on a streaming response. AI Chat shows
+   the provider, target, and activity:
 
 ```text
-AI WORKING | NIM | Product Plan | "Find gaps..."
+AI Chat | streaming | NIM | Product Plan | "Find gaps..."
 ```
 
-4. The model response is staged in AI Chat unless it contains structured
+5. The model response is staged in AI Chat unless it contains structured
    edit suggestions. The map is unchanged.
-5. If structured map edits are staged, the strip switches to review state:
+6. If structured map edits are staged, Review Suggestions becomes available
+   from AI Chat or AI Settings:
 
 ```text
-AI REVIEW | NIM | 3 suggestions
+Review Suggestions | NIM | 3 suggestions
 ```
 
 Conversational answers should stay inside AI Chat. They should not be written
 into the map just because the user sent a message. Only structured edit
-suggestions should become checkable/applyable rows.
+suggestions should become checkable/applicable rows.
 
 Cancelled chat turns and dismissed/applied Review Suggestions should move into
 in-memory AI session history. That history is visible from AI Chat until the TUI
@@ -1041,9 +1059,9 @@ session ends, but is not written to map files or sidecars.
 ### Review Suggestions Flow
 
 Review Suggestions is the decision surface for AI Chat and background
-automation outputs that propose map changes. It should open from the AI Panel,
-the AI status strip, or a future single-key focus action when `AI REVIEW` is
-visible. It should not show conversational Q/A entries.
+automation outputs that propose map edits. It should open from AI Chat, AI Settings,
+or a future single-key focus action. It should not show conversational Q/A
+entries.
 
 ```text
 ┌─ Review Suggestions: Product Plan ──────────────────────┐
@@ -1069,10 +1087,10 @@ visible. It should not show conversational Q/A entries.
 Review rules:
 
 * additions may default checked when confidence is high;
-* add-child suggestions may omit a target to apply under the selected branch, or
-  name an existing descendant/selected branch target when the new node belongs
+* add-child suggestions may omit a target to apply under the chat context branch,
+  or name an existing descendant/chat context branch target when the new node belongs
   deeper in the opened context;
-* the header summarizes placement across targets, and each add-child row says
+* the header summarizes placement across branches, and each add-child row says
   `Place under ...` so the landing spot is explicit before apply;
 * updates may default checked only when the diff is small and target resolution
   is exact;
@@ -1083,53 +1101,22 @@ Review rules:
   label;
 * unsupported suggestion types remain visible but disabled with an explanation;
 * answer bodies and long suggestion lists are scrollable;
-* Review Suggestions browses only currently staged map-change items.
+* Review Suggestions browses only currently staged map-edit items.
 * AI Chat browses streaming/current conversational answers and read-only
   in-memory session history.
-
-### Background Mode Flow
-
-Background mode should use the same Review Suggestions queue rather than a
-second UI. Automations produce staged suggestions; users decide what lands in
-the map.
-
-Hook setup should be a TUI form, not config-file editing:
-
-```text
-┌─ AI Automation ──────────────────────────────────────────┐
-│ Name: Character relationship reviewer                    │
-│ Provider: NVIDIA NIM                                     │
-│ Scope: descendants of /Story/Characters                  │
-│ Events: [x] node added  [x] node updated  [ ] removed     │
-│ Prompt: suggest missing relationships with siblings      │
-│ Debounce: 5s                                             │
-│ Review: stage suggestions only                           │
-└──────────────────────────────────────────────────────────┘
-```
-
-Background activity should be visible in the thin strip:
-
-```text
-AI QUEUED  | 2 hooks waiting
-AI WORKING | Characters hook · 4 changed nodes
-AI REVIEW  | 5 staged suggestions
-```
-
-No background hook should send hidden context. The setup flow must preview the
-scope and event types before enabling the hook.
 
 ### Error And Offline Flow
 
 AI failures must return control with visible state, not a frozen prompt:
 
 ```text
-AI ERROR | NIM request timed out | retry from review
+NIM request timed out | retry from AI Chat or Review Suggestions
 ```
 
 If AI is off:
 
 ```text
-AI OFF | mdmind works fully without AI
+mdmind works fully without AI
 ```
 
 If a provider is configured but unavailable, the UI should show whether the
@@ -1186,9 +1173,9 @@ Internal suggestion shape:
 ```
 
 For add-child rows, `target` is optional. When absent, the row applies under the
-selected branch that opened AI Chat. When present, the app resolves the target by
-id, path, or label/path and only applies it when it is inside the selected
-branch scope.
+chat context branch for that AI Chat turn. When present, the app resolves the
+target by id, path, or label/path and only applies it when it is inside the chat
+chat context branch scope.
 
 If a provider supports tool calling, mdmind should expose tools that propose
 changes, not tools that mutate the map:
@@ -1206,12 +1193,15 @@ only mutation path.
 
 If a provider does not support tool calling, the adapter should request strict
 JSON with the same shape for edit-producing tasks. If parsing fails, mdmind
-should keep the prose answer in AI Chat and clearly mark it as non-applyable
+should keep the prose answer in AI Chat and clearly mark it as non-applicable
 instead of inventing a map edit.
 
-Prompt context for edit-producing tasks should include the selected branch plus
-compact branch style notes: task-marker use, common tags, metadata keys, stable
-id examples, detail-line usage, relation styles, and external reference styles.
+Prompt context for edit-producing tasks should include the current focus branch,
+the chat context branch, and compact context style notes: task-marker use, common
+tags, metadata keys, stable id examples, detail-line usage, relation styles, and
+external reference styles. On the first chat turn, include the whole map when it
+is reasonably sized; for large maps, omit it and say so rather than wasting the
+token budget.
 The system prompt should incorporate the local `mdmind-map-authoring` guidance:
 build a readable tree first; keep labels short; preserve the user's framing;
 use tags, metadata, ids, details, relations, and external refs only when useful
@@ -1239,6 +1229,8 @@ Library strategy:
 * do not let SDK-specific types leak into `interactive.rs` or `editor.rs`;
 * require any chosen library to support custom base URLs so NVIDIA NIM, local
   OpenAI-compatible servers, and future providers remain first-class.
+* show local model-server and local CLI providers only when mdmind detects that
+  they are actually available on the local machine.
 
 ### Provider Profile Fields
 
@@ -1265,65 +1257,6 @@ Users should be able to bring:
 * local model servers such as Ollama or LM Studio;
 * authenticated local CLIs such as Codex or Claude Code;
 * future custom adapters.
-
-## AI Automation
-
-In addition to explicit AI Chat mode, `mdmind` should support a future automation
-mode where users attach small AI hooks to map events. These hooks are opt-in,
-visible, scoped, and review-only by default.
-
-An automation should include:
-
-```text
-Name
-Enabled/disabled state
-Path or branch selector
-Event types
-Provider/profile
-Instruction prompt
-Debounce/grouping window
-Output target
-Review policy
-```
-
-Initial event types:
-
-* node added;
-* node updated;
-* node removed;
-* detail updated;
-* branch moved;
-* tag or metadata changed.
-
-The path selector should be understandable in TUI terms: current branch, root,
-node id, tag filter, metadata filter, or descendants of a selected branch.
-
-Example automations:
-
-```text
-On any added node under root, check spelling.
-On any added node under the Characters branch, suggest relationships with other characters in that branch.
-On detail updates under Research, extract open questions and source gaps.
-On TODO additions under Milestones, flag missing owners or dates.
-```
-
-Automation output should flow into the same thin AI surface as explicit mode:
-a compact activity/status line and a reviewable suggestions list that can be
-focused from the map. The map must never be silently rewritten. Suggestions
-can propose node edits, child nodes, tags, metadata, questions, or warnings,
-but applying them must go through the normal undo/checkpoint path.
-
-Automation safeguards:
-
-* off by default;
-* per-hook enable/disable;
-* obvious `AI WORKING` or queued state while hooks run;
-* debounced event batches so typing does not spam providers;
-* max suggestions per run;
-* no hidden network sends;
-* previewable scope before enabling a hook;
-* provider and prompt shown on every hook config;
-* failures are visible but non-blocking.
 
 ## Privacy and Trust
 
@@ -1537,7 +1470,7 @@ This creates the “oh, nice” moment.
 
 ### 2. Suggestion chips
 
-Use compact suggestion rows, not a giant menu.
+Use compact suggestion chips, not a giant menu.
 
 Example:
 
@@ -1646,9 +1579,9 @@ For local providers, the UI can make that feel good.
 Example:
 
 ```text
-AI: Local
-Provider: Ollama
-Network: none
+Provider Ollama Local
+Model llama3.2:latest
+Local HTTP only
 ```
 
 That is a trust-building detail.
@@ -1690,11 +1623,11 @@ No celebration confetti. Just crisp confirmation.
 │  ├─ Requirements                             │
 │  └─ Risks                                    │
 │                                              │
-│ AI: Off                                      │
+│                                              │
 └──────────────────────────────────────────────┘
 ```
 
-### AI Panel Setup Action
+### AI Settings Setup Action
 
 ```text
 ┌──────────────────────────────────────────────┐
@@ -1705,49 +1638,51 @@ No celebration confetti. Just crisp confirmation.
 │  ├─ Requirements                             │
 │  └─ Risks                                    │
 │                                              │
-│ AI: NIM  |  Provider: NVIDIA NIM             │
+│                                              │
 └──────────────────────────────────────────────┘
 ```
 
 Setup should feel like part of the TUI, not like a separate developer workflow.
-The main map should expose provider state and a single AI Panel entry point; the
-panel owns setup so provider controls do not clutter map navigation.
+The main map should expose a single AI Chat entry point without persistent
+provider state; AI Settings owns setup so provider controls do not clutter map
+navigation.
 
 ### NVIDIA NIM Key Prompt
 
 ```text
 ┌─ NVIDIA NIM API Key ─────────────────────────┐
-│ Paste an API key from build.nvidia.com.       │
+│ Current key: nvapi-xxxxx3eda                 │
+│ Paste a new key only if replacing it.         │
 │                                              │
 │ API key                                      │
 │ [****************____________]               │
 │                                              │
-│ Get a key:                                   │
+│ Key page:                                    │
 │ https://build.nvidia.com/settings/api-keys   │
 │                                              │
 │ Enter stores  Esc cancels                    │
 └──────────────────────────────────────────────┘
 ```
 
-The pasted key should be masked. The profile should store only the secret
-reference, not the raw key.
+The pasted key should be masked. If a key is already stored and readable, the
+prompt should show only the beginning and final four characters. The profile
+should store only the secret reference, not the raw key.
 
-### AI Help Invoked
+### AI Chat Opened
 
 ```text
-┌─ AI Help ────────────────────────────────────┐
-│ Target: Current branch                        │
+┌─ AI Chat ────────────────────────────────────┐
+│ Context: Root                                │
 │ Provider: local-llama                         │
 │                                              │
-│ This looks like product planning.             │
+│ No turns yet.                                 │
 │                                              │
-│ Useful next steps:                            │
+│ Quick prompts:                                │
 │ › Find missing requirements                   │
 │   Extract open questions                      │
 │   Draft acceptance criteria                   │
-│   Split into implementation phases            │
 │                                              │
-│ [Enter] run  [Tab] preview  [Esc] cancel      │
+│ [Enter] message  [P] settings  [T] context    │
 └──────────────────────────────────────────────┘
 ```
 
@@ -1871,7 +1806,7 @@ Example:
 Build v1 around one primary command:
 
 ```text
-AI: Help here
+AI: Open Chat
 ```
 
 Behind that, implement:
@@ -1967,7 +1902,7 @@ Mitigation:
 * one primary entry point;
 * no passive suggestions in v1;
 * no always-open assistant panel;
-* subtle status lamp;
+* subtle status rows only when there is active AI state;
 * easy dismissal.
 
 ### Risk: AI feels unsafe
@@ -2023,16 +1958,12 @@ Mitigation:
 
 ## Open Questions
 
-* What should the primary command be named: `AI: Help here`, `AI: Assist here`, or `AI: Suggest next steps`?
-* Should the AI status lamp appear before AI is configured, or only after setup?
 * Should context preview be mandatory for every networked request?
 * How much of the internal classifier output should be visible to users?
 * Should local CLI bridge ship in v1 or wait until HTTP providers are excellent?
 * Should custom user recipes be available in v1?
 * Which freeform chat affordances belong in the first release versus later?
 * Should accepted AI suggestions be stored in map history as AI-authored changes?
-* How should AI Automation hooks be represented in the TUI without turning the map into a rules editor?
-* Which event types are valuable enough for v1 automation, and which should wait?
 
 ## Recommended Product Decisions
 
@@ -2041,7 +1972,7 @@ Mitigation:
 Use:
 
 ```text
-AI: Help here
+AI: Open Chat
 ```
 
 Do not lead with a long command list.
@@ -2097,11 +2028,11 @@ salesy
 
 Current TUI design commitments:
 
-* the only global palette action is `AI: Open Panel`;
-* AI Chat, Review Suggestions, provider setup, provider switching, on/off, Codex Local, and hooks live inside the AI Panel;
-* provider state lives in a thin header/status surface plus the AI Panel, not scattered global commands;
-* working state is specific: provider, elapsed time, and target branch;
-* AI Chat accepts freeform requests for input, critique, cleanup, or suggested changes from the panel;
+* the only global palette action is `AI: Open Chat`;
+* AI Chat is the default AI destination; Review Suggestions, provider setup, provider switching, on/off, and local provider choices live inside AI Settings;
+* provider state lives in AI Settings and AI Chat/Review headers, not in the main map header or scattered global commands;
+* working state is specific: provider, elapsed time, and context branch;
+* AI Chat accepts freeform requests for input, critique, cleanup, or reviewable map edits;
 * conversational responses stay in the panel; structured edit suggestions are staged before they become normal editable map content;
 * duplicate requests are blocked with a helpful message rather than queued silently;
 * the user can continue navigating while the request runs.

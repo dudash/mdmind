@@ -7,7 +7,7 @@ generic chatbot bolted onto the side.
 
 The AI feature should help users reason about a map, ask branch-local questions,
 and stage reviewable map edits without taking over the outline. Conversational
-answers stay in AI Chat. Suggested map changes go through Review Suggestions.
+answers stay in AI Chat. Suggested map edits go through Review Suggestions.
 Nothing silently edits the map.
 
 ## Availability
@@ -26,10 +26,10 @@ then available through the command palette and built-in help.
 
 - Keep the map primary. AI surfaces should be panels and prompts, not permanent
   clutter over the outline.
-- Use one main AI entry point. The global palette opens the AI Panel; provider
-  setup, chat, review, on/off, and future hooks live there.
+- Use one main AI entry point. The global palette opens AI Chat first. If setup
+  is needed, it opens AI Settings first.
 - Keep chat and edits separate. AI Chat is a transcript. Review Suggestions is a
-  decision surface for staged map changes.
+  decision surface for staged map edits.
 - Make intent visible. The UI should always show what the user is chatting about,
   what input the model receives, and what will or will not change the map.
 - Prefer natural language over modes. Users should be able to type "suggest new
@@ -45,9 +45,8 @@ then available through the command palette and built-in help.
 The main map remains the working surface. AI adds only small orientation cues:
 
 - experimental badge when AI is enabled;
-- AI lamp in the header, such as `AI OFF`, `AI NIM`, `AI CODEX`, `AI WORKING`,
-  `AI REVIEW`, or `AI PENDING`;
-- command palette entry for `AI: Open Panel`;
+- no ordinary AI provider/chat/review lamp in the header;
+- command palette entry for `AI: Open Chat`;
 - normal status messages for AI actions.
 
 The main map should not expose separate global commands for each provider or AI
@@ -57,20 +56,22 @@ action. That keeps the normal TUI command surface calm.
 
 | Key | Behavior |
 | --- | --- |
-| `:` / `Ctrl+P` | Open command palette. Search for `AI: Open Panel`. |
+| `:` / `Ctrl+P` | Open command palette. Search for `AI: Open Chat`. |
 | `?` | Open help. AI help appears only when experimental AI is enabled. |
 
-## AI Panel
+## AI Settings
 
-The AI Panel is the central workspace for AI. It is opened from the command
-palette and stays under nested prompts, so `Esc` from setup or chat composition
-returns to the AI workspace instead of dumping the user back into the map.
+AI Chat is the central workspace for AI. AI Settings is the setup and controls
+surface for providers, staged edits, and on/off. The command palette opens AI
+Chat when a provider or prior chat state is available; otherwise it opens AI
+Settings first.
 
 ### Layout
 
-- Header: `AI workspace`, state, provider, model, and session token estimate.
+- Header: `AI controls`, state, provider, model, and session token estimate.
 - Left pane: grouped action list.
-- Right pane: contextual workspace preview.
+- Right pane: current setup summary, latest chat/edit preview, and selected
+  action guidance.
 - Footer: compact hotkey hints.
 
 ### Sections And Actions
@@ -79,14 +80,15 @@ returns to the AI workspace instead of dumping the user back into the map.
 | --- | --- | --- |
 | Chat | Open AI Chat | Open the session transcript and composer entry point. |
 | Chat | Cancel response | Stop the current streaming response, if any. |
-| Suggestions | Review suggestions | Inspect staged map-change suggestions. |
+| Map edits | Review map edits | Inspect staged map edits before they touch the map. |
+| Providers | Use Ollama Local | Make the detected local Ollama chat model the active provider. |
 | Providers | Set up NVIDIA NIM | Paste or update a NIM API key. |
 | Providers | Use NVIDIA NIM | Make NIM the active OpenAI-compatible provider. |
 | Providers | Use Codex Local | Make read-only `codex exec` the active local provider. |
-| Automation | Automation hooks | Planned slice; currently disabled. |
+| Providers | Use Claude Local | Make constrained `claude -p` the active local provider. |
 | Settings | Turn AI off | Stop AI activity while keeping provider profiles, stored keys, and staged Review Suggestions. |
 
-### AI Panel Hotkeys
+### AI Settings Hotkeys
 
 | Key | Behavior |
 | --- | --- |
@@ -95,37 +97,65 @@ returns to the AI workspace instead of dumping the user back into the map.
 | `A` / `H` | Open AI Chat. |
 | `X` | Cancel the running response. |
 | `S` | Open Review Suggestions. |
+| `L` | Use Ollama Local when a local Ollama chat model is detected. |
 | `N` | Set up or update NVIDIA NIM. |
 | `P` | Use NVIDIA NIM. |
-| `C` | Use Codex Local. |
+| `C` | Use Codex Local when the codex CLI is detected. |
+| `D` | Use Claude Local when the claude CLI is detected. |
 | `O` | Turn AI off. |
-| `U` | Automation hooks placeholder. |
-| `Esc` / `q` | Close AI Panel. |
+| `Esc` / `q` | Close AI Settings, or return to AI Chat when opened from chat. |
 
 ## Provider Setup
+
+### Ollama Local
+
+Ollama Local is selected from AI Settings when mdmind detects a running local
+Ollama server with at least one chat-capable model.
+
+The detection path is intentionally simple:
+
+- call the local `/api/tags` model list endpoint with a short timeout;
+- ignore embedding-only models for the default choice;
+- create an in-memory profile for the recommended model;
+- record the profile only when the user selects it.
+
+Ollama uses the local OpenAI-compatible `/v1/chat/completions` endpoint, so the
+AI Chat streaming and Review Suggestions flow stays the same as other chat
+providers.
 
 ### NVIDIA NIM
 
 The NIM setup flow opens a masked prompt:
 
 - title: `NVIDIA NIM API Key`;
-- prompt copy links users to `https://build.nvidia.com/settings/api-keys`;
+- if a local key is already readable, prompt copy shows a masked preview such as `nvapi-xxxxx3eda`;
+- the prompt footer shows one key-page URL: `https://build.nvidia.com/settings/api-keys`;
 - input is masked;
 - `Enter` stores the key in the local secret store;
 - the profile stores only a secret reference;
-- `Esc` cancels and returns to the AI Panel.
+- `Esc` cancels and returns to AI Settings.
 
 After setup, AI Chat can use the configured NIM endpoint and model.
 
 ### Codex Local
 
-Codex Local is selected from the AI Panel with one action. It should not require a
-separate setup command.
+Codex Local is selected from AI Settings with one action when the codex CLI is
+detected. It should not require a separate setup command.
 
 The local bridge calls `codex exec` in read-only, ephemeral mode. It receives the
-selected branch snapshot, compact branch style notes, recent AI Chat context,
+chat context snapshot, compact branch style notes, recent AI Chat context,
 and the mdmind AI instruction through stdin. It must not write files, run
 destructive commands, or claim it changed the map.
+
+### Claude Local
+
+Claude Local is selected from AI Settings with one action when the claude CLI
+is detected. It should not require a separate setup command or mdmind API key.
+
+The local bridge calls `claude -p` in stream-json mode with partial message
+events, plan permission mode, tools disabled, one turn, and no session
+persistence. It receives the chat context snapshot, compact branch style
+notes, recent AI Chat context, and the mdmind AI instruction through stdin.
 
 ### Provider Switching
 
@@ -133,11 +163,16 @@ Switching providers starts a fresh AI Chat conversation. Prior chat turns are no
 sent to the new provider. Staged Review Suggestions are kept because they are
 explicit user-review work, not provider context.
 
+If the active local provider is no longer detected, AI Chat should not silently
+fall back to another configured provider. AI Settings should show the provider
+as pending/unavailable and let the user explicitly choose a detected local
+provider or configured network provider.
+
 ## AI Chat
 
 AI Chat is a chat log, not a review queue. It is where users ask questions,
 watch streaming answers, browse in-session turns, cancel work, and turn a
-conversational answer into staged suggestions.
+conversational answer into staged map edits.
 
 ### Header
 
@@ -151,8 +186,8 @@ Current header shape:
 
 ```text
 Chat session | State Streaming | Provider NVIDIA NIM | Model ... | Tokens ~420
-Chat target Moonwake Field Guide                                LATEST | turn 1/1
-Input selected branch + style notes + recent chat       New text below | End to follow
+Context Moonwake Field Guide                                    LATEST | turn 1/1
+Sends whole map on the first turn when it fits; focus, context, and recent chat every turn New text below | End to follow
 ```
 
 Do not show visual map viewport state, such as `Map view Whole map`, in AI Chat
@@ -162,13 +197,13 @@ unless it changes the model input. It reads like AI scope and creates confusion.
 
 Before the first message, AI Chat shows:
 
-- no messages yet;
-- target branch;
-- input summary;
+- a short invitation to ask a useful question;
+- context branch and the `T` context action;
 - prompt to press `Enter`;
 - quick prompts.
 
-The empty state should teach by example without becoming documentation text.
+The input summary lives in the header, so the empty state should not repeat it.
+It should teach by example without becoming documentation text.
 
 ### Transcript
 
@@ -197,8 +232,9 @@ user scrolls away, the header/footer show `New text below` and `End to follow`.
 | `1` | Quick prompt: summarize this branch. |
 | `2` | Quick prompt: find gaps, risks, and open questions. |
 | `3` | Quick prompt: extract TODOs, risks, and open questions. |
-| `4` | Quick prompt: suggest map edits I can review. |
+| `4` | Quick prompt: suggest concise add, update, or remove map edits I can review. |
 | `C` | Clear AI Chat and start a new conversation. Keeps staged Review Suggestions. |
+| `T` | Change the chat context without leaving AI Chat. |
 | `Up` / `Down` / `k` / `j` | Scroll the transcript. Stops auto-follow while streaming. |
 | `PageUp` / `PageDown` | Jump-scroll the transcript. |
 | `Tab` / `]` | Move to next chat turn. |
@@ -206,22 +242,22 @@ user scrolls away, the header/footer show `New text below` and `End to follow`.
 | `Home` / `g` | Jump to the first chat turn. |
 | `End` / `G` | Jump to the latest chat turn and resume follow. |
 | `X` | Cancel a running response. |
-| `S` | Open Review Suggestions when staged changes exist. |
-| `V` | Ask AI to turn the selected answer into staged suggestions. |
+| `S` | Open Review Suggestions when staged map edits exist. |
+| `V` | Request reviewable map edits from the selected chat turn. |
 | `Esc` / `q` | Close AI Chat. |
 
 ## AI Chat Composer
 
-The composer is a prompt overlay opened from AI Chat. It keeps AI Chat and the
-AI Panel underneath, so the user returns to the streaming transcript after send.
+The composer is an input bar inside AI Chat. It keeps the user in the transcript,
+so sending, cancelling, and watching streaming text all feel like one flow.
 
 ### Composer Copy
 
 - Title: `AI Chat`.
-- Hint: "Send a message about the selected branch. The response streams back
+- Hint: "Send a message about the chat context. The response streams back
   into AI Chat."
 - Action text: `Enter sends | Esc returns`.
-- Footer: names the message target and explains that reviewable edits appear in
+- Footer: names the chat context and explains that reviewable edits appear in
   Review Suggestions.
 - Feedback panel: provider, model, input summary, edit-mode detection, and
   examples.
@@ -238,7 +274,7 @@ Ordinary questions stay conversational:
 Review Suggestions mode turns on when the user asks for reviewable edits or
 additive structure:
 
-- `suggest map changes I can review`
+- `suggest map edits I can review`
 - `suggest branch edits`
 - `suggest nodes for missing risks`
 - `suggest new characters`
@@ -256,13 +292,18 @@ Every AI Chat request sends:
 
 - the user message;
 - recent in-session AI Chat turns;
-- the selected branch rendered as mdmind node syntax;
+- the whole map rendered as mdmind node syntax on the first turn when the map is
+  reasonably sized;
+- a note that whole-map context was omitted when the first-turn map is large;
+- the current focus branch rendered as mdmind node syntax;
+- the chat context branch rendered as mdmind node syntax when it differs from the
+  current focus branch;
 - compact style notes extracted from that branch.
 
-Style notes summarize only patterns already present in the selected branch:
+Style notes summarize only patterns already present in the chat context:
 task markers, common tags, metadata keys, stable id examples, detail-line usage,
 relation styles, and external reference styles. Suggestion prompts should ask
-the model to match the target branch's nearby siblings and descendants, keep
+the model to match the context branch's nearby siblings and descendants, keep
 labels short, use the smallest useful mdmind structure, and preserve the user's
 local vocabulary.
 
@@ -287,7 +328,6 @@ only when useful; ids only on durable branches; relations sparse and meaningful.
 Submitting a message immediately returns to AI Chat. The active turn streams in
 place:
 
-- header lamp shows `AI WORKING`;
 - AI Chat shows `AI | streaming`;
 - empty output shows "Waiting for first tokens...";
 - partial text remains visible if cancelled.
@@ -303,12 +343,12 @@ session.
 ## Review Suggestions
 
 Review Suggestions is the decision surface for map-changing AI output. It should
-open from the AI Panel, from AI Chat when staged suggestions exist, or after a
-model response stages suggestions.
+open from AI Settings, from AI Chat when staged map edits exist, or after a
+model response stages map edits.
 
 ### Header
 
-The first row shows provider and target on the left, with state/count
+The first row shows provider and context on the left, with state/count
 right-aligned:
 
 ```text
@@ -320,7 +360,7 @@ Additional header rows show:
 - `Prompt > "..."` so the user knows what triggered the suggestions;
 - source turn, model, and token estimate;
 - staging reason, when present;
-- placement summary, such as "6 edits across 4 targets";
+- placement summary, such as "6 edits across 4 branches";
 - count and applyability note.
 
 ### Rows
@@ -333,10 +373,11 @@ Each change row shows:
 - placement label, such as `Place under Characters`;
 - compact diff preview.
 
-Only supported add-child rows are enabled today. Update and remove rows can be
-represented and reviewed, but applying them is not wired yet.
+Add-child, update-node, and remove-node rows are applicable. Add and update rows
+start checked by default; remove rows start unchecked so deletion requires an
+explicit review choice.
 
-Rows outside the selected branch scope or with unresolved targets should be
+Rows outside the chat context branch or with unresolved placement should be
 disabled or fail safely with a status message.
 
 ### Review Suggestions Hotkeys
@@ -346,10 +387,10 @@ disabled or fail safely with a status message.
 | `Tab` / `]` | Move to next staged item. |
 | `BackTab` / `[` | Move to previous staged item. |
 | `PageUp` / `PageDown` | Scroll the review body. |
-| `Up` / `Down` / `k` / `j` | Choose a suggestion row when editable; otherwise scroll. |
+| `Up` / `Down` / `k` / `j` | Choose a map edit row when editable; otherwise scroll. |
 | `Space` | Toggle the selected supported row. |
 | `Enter` / `A` | Apply checked supported rows. |
-| `D` | Dismiss the current staged suggestion item. |
+| `D` | Dismiss the current staged map-edit item. |
 | `Esc` / `q` | Close Review Suggestions. |
 
 ## Review Suggestions Outcomes
@@ -358,14 +399,14 @@ disabled or fail safely with a status message.
 
 Applying checked add-child rows:
 
-- inserts the selected rows under their resolved targets;
+- inserts the selected rows under their resolved branches;
 - creates the normal undoable edit path;
 - focuses the inserted child according to existing editor behavior;
 - archives the AI suggestion as applied.
 
 ### Dismiss
 
-Dismissing a staged suggestion:
+Dismissing a staged map-edit item:
 
 - removes it from active Review Suggestions;
 - archives it in in-memory AI history for this TUI session;
@@ -373,8 +414,8 @@ Dismissing a staged suggestion:
 
 ### Unsupported
 
-Unsupported update/remove rows remain visible but disabled. Attempting to apply
-them should explain that the operation is staged for review but not wired yet.
+Unsupported rows remain visible but disabled. Attempting to apply them should
+explain that the operation can be reviewed but cannot be applied.
 
 ### Invalid Structured Output
 
@@ -394,40 +435,28 @@ references.
 | Staged Review Suggestions | In memory until applied, dismissed, cleared, or TUI exit. |
 | Applied edits | Normal map edits with undo/checkpoint behavior. |
 | Provider switch | Clears chat context, keeps staged Review Suggestions. |
-| Turn AI off | Cancels active response, clears active AI panel/chat state, keeps staged Review Suggestions, profiles, and keys. |
+| Turn AI off | Cancels active response, clears active AI settings/chat state, keeps staged Review Suggestions, profiles, and keys. |
 
 ## Whole Map Requests
 
-The current shipped input summary is branch-local:
+The current shipped input summary includes whole-map context on the first turn
+when the map is reasonably sized:
 
 ```text
-Input selected branch + style notes + recent chat
+Sends whole map on the first turn when it fits; focus, context, and recent chat every turn
 ```
 
-The preferred future whole-map UX is intent-driven, not another hotkey:
+Explicit whole-map tasks should still be intent-driven, not another hotkey:
 
 - user types "summarize the whole map", "suggest gaps across the whole map", or
   similar;
-- composer preview changes to `Message target Whole map`;
-- input summary changes to `whole map + style notes + recent chat`;
+- composer preview changes to `About Whole map`;
+- for large maps, mdmind should summarize or chunk intentionally instead of
+  silently spending the full token budget;
 - the resulting turn is labeled `You | Whole map`;
 - Review Suggestions still require explicit user intent and clear placement.
 
 This avoids a hidden persistent scope mode while making the model input obvious.
-
-## Automation Hooks
-
-Automation hooks are planned and currently disabled in the AI Panel. The intended
-UX is to reuse the same Review Suggestions queue:
-
-- user chooses event type, path scope, and instruction prompt;
-- background output stages suggestions only;
-- user reviews and applies through the existing Review Suggestions surface.
-
-Examples:
-
-- on added node under root, check spelling;
-- on added node under Characters, suggest relationships with other characters.
 
 ## Delight And Fit
 

@@ -6,10 +6,19 @@ Future entries should be curated before release. Older entries are a best-effort
 backfill from local tags, product docs, and commit history, so they summarize
 the release shape rather than every internal commit.
 
-## [0.9.0] - 2026-05-25
+## [0.9.0] - 2026-06-06
 
 ### Features
 
+- **Experimental AI-assisted map support is now available behind
+  `--experimental-ai`**: AI Chat, AI Settings, local Ollama/Codex/Claude
+  detection, NVIDIA NIM setup, and reviewable map edits now share one calmer
+  workflow.
+  - The experiment stays hidden and inert unless the flag is set, including
+    startup provider discovery, palette entries, help topics, status summaries,
+    and stale AI state.
+  - AI Chat can keep conversation separate from the map while explicit edit
+    requests stage reviewable add, update, and remove suggestions.
 - **Ordinary Markdown is now first-class in mdmind**: READMEs, changelogs,
   agent reports, and notes open as read-only documents instead of broken maps,
   while native mdmind maps still open as maps.

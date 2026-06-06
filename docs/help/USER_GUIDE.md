@@ -117,39 +117,49 @@
     - Current state #guide [id:guide/ai/current]
       - AI assistance is experimental and hidden unless mdmind is launched with --experimental-ai or --experimental=ai
       - when enabled, the header shows a warning-colored EXPERIMENTAL AI badge
-      - AI is optional and off until you set up a profile
-      - setup lives in the command palette, not in a separate developer workflow
-      - the header lamp shows the active provider, such as AI NIM or AI CODEX
-      - while a request is running, the header lamp switches to AI WORKING
-      - when suggestions are staged, the header lamp switches to AI REVIEW
+      - AI is optional and quiet until you open AI Chat
+      - setup lives in AI Settings, not in a separate developer workflow
+      - detected local providers appear only when mdmind can see them on this machine
+      - ordinary provider, chat, and review state does not add an AI lamp to the header
       - when AI has state to show, it appears on its own status row underneath the normal INFO message
-      - the global palette has one AI entry: AI: Open Panel
-      - the AI Panel owns provider setup, on/off, AI Chat, cancel response, Review Suggestions, Codex Local, and future hooks
-      - setup prompts keep the AI Panel open underneath, so Esc returns to the AI workspace instead of the map
-      - if multiple providers are configured, use the AI Panel to choose the active one
+      - the global palette has one AI entry: AI: Open Chat
+      - AI Chat is the default destination; AI Settings owns detected local providers, provider setup, on/off, cancel response, and Review Suggestions
+      - setup prompts keep AI Settings open underneath, so Esc returns to AI controls instead of the map
+      - if multiple providers are configured, use AI Settings to choose the active one
+      - if the active local provider is not available anymore, AI Chat waits for you to start it again or choose another provider instead of silently switching
       - switching providers starts a fresh AI Chat conversation so old turns are not sent to the new provider; staged Review Suggestions are kept
-      - use O in the AI Panel to stop AI activity without deleting provider profiles, stored keys, or staged Review Suggestions
-      - use X in the AI Panel or AI Chat to cancel a streaming response without turning AI off
-      - choose a provider in the AI Panel later to turn AI back on
-      - the first usable action is AI Chat from the AI Panel
-      - AI Chat and the AI Panel show the active provider, model name, and an estimated total token count for the current TUI session
-      - each message sends the selected branch, compact branch style notes, and recent chat context to the active provider
+      - use O in AI Settings to stop AI activity without deleting provider profiles, stored keys, or staged Review Suggestions
+      - use X in AI Settings or AI Chat to cancel a streaming response without turning AI off
+      - choose a provider in AI Settings later to turn AI back on
+      - use P in AI Chat to open AI Settings
+      - AI Chat and AI Settings show the active provider, model name, and an estimated total token count for the current TUI session
+      - on the first message, AI Chat sends the whole map when it is reasonably sized; if the map is large, mdmind omits the whole-map snapshot to avoid wasting tokens
+      - every message sends the current focus branch, AI Chat context, compact context style notes, and recent chat context to the active provider
       - AI Chat fills in text as the provider sends response chunks
-      - Review Suggestions are staged only when your message explicitly asks for map edits or staged suggestions
+      - Review Suggestions are staged only when your message explicitly asks for map edits or changes that can be reviewed and applied
       - use suggest with new, missing, or additional items, or with map/branch/node/outline edits, when you want AI to return staged Review Suggestions
       - sending a new message while one is running cancels the previous response and keeps any partial output in AI Chat
       - turning AI off also cancels any streaming response and keeps staged Review Suggestions available for review
       - conversational answers stay in AI Chat for the TUI session instead of needing a dismiss action
       - cancelled AI answers and applied or dismissed Review Suggestions move into in-memory session history that is available from AI Chat until the TUI exits
-      - use Review Suggestions from the AI Panel to inspect staged map-change suggestions, see the original Prompt line and Placement summary, toggle supported edit rows, apply checked rows, or dismiss the item
+      - use Review Suggestions from AI Settings or AI Chat to inspect staged map edits, see the original Prompt line and Placement summary, toggle supported edit rows, apply checked rows, or dismiss the item
       - in AI Chat, use Enter or A to compose, C to clear the chat and start a new conversation, Up/Down to scroll, PageUp/PageDown to jump, Tab or ] / [ to move through turns, and Home/End to jump to first/latest
-      - add-child suggestions can be applied today under the selected branch or an existing descendant target; update and remove suggestions are part of the review model but still need their patch applier
-      - background automation is a future slice
+      - add-child suggestions can be applied under the chat context branch or an existing descendant branch; update suggestions can replace an existing node label or detail; remove suggestions are supported but start unchecked
+    - Ollama Local setup #guide [id:guide/ai/ollama-local]
+      - start Ollama locally and install at least one chat-capable model
+      - launch mdmind with --experimental-ai
+      - open the palette with : or Ctrl+P
+      - type ai
+      - choose AI: Open Chat
+      - if Ollama is running and has a chat model, mdmind shows Use Ollama Local
+      - press L
+      - mdmind picks a sensible installed chat model and does not ask for an API key
+      - AI Chat uses the local Ollama HTTP server and keeps the map-edit review flow unchanged
     - NVIDIA NIM setup #guide [id:guide/ai/nvidia-nim]
       - launch mdmind with --experimental-ai
       - open the palette with : or Ctrl+P
       - type ai
-      - choose AI: Open Panel
+      - choose AI: Open Chat
       - press N
       - get a key from https://build.nvidia.com/settings/api-keys
       - paste it into the masked prompt
@@ -159,21 +169,33 @@
       - launch mdmind with --experimental-ai
       - open the palette with : or Ctrl+P
       - type ai
-      - choose AI: Open Panel
+      - choose AI: Open Chat
+      - if the codex CLI is detected, mdmind shows Use Codex Local
       - press C
       - mdmind records Codex Local as the active provider without asking for an API key
-      - AI Chat calls codex exec in read-only, ephemeral mode and sends the selected branch, compact branch style notes, and recent chat context through stdin
+      - AI Chat calls codex exec in read-only, ephemeral mode and sends the same first-turn whole-map snapshot, current focus branch, chat context, compact style notes, and recent chat context through stdin
+    - Claude Local setup #guide [id:guide/ai/claude-local]
+      - install and sign in to the local claude CLI outside mdmind
+      - launch mdmind with --experimental-ai
+      - open the palette with : or Ctrl+P
+      - type ai
+      - choose AI: Open Chat
+      - if the claude CLI is detected, mdmind shows Use Claude Local
+      - press D
+      - mdmind records Claude Local as the active provider without asking for an API key
+      - AI Chat calls claude -p in stream-json mode with plan permissions, disabled tools, one turn, and no session persistence
     - Chat about a branch #recipe [id:guide/ai/chat-branch]
       - launch mdmind with --experimental-ai
       - focus the branch you want help with
       - open the palette with : or Ctrl+P
       - type ai
-      - choose AI: Open Panel
+      - choose AI: Open Chat
       - press A
+      - AI Chat uses the current root as context by default; press T in AI Chat only when you want to pin a different branch, type any part of a branch name/path and press Tab to complete, or type . to pin the selected node
       - press Enter to open the message composer
       - if another response is streaming, the composer explains that Enter will cancel it before sending this message
-      - ask a concrete question, request cleanup, ask a follow-up, or ask for suggested changes
-      - say something like suggest new characters or suggest map changes I can review when you want applyable Review Suggestions
+      - ask a concrete question, request cleanup, ask a follow-up, or ask for reviewable map edits
+      - say something like suggest new characters or suggest map edits I can review when you want applicable Review Suggestions
       - if you opened AI Chat at the root, add-child Review Suggestions can target existing branches farther down when the model names a valid target
       - Review Suggestions labels each row with Place under so you know exactly where checked add-child edits will land
       - after submitting, AI Chat stays open on the streaming response

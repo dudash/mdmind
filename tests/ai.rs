@@ -1,18 +1,21 @@
 use mdmind::ai::{
     AiAdapterType, AiAuthScheme, AiIntent, AiOutput, AiProfile, AiProfilesConfig, AiRequest,
-    AiScope, AiSuggestedChange, AiSuggestion, AiSuggestionTarget, CODEX_LOCAL_QUICK_ADD_ID,
-    NVIDIA_NIM_LOCAL_SECRET_ID, NVIDIA_NIM_QUICK_ADD_ID, ai_profile_is_codex_local_bridge,
-    ai_profiles_path_for_config_dir, ai_secrets_path_for_config_dir, codex_exec_json_event_text,
+    AiScope, AiSuggestedChange, AiSuggestion, AiSuggestionTarget, CLAUDE_LOCAL_QUICK_ADD_ID,
+    CODEX_LOCAL_QUICK_ADD_ID, NVIDIA_NIM_LOCAL_SECRET_ID, NVIDIA_NIM_QUICK_ADD_ID,
+    OLLAMA_LOCAL_QUICK_ADD_ID, ai_profile_is_claude_local_bridge, ai_profile_is_codex_local_bridge,
+    ai_profile_is_ollama_local, ai_profiles_path_for_config_dir, ai_secrets_path_for_config_dir,
+    claude_code_stream_json_event_text, claude_local_exec_args, codex_exec_json_event_text,
     codex_local_exec_args, contextual_presets_for_node, load_ai_profiles_from_path,
-    load_local_ai_secrets_from_path, local_ai_secret_ref, local_codex_bridge_prompt,
-    map_assistant_system_prompt, openai_compatible_chat_body,
+    load_local_ai_secrets_from_path, local_ai_secret_ref, local_claude_bridge_prompt,
+    local_codex_bridge_prompt, map_assistant_system_prompt, openai_compatible_chat_body,
     openai_compatible_chat_body_with_stream, openai_compatible_chat_url,
     parse_reviewable_map_suggestions, quick_add_presets, quick_add_profile,
-    resolve_local_ai_secret_from_path, save_ai_profiles_to_path, save_local_ai_secret_to_path,
-    send_ai_chat_streaming_cancellable, split_reviewable_map_suggestions,
-    split_reviewable_map_suggestions_with_warning,
+    recommended_ollama_model, resolve_local_ai_secret_from_path, save_ai_profiles_to_path,
+    save_local_ai_secret_to_path, send_ai_chat_streaming_cancellable,
+    split_reviewable_map_suggestions, split_reviewable_map_suggestions_with_warning,
 };
 use mdmind::parser::parse_document;
+use std::io::{Read, Write};
 
 fn temp_path(name: &str) -> std::path::PathBuf {
     let nonce = std::time::SystemTime::now()
@@ -105,6 +108,7 @@ fn map_assistant_system_prompt_asks_for_reviewable_operations() {
     assert!(prompt.contains("explicitly asks"));
     assert!(prompt.contains("reviewable map edits"));
     assert!(prompt.contains("local conventions"));
+    assert!(prompt.contains("Prefer repairing or enriching existing nodes"));
     assert!(prompt.contains("Do not claim you changed the map directly"));
 }
 
@@ -113,6 +117,10 @@ fn reviewable_map_suggestion_blocks_parse_and_strip_from_chat_answer() {
     let contract = mdmind::ai::reviewable_map_suggestion_contract();
     assert!(contract.contains("tool-call-like output"));
     assert!(contract.contains("Omit target"));
+    assert!(contract.contains("smallest honest operation"));
+    assert!(contract.contains("Do not express every idea as add_child"));
+    assert!(contract.contains("update_node"));
+    assert!(contract.contains("remove_node"));
     assert!(contract.contains("Match nearby branch conventions"));
     assert!(contract.contains("detail lines, relations, and external references"));
 
@@ -125,6 +133,21 @@ fn reviewable_map_suggestion_blocks_parse_and_strip_from_chat_answer() {
     assert!(chat.contains("I found two additions."));
     assert!(chat.contains("Open Review Suggestions."));
     assert!(!chat.contains("mdmind-suggestions"));
+}
+
+#[test]
+fn empty_reviewable_map_suggestions_are_a_clean_noop() {
+    let direct = split_reviewable_map_suggestions_with_warning(r#"{"changes":[]}"#);
+    assert!(direct.answer.is_empty());
+    assert!(direct.changes.is_empty());
+    assert!(direct.warning.is_none());
+
+    let fenced = split_reviewable_map_suggestions_with_warning(
+        "Nothing useful to add.\n```mdmind-suggestions\n{\"changes\":[]}\n```\n",
+    );
+    assert_eq!(fenced.answer, "Nothing useful to add.");
+    assert!(fenced.changes.is_empty());
+    assert!(fenced.warning.is_none());
 }
 
 #[test]
@@ -267,6 +290,137 @@ fn profiles_round_trip_without_secret_material() {
 }
 
 #[test]
+fn legacy_ai_profiles_config_migrates_codex_local_profile() {
+    let root = temp_path("legacy-config-root");
+    let path = ai_profiles_path_for_config_dir(&root);
+    std::fs::create_dir_all(path.parent().expect("config path should have a parent"))
+        .expect("config directory should be created");
+    std::fs::write(
+        &path,
+        r#"{
+  "active_profile_id": "codex-local",
+  "profiles": [
+    {
+      "id": "codex-local",
+      "label": "Codex Local",
+      "provider": "codex-local",
+      "endpoint": "codex",
+      "model": "Codex CLI default"
+    }
+  ]
+}"#,
+    )
+    .expect("legacy AI profile config should be written");
+
+    let loaded = load_ai_profiles_from_path(&path).expect("legacy AI profile config should load");
+    let profile = loaded
+        .profile(CODEX_LOCAL_QUICK_ADD_ID)
+        .expect("Codex Local profile should migrate");
+
+    assert!(loaded.enabled);
+    assert_eq!(loaded.default_profile.as_deref(), Some("codex-local"));
+    assert_eq!(profile.adapter_type, AiAdapterType::LocalCli);
+    assert_eq!(profile.command.as_deref(), Some("codex"));
+    assert_eq!(profile.command_args, vec!["exec"]);
+    assert_eq!(profile.model, None);
+    assert!(ai_profile_is_codex_local_bridge(profile));
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn legacy_ai_profiles_config_maps_short_default_ids_to_canonical_profiles() {
+    let root = temp_path("legacy-short-default-config-root");
+    let path = ai_profiles_path_for_config_dir(&root);
+    std::fs::create_dir_all(path.parent().expect("config path should have a parent"))
+        .expect("config directory should be created");
+    std::fs::write(
+        &path,
+        r#"{
+  "active_profile_id": "codex",
+  "profiles": [
+    {
+      "id": "nvidia-nim",
+      "label": "NVIDIA NIM",
+      "provider": "nvidia-nim",
+      "endpoint": "https://integrate.api.nvidia.com/v1",
+      "model": "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    },
+    {
+      "id": "codex",
+      "label": "Codex Local",
+      "provider": "codex",
+      "endpoint": "codex"
+    }
+  ]
+}"#,
+    )
+    .expect("legacy AI profile config should be written");
+
+    let loaded = load_ai_profiles_from_path(&path).expect("legacy AI profile config should load");
+
+    assert_eq!(loaded.default_profile.as_deref(), Some("codex-local"));
+    assert!(loaded.profile(NVIDIA_NIM_QUICK_ADD_ID).is_some());
+    assert!(loaded.profile(CODEX_LOCAL_QUICK_ADD_ID).is_some());
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn legacy_ai_profiles_config_can_be_saved_after_nvidia_quick_add() {
+    let root = temp_path("legacy-nim-config-root");
+    let path = ai_profiles_path_for_config_dir(&root);
+    std::fs::create_dir_all(path.parent().expect("config path should have a parent"))
+        .expect("config directory should be created");
+    std::fs::write(
+        &path,
+        r#"{
+  "active_profile_id": "codex-local",
+  "profiles": [
+    {
+      "id": "codex-local",
+      "label": "Codex Local",
+      "provider": "codex-local",
+      "endpoint": "codex",
+      "model": "Codex CLI default"
+    }
+  ]
+}"#,
+    )
+    .expect("legacy AI profile config should be written");
+
+    let mut config =
+        load_ai_profiles_from_path(&path).expect("legacy AI profile config should load");
+    config.upsert_profile(
+        quick_add_profile(
+            NVIDIA_NIM_QUICK_ADD_ID,
+            Some(local_ai_secret_ref(NVIDIA_NIM_LOCAL_SECRET_ID)),
+        )
+        .expect("NVIDIA NIM quick-add should build"),
+        true,
+    );
+    save_ai_profiles_to_path(&path, &config).expect("migrated AI profile config should save");
+
+    let contents =
+        std::fs::read_to_string(&path).expect("migrated AI profile config should be readable");
+    assert!(contents.contains("\"default_profile\": \"nvidia-nim\""));
+    assert!(contents.contains("\"adapter_type\""));
+    assert!(!contents.contains("active_profile_id"));
+
+    let reloaded =
+        load_ai_profiles_from_path(&path).expect("migrated AI profile config should reload");
+    assert!(reloaded.profile(CODEX_LOCAL_QUICK_ADD_ID).is_some());
+    assert_eq!(
+        reloaded
+            .profile(NVIDIA_NIM_QUICK_ADD_ID)
+            .and_then(|profile| profile.secret_ref.as_deref()),
+        Some("local:mdmind.ai.nvidia-nim")
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
 fn profiles_refuse_raw_key_material() {
     let root = temp_path("unsafe-config-root");
     let path = ai_profiles_path_for_config_dir(&root);
@@ -361,12 +515,14 @@ fn openai_compatible_chat_request_can_force_streaming() {
 }
 
 #[test]
-fn quick_add_presets_include_nvidia_nim_and_local_codex() {
+fn quick_add_presets_include_nvidia_nim_local_ollama_codex_and_claude() {
     let presets = quick_add_presets();
     let ids = presets.iter().map(|preset| preset.id).collect::<Vec<_>>();
 
     assert!(ids.contains(&NVIDIA_NIM_QUICK_ADD_ID));
     assert!(ids.contains(&CODEX_LOCAL_QUICK_ADD_ID));
+    assert!(ids.contains(&CLAUDE_LOCAL_QUICK_ADD_ID));
+    assert!(ids.contains(&OLLAMA_LOCAL_QUICK_ADD_ID));
 
     let nvidia = presets
         .iter()
@@ -377,6 +533,20 @@ fn quick_add_presets_include_nvidia_nim_and_local_codex() {
         nvidia.default_model,
         Some("nvidia/llama-3.3-nemotron-super-49b-v1.5")
     );
+
+    let ollama = presets
+        .iter()
+        .find(|preset| preset.id == OLLAMA_LOCAL_QUICK_ADD_ID)
+        .expect("Ollama preset should exist");
+    assert_eq!(ollama.adapter_type, AiAdapterType::LocalHttp);
+    assert_eq!(ollama.default_secret_ref, None);
+
+    let claude = presets
+        .iter()
+        .find(|preset| preset.id == CLAUDE_LOCAL_QUICK_ADD_ID)
+        .expect("Claude preset should exist");
+    assert_eq!(claude.adapter_type, AiAdapterType::LocalCli);
+    assert_eq!(claude.default_secret_ref, None);
 }
 
 #[test]
@@ -417,6 +587,157 @@ fn codex_quick_add_uses_local_exec_bridge() {
     assert!(profile.capabilities.filesystem_access);
     assert_eq!(profile.secret_ref, None);
     assert!(ai_profile_is_codex_local_bridge(&profile));
+}
+
+#[test]
+fn claude_quick_add_uses_local_print_bridge() {
+    let profile = quick_add_profile(CLAUDE_LOCAL_QUICK_ADD_ID, None)
+        .expect("Claude quick-add should build a profile");
+
+    assert_eq!(profile.id, "claude-local");
+    assert_eq!(profile.adapter_type, AiAdapterType::LocalCli);
+    assert_eq!(profile.command.as_deref(), Some("claude"));
+    assert_eq!(profile.command_args, vec!["-p"]);
+    assert!(profile.capabilities.local_execution);
+    assert!(!profile.capabilities.filesystem_access);
+    assert_eq!(profile.secret_ref, None);
+    assert!(ai_profile_is_claude_local_bridge(&profile));
+}
+
+#[test]
+fn ollama_quick_add_uses_local_http_without_a_secret() {
+    let profile = quick_add_profile(OLLAMA_LOCAL_QUICK_ADD_ID, None)
+        .expect("Ollama quick-add should build a profile");
+
+    assert_eq!(profile.id, "ollama-local");
+    assert_eq!(profile.label, "Ollama Local");
+    assert_eq!(profile.adapter_type, AiAdapterType::LocalHttp);
+    assert_eq!(profile.auth_scheme, AiAuthScheme::None);
+    assert_eq!(
+        profile.endpoint.as_deref(),
+        Some("http://127.0.0.1:11434/v1")
+    );
+    assert_eq!(profile.model.as_deref(), Some("llama3.2:latest"));
+    assert_eq!(profile.secret_ref, None);
+    assert!(ai_profile_is_ollama_local(&profile));
+    assert!(!profile.has_secret_material());
+}
+
+#[test]
+fn local_http_chat_urls_must_stay_local() {
+    let mut profile = quick_add_profile(OLLAMA_LOCAL_QUICK_ADD_ID, None)
+        .expect("Ollama quick-add should build a profile");
+    profile.endpoint = Some("https://example.com/v1".to_string());
+
+    let error =
+        openai_compatible_chat_url(&profile).expect_err("remote local-http URLs should be blocked");
+    assert!(error.message().contains("not local"));
+}
+
+#[test]
+fn ollama_local_http_streaming_uses_local_chat_completions_endpoint() {
+    let listener =
+        std::net::TcpListener::bind("127.0.0.1:0").expect("fake local AI server should bind");
+    let endpoint = format!(
+        "http://{}/v1",
+        listener
+            .local_addr()
+            .expect("fake local AI server address should be available")
+    );
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener
+            .accept()
+            .expect("fake local AI server should accept one request");
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+            .expect("fake local AI server should set a read timeout");
+
+        let mut request = Vec::new();
+        let mut buffer = [0_u8; 1024];
+        loop {
+            let read = stream
+                .read(&mut buffer)
+                .expect("fake local AI server should read request bytes");
+            if read == 0 {
+                break;
+            }
+            request.extend_from_slice(&buffer[..read]);
+            let header_end = request
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n")
+                .map(|index| index + 4);
+            if let Some(header_end) = header_end {
+                let headers = String::from_utf8_lossy(&request[..header_end]);
+                let content_length = headers
+                    .lines()
+                    .find_map(|line| {
+                        line.strip_prefix("Content-Length:")
+                            .or_else(|| line.strip_prefix("content-length:"))
+                    })
+                    .and_then(|value| value.trim().parse::<usize>().ok())
+                    .unwrap_or(0);
+                if request.len() >= header_end + content_length {
+                    break;
+                }
+            }
+        }
+
+        let request_text = String::from_utf8_lossy(&request).to_string();
+        let body = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"local \"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"Ollama\"}}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        stream
+            .write_all(response.as_bytes())
+            .expect("fake local AI server should write response");
+        request_text
+    });
+
+    let mut profile = quick_add_profile(OLLAMA_LOCAL_QUICK_ADD_ID, None)
+        .expect("Ollama quick-add should build a profile");
+    profile.endpoint = Some(endpoint);
+    let mut streamed = String::new();
+    let answer = send_ai_chat_streaming_cancellable(
+        &profile,
+        "system",
+        "user",
+        None,
+        |delta| streamed.push_str(delta),
+        || false,
+    )
+    .expect("fake Ollama-compatible server should stream an answer");
+    let request_text = server
+        .join()
+        .expect("fake local AI server thread should not panic");
+
+    assert!(request_text.starts_with("POST /v1/chat/completions "));
+    assert!(request_text.contains("\"model\":\"llama3.2:latest\""));
+    assert!(request_text.contains("\"stream\":true"));
+    assert_eq!(streamed, "local Ollama");
+    assert_eq!(answer, "local Ollama");
+}
+
+#[test]
+fn ollama_model_recommendation_prefers_chat_models_over_embeddings() {
+    let recommendation = recommended_ollama_model([
+        "nomic-embed-text:latest",
+        "all-minilm:latest",
+        "llama3.2:latest",
+        "qwen2.5:7b-instruct",
+    ])
+    .expect("a chat-capable local model should be recommended");
+
+    assert_eq!(recommendation, "qwen2.5:7b-instruct");
+    assert_eq!(
+        recommended_ollama_model(["nomic-embed-text:latest", "mxbai-embed-large:latest"]),
+        None
+    );
 }
 
 #[test]
@@ -463,6 +784,76 @@ fn codex_local_exec_args_reject_dangerous_profile_flags() {
 }
 
 #[test]
+fn claude_local_exec_args_force_constrained_print_mode() {
+    let mut profile = quick_add_profile(CLAUDE_LOCAL_QUICK_ADD_ID, None)
+        .expect("Claude quick-add should build a profile");
+    profile.model = Some("sonnet".to_string());
+    let args = claude_local_exec_args(&profile).expect("Claude args should build");
+
+    assert_eq!(args.first().map(String::as_str), Some("-p"));
+    assert!(
+        args.windows(2)
+            .any(|pair| pair[0] == "--output-format" && pair[1] == "stream-json")
+    );
+    assert!(args.contains(&"--verbose".to_string()));
+    assert!(args.contains(&"--include-partial-messages".to_string()));
+    assert!(
+        args.windows(2)
+            .any(|pair| pair[0] == "--permission-mode" && pair[1] == "plan")
+    );
+    assert!(
+        args.windows(2)
+            .any(|pair| pair[0] == "--tools" && pair[1].is_empty())
+    );
+    assert!(
+        args.windows(2)
+            .any(|pair| pair[0] == "--max-turns" && pair[1] == "1")
+    );
+    assert!(args.contains(&"--no-session-persistence".to_string()));
+    assert!(
+        args.windows(2)
+            .any(|pair| pair[0] == "--model" && pair[1] == "sonnet")
+    );
+    assert!(
+        args.last()
+            .expect("Claude query should be appended")
+            .contains("stdin")
+    );
+}
+
+#[test]
+fn claude_local_exec_args_reject_dangerous_profile_flags() {
+    let mut profile = quick_add_profile(CLAUDE_LOCAL_QUICK_ADD_ID, None)
+        .expect("Claude quick-add should build a profile");
+    profile.command_args = vec![
+        "-p".to_string(),
+        "--dangerously-skip-permissions".to_string(),
+    ];
+
+    let error =
+        claude_local_exec_args(&profile).expect_err("dangerous Claude flags should be rejected");
+    assert!(error.message().contains("dangerous Claude flags"));
+
+    let mut profile = quick_add_profile(CLAUDE_LOCAL_QUICK_ADD_ID, None)
+        .expect("Claude quick-add should build a profile");
+    profile.command_args = vec![
+        "-p".to_string(),
+        "--permission-mode".to_string(),
+        "bypassPermissions".to_string(),
+    ];
+    let error =
+        claude_local_exec_args(&profile).expect_err("Claude permission bypass should be rejected");
+    assert!(error.message().contains("plan mode"));
+
+    let mut profile = quick_add_profile(CLAUDE_LOCAL_QUICK_ADD_ID, None)
+        .expect("Claude quick-add should build a profile");
+    profile.command_args = vec!["-p".to_string(), "--tools=Read".to_string()];
+    let error =
+        claude_local_exec_args(&profile).expect_err("Claude tool overrides should be rejected");
+    assert!(error.message().contains("tools disabled"));
+}
+
+#[test]
 fn codex_json_events_extract_assistant_text_only() {
     assert_eq!(
         codex_exec_json_event_text(r#"{"type":"agent_message_delta","delta":"Hel"}"#).as_deref(),
@@ -482,11 +873,46 @@ fn codex_json_events_extract_assistant_text_only() {
 }
 
 #[test]
+fn claude_stream_json_events_extract_text_deltas_only() {
+    assert_eq!(
+        claude_code_stream_json_event_text(
+            r#"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hel"}}}"#
+        )
+        .as_deref(),
+        Some("Hel")
+    );
+    assert_eq!(
+        claude_code_stream_json_event_text(
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"lo"}}"#
+        )
+        .as_deref(),
+        Some("lo")
+    );
+    assert_eq!(
+        claude_code_stream_json_event_text(
+            r#"{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{}"}}}"#
+        ),
+        None
+    );
+}
+
+#[test]
 fn local_codex_bridge_prompt_is_read_only_and_preserves_contract() {
     let prompt = local_codex_bridge_prompt("system", "user payload");
 
     assert!(prompt.contains("read-only"));
     assert!(prompt.contains("Do not modify files"));
+    assert!(prompt.contains("system"));
+    assert!(prompt.contains("user payload"));
+}
+
+#[test]
+fn local_claude_bridge_prompt_is_constrained_and_preserves_contract() {
+    let prompt = local_claude_bridge_prompt("system", "user payload");
+
+    assert!(prompt.contains("constrained"));
+    assert!(prompt.contains("Do not modify files"));
+    assert!(prompt.contains("run commands"));
     assert!(prompt.contains("system"));
     assert!(prompt.contains("user payload"));
 }
@@ -537,6 +963,48 @@ printf 'final from codex' > "$out"
 
     assert_eq!(streamed, "streaming");
     assert_eq!(answer, "final from codex");
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[cfg(unix)]
+#[test]
+fn claude_local_bridge_runs_command_and_streams_answer() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = temp_path("fake-claude");
+    std::fs::create_dir_all(&root).expect("temp root should be created");
+    let command_path = root.join("claude");
+    std::fs::write(
+        &command_path,
+        r#"#!/bin/sh
+cat >/dev/null
+printf '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"stream"}}}\n'
+printf '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ing"}}}\n'
+"#,
+    )
+    .expect("fake claude should be written");
+    let mut permissions = std::fs::metadata(&command_path)
+        .expect("fake claude metadata should load")
+        .permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&command_path, permissions).expect("fake claude should be executable");
+
+    let mut profile = AiProfile::claude_local();
+    profile.command = Some(command_path.display().to_string());
+    let mut streamed = String::new();
+    let answer = send_ai_chat_streaming_cancellable(
+        &profile,
+        "system",
+        "user",
+        Some(&root),
+        |delta| streamed.push_str(delta),
+        || false,
+    )
+    .expect("fake Claude bridge should answer");
+
+    assert_eq!(streamed, "streaming");
+    assert_eq!(answer, "streaming");
 
     std::fs::remove_dir_all(root).ok();
 }

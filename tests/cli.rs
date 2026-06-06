@@ -275,7 +275,7 @@ fn commands_json_lists_agent_command_catalog() {
 }
 
 #[test]
-fn ai_presets_list_nvidia_nim_and_codex_local() {
+fn ai_presets_list_nvidia_nim_ollama_codex_local_and_claude_local() {
     let output = run_mdm(&["ai", "presets"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));
     let stdout = stdout(&output);
@@ -285,6 +285,10 @@ fn ai_presets_list_nvidia_nim_and_codex_local() {
     assert!(stdout.contains("env:NVIDIA_API_KEY"));
     assert!(stdout.contains("codex-local"));
     assert!(stdout.contains("Codex Local"));
+    assert!(stdout.contains("claude-local"));
+    assert!(stdout.contains("Claude Local"));
+    assert!(stdout.contains("ollama-local"));
+    assert!(stdout.contains("Ollama Local"));
 }
 
 #[test]
@@ -297,7 +301,7 @@ fn ai_presets_json_uses_an_envelope() {
     assert_eq!(value["ok"], true);
     assert_eq!(value["command"], "ai presets");
     assert_eq!(value["format"], "ai_quick_add_presets.v1");
-    assert!(value["summary"]["count"].as_u64().unwrap() >= 2);
+    assert!(value["summary"]["count"].as_u64().unwrap() >= 4);
     assert!(
         value["data"]
             .as_array()
@@ -348,6 +352,50 @@ fn ai_quick_add_writes_codex_local_profile() {
     assert!(contents.contains("\"id\": \"codex-local\""));
     assert!(contents.contains("\"command\": \"codex\""));
     assert!(contents.contains("\"exec\""));
+    assert!(!contents.contains("secret_ref"));
+
+    std::fs::remove_file(config_path).ok();
+}
+
+#[test]
+fn ai_quick_add_writes_claude_local_profile() {
+    let config_path = temp_file("claude-ai-profiles.json");
+    let output = run_mdm(&[
+        "ai",
+        "quick-add",
+        "claude-local",
+        "--config",
+        config_path.to_str().unwrap(),
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+
+    let contents = std::fs::read_to_string(&config_path).expect("config should be written");
+    assert!(contents.contains("\"id\": \"claude-local\""));
+    assert!(contents.contains("\"command\": \"claude\""));
+    assert!(contents.contains("\"-p\""));
+    assert!(!contents.contains("secret_ref"));
+
+    std::fs::remove_file(config_path).ok();
+}
+
+#[test]
+fn ai_quick_add_writes_ollama_local_profile() {
+    let config_path = temp_file("ollama-ai-profiles.json");
+    let output = run_mdm(&[
+        "ai",
+        "quick-add",
+        "ollama-local",
+        "--default",
+        "--config",
+        config_path.to_str().unwrap(),
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+
+    let contents = std::fs::read_to_string(&config_path).expect("config should be written");
+    assert!(contents.contains("\"default_profile\": \"ollama-local\""));
+    assert!(contents.contains("\"adapter_type\": \"local-http\""));
+    assert!(contents.contains("\"endpoint\": \"http://127.0.0.1:11434/v1\""));
+    assert!(contents.contains("\"model\": \"llama3.2:latest\""));
     assert!(!contents.contains("secret_ref"));
 
     std::fs::remove_file(config_path).ok();

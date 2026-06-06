@@ -29,11 +29,13 @@ use ratatui::{Frame, Terminal};
 
 use crate::APP_VERSION;
 use crate::ai::{
-    AiAdapterType, AiProfile, AiProfilesConfig, AiSuggestedChange, AiSuggestion,
-    AiSuggestionSource, AiSuggestionTarget, CODEX_LOCAL_QUICK_ADD_ID, NVIDIA_NIM_LOCAL_SECRET_ID,
-    NVIDIA_NIM_QUICK_ADD_ID, ai_profile_is_codex_local_bridge, ai_profiles_path,
-    conversational_only_contract, load_ai_profiles_from_path, local_ai_secret_ref,
-    map_assistant_system_prompt, quick_add_profile, reviewable_map_suggestion_contract,
+    AiAdapterType, AiLocalProviderDetection, AiProfile, AiProfilesConfig, AiSuggestedChange,
+    AiSuggestion, AiSuggestionSource, AiSuggestionTarget, CLAUDE_LOCAL_QUICK_ADD_ID,
+    CODEX_LOCAL_QUICK_ADD_ID, NVIDIA_NIM_LOCAL_SECRET_ID, NVIDIA_NIM_QUICK_ADD_ID,
+    OLLAMA_LOCAL_QUICK_ADD_ID, ai_profile_is_claude_local_bridge, ai_profile_is_codex_local_bridge,
+    ai_profile_is_ollama_local, ai_profiles_path, conversational_only_contract,
+    load_ai_profiles_from_path, local_ai_secret_ref, map_assistant_system_prompt,
+    quick_add_profile, resolve_ai_secret_ref, reviewable_map_suggestion_contract,
     save_ai_profiles_to_path, save_local_ai_secret, send_ai_chat_streaming_cancellable,
     split_reviewable_map_suggestions_with_warning,
 };
@@ -80,11 +82,13 @@ const FREQUENT_LOCATION_MIN_VISITS: usize = 3;
 const REFERENCE_PREVIEW_MAX_BYTES: u64 = 128 * 1024;
 const REFERENCE_PREVIEW_MAX_LINES: usize = 80;
 const WEB_REFERENCE_PREVIEW_MAX_BYTES: usize = 64 * 1024;
+const AI_WHOLE_MAP_CONTEXT_TOKEN_LIMIT: usize = 5_000;
+const AI_CHAT_FAST_SCROLL_LINES: u16 = 4;
 
 type Palette = MindmapTheme;
 
 thread_local! {
-    static ACTIVE_PALETTE: Cell<Palette> = Cell::new(ThemeId::Workbench.theme());
+    static ACTIVE_PALETTE: Cell<Palette> = Cell::new(ThemeId::Mdmind.theme());
     static ACTIVE_ASCII_ACCENTS: Cell<bool> = const { Cell::new(false) };
     static ACTIVE_MINIMAL_MODE: Cell<bool> = const { Cell::new(false) };
     static ACTIVE_MOTION_TARGET: Cell<Option<MotionTarget>> = const { Cell::new(None) };
@@ -258,6 +262,7 @@ enum PromptMode {
     EditDetail,
     AttachFile,
     AiAskCurrentBranch,
+    AiChatTarget,
     NvidiaNimApiKey,
     SaveView,
     SaveCheckpoint,
@@ -274,6 +279,7 @@ impl PromptMode {
             Self::EditDetail => "Edit Details",
             Self::AttachFile => "Attach File",
             Self::AiAskCurrentBranch => "AI Chat",
+            Self::AiChatTarget => "AI Chat Context",
             Self::NvidiaNimApiKey => "NVIDIA NIM API Key",
             Self::SaveView => "Save Filter View",
             Self::SaveCheckpoint => "Save Checkpoint",
@@ -288,11 +294,12 @@ impl PromptMode {
             Self::OpenId => "Type a node id, then press Enter.",
             Self::AttachFile => "Type a local path or URL. mdmind stores it as a Markdown link.",
             Self::AiAskCurrentBranch => {
-                "Send a message about the selected branch. The response streams back into AI Chat."
+                "Send a message about the chat context. The response streams back into AI Chat."
             }
-            Self::NvidiaNimApiKey => {
-                "Paste an API key from https://build.nvidia.com/settings/api-keys."
+            Self::AiChatTarget => {
+                "Type any part of a branch name, id, or breadcrumb. Empty uses the root by default."
             }
+            Self::NvidiaNimApiKey => "Paste or replace a NVIDIA NIM API key.",
             Self::EditDetail => {
                 "Write longer notes for the selected node. Enter adds lines. Ctrl+S saves."
             }
@@ -564,7 +571,7 @@ impl HelpTopic {
             Self::Agents => {
                 "Use mdmind with agent skills, TODO maps, and shared branch decomposition."
             }
-            Self::Ai => "Set up optional AI providers and chat about the selected branch.",
+            Self::Ai => "Set up optional AI providers and chat about the map.",
             Self::Navigation => "Move through the tree, jump quickly, and open major overlays.",
             Self::Editing => "Add, rename, delete, and reshape branches without leaving the map.",
             Self::Details => "Keep node titles short while storing longer notes under a branch.",
@@ -606,9 +613,7 @@ impl HelpTopic {
             Self::Agents => {
                 "User guide for asking agents to use skills, decompose work, and fill in map branches."
             }
-            Self::Ai => {
-                "Open the AI Panel for provider setup, chat, staged suggestions, on/off, and future hooks."
-            }
+            Self::Ai => "Open AI Chat, or AI Settings when provider setup is needed.",
             Self::Navigation => "User guide plus movement keys and large-map wayfinding tips.",
             Self::Editing => "User guide plus editing keys, undo safety, and restructuring tips.",
             Self::Details => {
@@ -671,7 +676,7 @@ impl HelpTopic {
                 "safety undo redo checkpoint checkpoints autosave save revert restore history recent actions recovery"
             }
             Self::Themes => {
-                "theme themes paper blueprint calm violet amethyst atelier archive signal tokyo mind monograph terminal neon workbench palette ui settings motion ascii accents minimal reading purple lavender gray graphite vscode editor"
+                "theme themes mdmind brand paper blueprint calm violet amethyst atelier archive signal tokyo mind monograph terminal neon workbench palette ui settings motion ascii accents minimal reading purple lavender gray graphite vscode editor orange teal navy"
             }
             Self::Mindmap => {
                 "mindmap visual bubble canvas spatial canvas png export pan recenter map overlay"
@@ -709,7 +714,7 @@ impl HelpTopic {
                 "mdmind works well as an agent output format when the result needs to stay useful for a human later. The tree keeps structure obvious, inline syntax keeps the map queryable, and mdm gives you validation and inspection tools before you hand the file off."
             }
             Self::Ai => {
-                "AI inside mdmind is optional and invite-only. The global palette opens one AI Panel; that panel owns provider setup, chat, review, on/off, and future hooks."
+                "AI inside mdmind is optional and invite-only. The global palette opens AI Chat first; AI Settings owns provider setup, review, and on/off."
             }
             Self::Navigation => {
                 "Navigation in mdmind is tree-first. Stay in the outline while exploring, then use the palette or id jumps when the map gets too large to scroll comfortably."
@@ -791,14 +796,14 @@ impl HelpTopic {
                 "A good agent workflow is: generate the map, run mdm validate, inspect it with mdm view or mdm find, then open it in mdmind for human cleanup. If the output needs machine use later, mdm export --format json is the clean bridge.",
             ],
             Self::Ai => &[
-                "AI assistance is experimental and hidden unless mdmind is launched with --experimental-ai or --experimental=ai. When enabled, open the palette with : or Ctrl+P, then run AI: Open Panel.",
-                "The panel contains NIM setup, Codex Local selection, provider switching, chat, review, and on/off.",
-                "The active provider is shown in the header as an AI lamp, such as AI NIM or AI CODEX. If more than one provider is configured, use the AI Panel to choose which one is active.",
-                "Use the AI Panel's Turn AI off action to stop AI activity without deleting provider profiles, stored keys, or staged Review Suggestions. Choose a provider in the panel later to turn it back on.",
-                "After NVIDIA NIM or Codex Local is configured, open the AI Panel and press A to enter AI Chat. mdmind sends the selected branch, compact branch style notes, your message, recent chat context, and a short system instruction to the active provider in the background.",
+                "AI assistance is experimental and hidden unless mdmind is launched with --experimental-ai or --experimental=ai. When enabled, open the palette with : or Ctrl+P, then run AI: Open Chat.",
+                "The panel contains detected local providers, NIM setup, provider switching, chat, review, and on/off.",
+                "The main header stays quiet for ordinary AI chat, provider, review, and working state.",
+                "Use AI Settings' Turn AI off action to stop AI activity without deleting provider profiles, stored keys, or staged Review Suggestions. Choose a provider in settings later to turn it back on.",
+                "After Ollama Local, Codex Local, Claude Local, or NVIDIA NIM is ready, open AI Chat from the palette. On the first turn, mdmind sends the whole map when it is reasonably sized; every turn sends the current focus branch, chat context, compact style notes, your message, recent chat context, and a short system instruction to the active provider in the background.",
                 "The first usable AI action is deliberately simple: it keeps conversational answers in AI Chat instead of writing them into the tree.",
-                "While a request is running, the header shows AI WORKING and the status line stays usable instead of freezing the TUI.",
-                "AI Chat is for the live conversation, cancelled runs, and past answers. Review Suggestions is the decision surface for staged map changes. Add-child rows can target the selected branch or an existing descendant. Background mode, dynamic edit extraction, and update/remove patch application are still future slices.",
+                "While a request is running, the status line stays usable instead of freezing the TUI.",
+                "AI Chat is for the live conversation, cancelled runs, and past answers. Review Suggestions is the decision surface for staged map edits. Add-child rows can use the chat context branch or an existing descendant; update rows replace an existing node label or detail; remove rows start unchecked and need an explicit review choice.",
             ],
             Self::Navigation => &[
                 "The current focus is the center of the interface. The outline, focus card, and visual map all follow it, so plain arrow movement is enough for a lot of work.",
@@ -938,7 +943,7 @@ impl HelpTopic {
                 ("?", "Open this help topic again when teaching the workflow"),
             ],
             Self::Ai => &[
-                (": ai", "Open the AI Panel"),
+                (": ai", "Open AI Chat"),
                 ("A", "Open AI Chat"),
                 ("Enter", "Compose a chat message from AI Chat"),
                 ("Chat C", "Clear AI Chat and start a new conversation"),
@@ -947,9 +952,12 @@ impl HelpTopic {
                     "Ask for staged edit suggestions from the selected answer",
                 ),
                 ("X", "Cancel the running AI response"),
-                ("S", "Review staged map-change suggestions"),
+                ("S", "Review staged map edits"),
+                ("T", "In AI Chat, change context"),
                 ("N", "Set up or update NVIDIA NIM"),
-                ("Panel C", "Select or record a local Codex provider profile"),
+                ("Panel L", "Select detected Ollama Local"),
+                ("Panel C", "Select detected Codex Local"),
+                ("Panel D", "Select detected Claude Local"),
                 ("O", "Turn AI off without deleting provider setup"),
             ],
             Self::Navigation => &[
@@ -1190,9 +1198,9 @@ impl HelpTopic {
             Self::Ai => &[
                 "Use AI for branch-local questions first: gaps, risks, summaries, next steps, and cleanup ideas.",
                 "Use AI Chat for follow-up questions and running conversation. Conversational answers stay in chat for the session; only explicit requests for map edits can stage rows in Review Suggestions.",
-                "Add-child suggestions can be applied today under the selected branch or an existing descendant target. Update and remove suggestions are represented in the review model, but applying those operations is still a later patch path.",
-                "NVIDIA NIM and Codex Local are callable from the TUI in this slice. Codex Local runs codex exec in read-only, ephemeral mode.",
-                "Do not paste secrets into map nodes. Use AI Panel setup so the profile stores a secret reference instead.",
+                "Add-child suggestions can be applied under the chat context branch or an existing descendant target. Update suggestions can replace an existing node label or detail. Remove suggestions are supported but start unchecked so deletion always requires an explicit review choice.",
+                "Ollama Local, NVIDIA NIM, Codex Local, and Claude Local are callable from the TUI in this slice. Ollama uses a running local model server; Codex Local runs codex exec in read-only, ephemeral mode; Claude Local runs claude -p with tools disabled.",
+                "Do not paste secrets into map nodes. Use AI Settings setup so the profile stores a secret reference instead.",
             ],
             Self::Navigation => &[
                 "If the tree starts feeling noisy, change view mode before you keep scrolling.",
@@ -1270,12 +1278,12 @@ impl HelpTopic {
             Self::Search => Some("#todo @status:active"),
             Self::Palette => Some("review todo"),
             Self::Safety => Some("checkpoint"),
-            Self::Details => Some("| This branch still depends on partner auth."),
+            Self::Details => Some("Press d, then add: This branch still depends on partner auth."),
             Self::Outliner => Some("Minimal mode + Focus Branch + node details"),
             Self::Agents => {
                 Some("Use mdmind-map-authoring. Create a TODO map and fill branch details.")
             }
-            Self::Ai => Some("AI: Open Panel -> A -> What gaps do you see?"),
+            Self::Ai => Some("AI: Open Chat -> What gaps do you see?"),
             Self::Syntax => Some("API Design #backend @status:todo @owner:mira"),
             Self::TableView => Some("Model Row @provider:openai @aa_rank:01 @source:aa-lmarena"),
             Self::Ids => Some("API Design #backend [id:product/api-design]"),
@@ -2140,10 +2148,77 @@ fn spatial_overview_zoom(scene: &MindmapScene, viewport_width: u16, viewport_hei
     80
 }
 
-fn load_ai_profiles_for_tui() -> AiProfilesConfig {
-    ai_profiles_path()
+fn load_ai_profiles_for_tui(local_providers: &AiLocalProviderDetection) -> AiProfilesConfig {
+    let mut profiles = ai_profiles_path()
         .and_then(|path| load_ai_profiles_from_path(&path))
-        .unwrap_or_default()
+        .unwrap_or_default();
+    add_detected_local_ai_profiles(&mut profiles, local_providers);
+    profiles
+}
+
+fn initial_ai_state_for_tui(
+    feature_flags: &TuiFeatureFlags,
+) -> (AiLocalProviderDetection, AiProfilesConfig) {
+    initial_ai_state_for_tui_with(
+        feature_flags,
+        detect_local_ai_providers_for_tui,
+        load_ai_profiles_for_tui,
+    )
+}
+
+fn initial_ai_state_for_tui_with(
+    feature_flags: &TuiFeatureFlags,
+    detect_local_providers: impl FnOnce() -> AiLocalProviderDetection,
+    load_profiles: impl FnOnce(&AiLocalProviderDetection) -> AiProfilesConfig,
+) -> (AiLocalProviderDetection, AiProfilesConfig) {
+    if !feature_flags.is_enabled(TuiExperiment::Ai) {
+        return (
+            AiLocalProviderDetection::default(),
+            AiProfilesConfig::default(),
+        );
+    }
+
+    let local_providers = detect_local_providers();
+    let profiles = load_profiles(&local_providers);
+    (local_providers, profiles)
+}
+
+#[cfg(not(test))]
+fn detect_local_ai_providers_for_tui() -> AiLocalProviderDetection {
+    crate::ai::discover_local_ai_providers()
+}
+
+#[cfg(test)]
+fn detect_local_ai_providers_for_tui() -> AiLocalProviderDetection {
+    AiLocalProviderDetection::default()
+}
+
+fn add_detected_local_ai_profiles(
+    profiles: &mut AiProfilesConfig,
+    local_providers: &AiLocalProviderDetection,
+) {
+    if let Some(profile) = local_providers
+        .ollama
+        .as_ref()
+        .and_then(|ollama| ollama.profile())
+        && profiles.profile(OLLAMA_LOCAL_QUICK_ADD_ID).is_none()
+    {
+        profiles.upsert_profile(profile, false);
+    }
+    if local_providers.codex_cli && profiles.profile(CODEX_LOCAL_QUICK_ADD_ID).is_none() {
+        profiles.upsert_profile(
+            quick_add_profile(CODEX_LOCAL_QUICK_ADD_ID, None)
+                .expect("Codex Local quick-add should build without secrets"),
+            false,
+        );
+    }
+    if local_providers.claude_cli && profiles.profile(CLAUDE_LOCAL_QUICK_ADD_ID).is_none() {
+        profiles.upsert_profile(
+            quick_add_profile(CLAUDE_LOCAL_QUICK_ADD_ID, None)
+                .expect("Claude Local quick-add should build without secrets"),
+            false,
+        );
+    }
 }
 
 impl PromptState {
@@ -2309,6 +2384,21 @@ struct PathAnchor {
     id: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AiChatTargetInfo {
+    anchor: PathAnchor,
+    path: Vec<usize>,
+    label: String,
+    pinned: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AiChatTargetMatch {
+    target: AiChatTargetInfo,
+    breadcrumb: String,
+    score: i64,
+}
+
 struct AiRequestJob {
     profile_label: String,
     anchor_label: String,
@@ -2357,6 +2447,7 @@ struct AiReviewState {
     checked: HashSet<usize>,
     scroll: u16,
     follow_latest: bool,
+    return_chat_index: Option<usize>,
 }
 
 impl AiReviewState {
@@ -2368,6 +2459,7 @@ impl AiReviewState {
             checked: HashSet::new(),
             scroll: 0,
             follow_latest: mode == AiReviewMode::History,
+            return_chat_index: None,
         }
     }
 
@@ -2379,6 +2471,7 @@ impl AiReviewState {
             checked: Self::default_checked(suggestion, editable),
             scroll: 0,
             follow_latest: mode == AiReviewMode::History,
+            return_chat_index: None,
         }
     }
 
@@ -2390,7 +2483,7 @@ impl AiReviewState {
             .changes
             .iter()
             .enumerate()
-            .filter_map(|(index, change)| ai_change_apply_supported(change).then_some(index))
+            .filter_map(|(index, change)| ai_change_default_checked(change).then_some(index))
             .collect()
     }
 
@@ -2503,11 +2596,22 @@ struct AiHistoryEntry {
 #[derive(Debug, Clone)]
 struct AiPanelState {
     selected: usize,
+    return_to_chat: bool,
 }
 
 impl AiPanelState {
     fn new() -> Self {
-        Self { selected: 0 }
+        Self {
+            selected: 0,
+            return_to_chat: false,
+        }
+    }
+
+    fn with_selected(selected: usize) -> Self {
+        Self {
+            selected,
+            return_to_chat: false,
+        }
     }
 
     fn clamp(&mut self, len: usize) {
@@ -2527,8 +2631,9 @@ enum AiPanelAction {
     TurnOff,
     SetupNvidiaNim,
     UseNvidiaNim,
+    UseOllamaLocal,
     UseCodexLocal,
-    AutomationHooks,
+    UseClaudeLocal,
 }
 
 #[derive(Debug, Clone)]
@@ -2680,11 +2785,13 @@ struct TuiApp {
     motion_cue: Option<MotionCue>,
     ui_settings: UiSettings,
     ai_profiles: AiProfilesConfig,
+    ai_local_providers: AiLocalProviderDetection,
     ai_job: Option<AiRequestJob>,
     ai_suggestions: Vec<AiSuggestion>,
     ai_history: Vec<AiHistoryEntry>,
     ai_panel: Option<AiPanelState>,
     ai_review: Option<AiReviewState>,
+    ai_chat_target: Option<PathAnchor>,
     undo_history: Vec<HistoryEntry>,
     redo_history: Vec<HistoryEntry>,
     feature_flags: TuiFeatureFlags,
@@ -2732,6 +2839,7 @@ impl TuiApp {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn new_with_settings_and_features(
         map_path: PathBuf,
         document: Document,
@@ -2760,6 +2868,7 @@ impl TuiApp {
         };
 
         let table_columns = table_columns_from_storage_keys(&saved_views.table_columns);
+        let (ai_local_providers, ai_profiles) = initial_ai_state_for_tui(&feature_flags);
         let mut app = Self {
             map_path,
             editor: Editor::new(document, focus_path),
@@ -2790,12 +2899,14 @@ impl TuiApp {
             autosave: autosave || ui_settings.autosave,
             motion_cue: None,
             ui_settings,
-            ai_profiles: load_ai_profiles_for_tui(),
+            ai_profiles,
+            ai_local_providers,
             ai_job: None,
             ai_suggestions: Vec::new(),
             ai_history: Vec::new(),
             ai_panel: None,
             ai_review: None,
+            ai_chat_target: None,
             undo_history: Vec::new(),
             redo_history: Vec::new(),
             feature_flags,
@@ -2812,15 +2923,15 @@ impl TuiApp {
         if !self.ai_profiles.enabled {
             return None;
         }
+        if let Some(profile) = self.ai_profiles.default_profile() {
+            return self
+                .ai_profile_can_power_tui_ask(profile)
+                .then_some(profile);
+        }
         self.ai_profiles
-            .default_profile()
-            .filter(|profile| ai_profile_supports_tui_ask(profile))
-            .or_else(|| {
-                self.ai_profiles
-                    .profiles
-                    .iter()
-                    .find(|profile| ai_profile_supports_tui_ask(profile))
-            })
+            .profiles
+            .iter()
+            .find(|profile| self.ai_profile_can_power_tui_ask(profile))
     }
 
     fn pending_ai_profile(&self) -> Option<&AiProfile> {
@@ -2829,7 +2940,43 @@ impl TuiApp {
         }
         self.ai_profiles
             .default_profile()
-            .filter(|profile| profile.enabled && !ai_profile_supports_tui_ask(profile))
+            .filter(|profile| profile.enabled && !self.ai_profile_can_power_tui_ask(profile))
+    }
+
+    fn ai_profile_can_power_tui_ask(&self, profile: &AiProfile) -> bool {
+        ai_profile_supports_tui_ask(profile) && self.ai_profile_is_available(profile)
+    }
+
+    fn ai_profile_is_available(&self, profile: &AiProfile) -> bool {
+        if ai_profile_is_codex_local_bridge(profile) {
+            return self.ai_local_providers.codex_cli
+                || profile
+                    .command
+                    .as_deref()
+                    .map(crate::ai::local_command_available)
+                    .unwrap_or(false);
+        }
+        if ai_profile_is_claude_local_bridge(profile) {
+            return self.ai_local_providers.claude_cli
+                || profile
+                    .command
+                    .as_deref()
+                    .map(crate::ai::local_command_available)
+                    .unwrap_or(false);
+        }
+        if ai_profile_is_ollama_local(profile) {
+            let Some(ollama) = &self.ai_local_providers.ollama else {
+                return false;
+            };
+            let Some(profile_model) = profile.model.as_deref() else {
+                return false;
+            };
+            return ollama
+                .models
+                .iter()
+                .any(|model| model.name == profile_model);
+        }
+        true
     }
 
     fn ai_suggestion_source_for(
@@ -2840,9 +2987,7 @@ impl TuiApp {
     ) -> AiSuggestionSource {
         AiSuggestionSource {
             chat_turn: Some(self.ai_review_item_count_for(AiReviewMode::History) + 1),
-            model: profile.model.clone().or_else(|| {
-                ai_profile_is_codex_local_bridge(profile).then(|| "Codex CLI default".to_string())
-            }),
+            model: Some(ai_profile_display_model(profile)),
             token_estimate,
             reason,
         }
@@ -2861,7 +3006,7 @@ impl TuiApp {
                 .profiles
                 .iter()
                 .find(|profile| profile.label == profile_label)
-                .and_then(|profile| profile.model.clone()),
+                .map(ai_profile_display_model),
             token_estimate,
             reason,
         }
@@ -4297,7 +4442,12 @@ impl TuiApp {
         let multiline = prompt.mode == PromptMode::EditDetail;
         match key.code {
             KeyCode::Esc => {
-                self.set_status(StatusTone::Info, "Cancelled input.");
+                let message = match prompt.mode {
+                    PromptMode::AiAskCurrentBranch => "Back to AI Chat.",
+                    PromptMode::AiChatTarget => "Kept the current AI Chat context.",
+                    _ => "Cancelled input.",
+                };
+                self.set_status(StatusTone::Info, message);
             }
             KeyCode::Enter => {
                 if multiline {
@@ -4370,6 +4520,9 @@ impl TuiApp {
             {
                 prompt.insert(character);
             }
+            KeyCode::Tab if prompt.mode == PromptMode::AiChatTarget => {
+                self.complete_ai_chat_target_prompt(&mut prompt);
+            }
             KeyCode::Tab if multiline => {
                 prompt.insert(' ');
                 prompt.insert(' ');
@@ -4407,7 +4560,7 @@ impl TuiApp {
             return Ok(());
         }
 
-        if value.is_empty() {
+        if value.is_empty() && mode != PromptMode::AiChatTarget {
             self.set_status(StatusTone::Warning, "Input was empty; nothing changed.");
             return Ok(());
         }
@@ -4444,7 +4597,11 @@ impl TuiApp {
             }
             PromptMode::EditDetail => unreachable!("handled above"),
             PromptMode::AiAskCurrentBranch => {
-                self.ask_ai_about_current_branch(value)?;
+                self.ask_ai_about_chat_target(value)?;
+                Ok(())
+            }
+            PromptMode::AiChatTarget => {
+                self.set_ai_chat_target_from_input(value)?;
                 Ok(())
             }
             PromptMode::NvidiaNimApiKey => {
@@ -4566,6 +4723,62 @@ impl TuiApp {
         })
     }
 
+    fn anchor_for_path(&self, path: &[usize]) -> Option<PathAnchor> {
+        get_node(&self.editor.document().nodes, path).map(|node| PathAnchor {
+            path: path.to_vec(),
+            id: node.id.clone(),
+        })
+    }
+
+    fn ai_chat_target_info(&self) -> Option<AiChatTargetInfo> {
+        if let Some(anchor) = &self.ai_chat_target
+            && let Some(path) = self.resolve_anchor_path(anchor)
+        {
+            return Some(AiChatTargetInfo {
+                anchor: self.anchor_for_path(&path)?,
+                label: node_label_for_document(self.editor.document(), &path),
+                path,
+                pinned: true,
+            });
+        }
+
+        self.ai_chat_root_target_info()
+    }
+
+    fn ai_chat_current_target_info(&self) -> Option<AiChatTargetInfo> {
+        let anchor = self.current_anchor()?;
+        let path = anchor.path.clone();
+        Some(AiChatTargetInfo {
+            anchor,
+            label: node_label_for_document(self.editor.document(), &path),
+            path,
+            pinned: true,
+        })
+    }
+
+    fn ai_chat_root_target_info(&self) -> Option<AiChatTargetInfo> {
+        let root_index = self
+            .editor
+            .focus_path()
+            .first()
+            .copied()
+            .or_else(|| (!self.editor.document().nodes.is_empty()).then_some(0))?;
+        let path = vec![root_index];
+        let anchor = self.anchor_for_path(&path)?;
+        Some(AiChatTargetInfo {
+            anchor,
+            label: node_label_for_document(self.editor.document(), &path),
+            path,
+            pinned: false,
+        })
+    }
+
+    fn ai_chat_target_label(&self) -> String {
+        self.ai_chat_target_info()
+            .map(|target| target.label)
+            .unwrap_or_else(|| "(no focus)".to_string())
+    }
+
     fn memory_anchor(anchor: &PathAnchor) -> LocationMemoryAnchor {
         LocationMemoryAnchor {
             path: anchor.path.clone(),
@@ -4592,6 +4805,133 @@ impl TuiApp {
             return Some(path);
         }
         get_node(&self.editor.document().nodes, &anchor.path).map(|_| anchor.path.clone())
+    }
+
+    fn resolve_ai_chat_target_input(
+        &self,
+        value: &str,
+    ) -> Result<Option<AiChatTargetInfo>, AppError> {
+        let raw = value.trim();
+        if raw.is_empty() {
+            return Ok(None);
+        }
+        if matches!(
+            raw.to_ascii_lowercase().as_str(),
+            "." | "focus" | "focused" | "current" | "current branch"
+        ) {
+            return self.ai_chat_current_target_info().map(Some).ok_or_else(|| {
+                AppError::new("The document has no selected node to pin as AI Chat context.")
+            });
+        }
+
+        let id_candidate = ai_chat_target_id_candidate(raw);
+        if let Some(path) = find_path_by_id(&self.editor.document().nodes, &id_candidate) {
+            let anchor = self
+                .anchor_for_path(&path)
+                .expect("id lookup path should resolve to a node");
+            return Ok(Some(AiChatTargetInfo {
+                label: node_label_for_document(self.editor.document(), &path),
+                path,
+                anchor,
+                pinned: true,
+            }));
+        }
+
+        if let Some(best) = self.ai_chat_target_matches(raw, 1).into_iter().next() {
+            return Ok(Some(best.target));
+        }
+
+        Err(AppError::new(format!(
+            "No AI Chat context matches '{raw}'. Type part of a branch name, breadcrumb, or id; empty uses root and . pins the selected node."
+        )))
+    }
+
+    fn ai_chat_target_matches(&self, value: &str, limit: usize) -> Vec<AiChatTargetMatch> {
+        if limit == 0 {
+            return Vec::new();
+        }
+        let raw = value.trim();
+        let query = normalize_ai_chat_target_query(raw);
+        if query.is_empty() {
+            return Vec::new();
+        }
+
+        let mut matches = self
+            .ai_chat_target_entries()
+            .into_iter()
+            .filter_map(|entry| {
+                let score = ai_chat_target_match_score(
+                    raw,
+                    query.as_str(),
+                    &entry,
+                    self.editor.document(),
+                )?;
+                let anchor = self.anchor_for_path(&entry.path)?;
+                let label = node_label_for_document(self.editor.document(), &entry.path);
+                let breadcrumb = breadcrumb_for_path(self.editor.document(), &entry.path);
+                Some(AiChatTargetMatch {
+                    target: AiChatTargetInfo {
+                        anchor,
+                        path: entry.path,
+                        label,
+                        pinned: true,
+                    },
+                    breadcrumb,
+                    score,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        matches.sort_by(|left, right| {
+            right
+                .score
+                .cmp(&left.score)
+                .then_with(|| left.target.path.len().cmp(&right.target.path.len()))
+                .then_with(|| left.target.label.cmp(&right.target.label))
+                .then_with(|| left.breadcrumb.cmp(&right.breadcrumb))
+        });
+        matches.truncate(limit);
+        matches
+    }
+
+    fn complete_ai_chat_target_prompt(&mut self, prompt: &mut PromptState) {
+        let raw = prompt.value.trim();
+        if raw.is_empty() {
+            self.set_status(
+                StatusTone::Info,
+                "Type part of a branch name first. Empty + Enter keeps AI Chat on the current root.",
+            );
+            return;
+        }
+
+        let Some(best) = self.ai_chat_target_matches(raw, 1).into_iter().next() else {
+            self.set_status(
+                StatusTone::Warning,
+                format!("No AI Chat context matches '{raw}' yet."),
+            );
+            return;
+        };
+
+        prompt.value = ai_chat_target_completion_value(&best.target, &best.breadcrumb);
+        prompt.cursor = prompt.value.len();
+        self.set_status(
+            StatusTone::Info,
+            format!(
+                "Completed AI Chat context to '{}'. Press Enter to pin it.",
+                best.target.label
+            ),
+        );
+    }
+
+    fn ai_chat_target_entries(&self) -> Vec<PaletteNodeEntry> {
+        let mut entries = Vec::new();
+        collect_palette_nodes_from(
+            &self.editor.document().nodes,
+            &mut entries,
+            Vec::new(),
+            &mut Vec::new(),
+        );
+        entries
     }
 
     fn resolve_ai_suggestion_target_path(&self, target: &AiSuggestionTarget) -> Option<Vec<usize>> {
@@ -4703,7 +5043,7 @@ impl TuiApp {
             let target_label = self.ai_suggestion_target_label(target, &target_path);
             let source_label = self.ai_suggestion_target_label(&suggestion.target, &source_path);
             return Err(format!(
-                "AI suggestion target '{target_label}' is outside the selected branch '{source_label}'."
+                "AI suggestion target '{target_label}' is outside the chat context branch '{source_label}'."
             ));
         }
         let label = self.ai_suggestion_target_label(target, &target_path);
@@ -5292,10 +5632,13 @@ impl TuiApp {
 
     fn open_nvidia_nim_api_key_prompt(&mut self) {
         self.begin_prompt(PromptMode::NvidiaNimApiKey, String::new());
-        self.set_status(
-            StatusTone::Info,
-            "Paste a NVIDIA NIM API key from https://build.nvidia.com/settings/api-keys.",
-        );
+        let message = if let Some(preview) = nvidia_nim_existing_key_preview(self) {
+            format!("NVIDIA NIM key setup. Current key: {preview}. Paste a new key to replace it.")
+        } else {
+            "NVIDIA NIM key setup. Paste a key; the key page is shown in the prompt footer."
+                .to_string()
+        };
+        self.set_status(StatusTone::Info, message);
     }
 
     fn save_nvidia_nim_api_key(&mut self, api_key: &str) -> Result<(), AppError> {
@@ -5312,7 +5655,7 @@ impl TuiApp {
 
         let clear_summary = provider_changed.then(|| self.clear_ai_chat_session_state(true));
         let mut message = format!(
-            "NVIDIA NIM ready. Press A in the AI Panel to open AI Chat. Key stored as {secret_ref}."
+            "NVIDIA NIM ready. Press A in AI Settings to open AI Chat. Key stored as {secret_ref}."
         );
         if let Some(summary) = clear_summary {
             append_ai_provider_switch_clear_summary(&mut message, summary);
@@ -5331,10 +5674,33 @@ impl TuiApp {
         profile_id: &str,
         config_path: &Path,
     ) -> Result<(), AppError> {
-        let mut profiles = load_ai_profiles_from_path(&config_path)?;
+        let mut profiles = load_ai_profiles_from_path(config_path)?;
         let previous_profile_id = profiles.default_profile.clone();
-        if profiles.profile(profile_id).is_none() && profile_id == CODEX_LOCAL_QUICK_ADD_ID {
-            profiles.upsert_profile(quick_add_profile(CODEX_LOCAL_QUICK_ADD_ID, None)?, false);
+        if profile_id == NVIDIA_NIM_QUICK_ADD_ID {
+            ensure_nvidia_nim_profile_from_local_secret_if_available(&mut profiles)?;
+        }
+        if profiles.profile(profile_id).is_none() {
+            match profile_id {
+                CODEX_LOCAL_QUICK_ADD_ID if self.ai_local_providers.codex_cli => {
+                    profiles
+                        .upsert_profile(quick_add_profile(CODEX_LOCAL_QUICK_ADD_ID, None)?, false);
+                }
+                CLAUDE_LOCAL_QUICK_ADD_ID if self.ai_local_providers.claude_cli => {
+                    profiles
+                        .upsert_profile(quick_add_profile(CLAUDE_LOCAL_QUICK_ADD_ID, None)?, false);
+                }
+                OLLAMA_LOCAL_QUICK_ADD_ID => {
+                    if let Some(profile) = self
+                        .ai_local_providers
+                        .ollama
+                        .as_ref()
+                        .and_then(|ollama| ollama.profile())
+                    {
+                        profiles.upsert_profile(profile, false);
+                    }
+                }
+                _ => {}
+            }
         }
 
         let profile = profiles
@@ -5348,26 +5714,19 @@ impl TuiApp {
             )));
         }
 
-        if !ai_profile_supports_tui_ask(&profile) {
-            profiles.enabled = true;
-            if profiles.default_profile.as_deref() == Some(profile_id) {
-                profiles.default_profile = profiles
-                    .profiles
-                    .iter()
-                    .find(|profile| ai_profile_supports_tui_ask(profile))
-                    .map(|profile| profile.id.clone());
-            }
-            save_ai_profiles_to_path(config_path, &profiles)?;
-            self.ai_profiles = profiles;
-            let suffix = self
+        if !self.ai_profile_can_power_tui_ask(&profile) {
+            let current = self
                 .active_ask_ai_profile()
-                .map(|profile| format!(" AI Chat will keep using {}.", profile.label))
-                .unwrap_or_else(|| " Add NVIDIA NIM or Codex Local for AI Chat.".to_string());
+                .map(|profile| format!(" AI Chat is still using {}.", profile.label))
+                .unwrap_or_else(|| {
+                    " Choose another detected provider or set up NVIDIA NIM.".to_string()
+                });
             self.set_status(
-                StatusTone::Success,
+                StatusTone::Warning,
                 format!(
-                    "{} is configured, but it does not power AI Chat yet.{suffix}",
-                    profile.label
+                    "{} is not available for AI Chat right now.{}{current}",
+                    profile.label,
+                    ai_profile_unavailable_guidance(&profile)
                 ),
             );
             return Ok(());
@@ -5386,6 +5745,14 @@ impl TuiApp {
         let mut message = format!("AI provider: {}.", profile.label);
         if ai_profile_is_codex_local_bridge(profile) {
             message.push_str(" AI Chat will use read-only codex exec.");
+        } else if ai_profile_is_claude_local_bridge(profile) {
+            message.push_str(" AI Chat will use constrained claude -p.");
+        } else if ai_profile_is_ollama_local(profile) {
+            if let Some(model) = profile.model.as_deref() {
+                message.push_str(&format!(" AI Chat will use local Ollama model {model}."));
+            } else {
+                message.push_str(" AI Chat will use local Ollama.");
+            }
         } else {
             message.push_str(" AI Chat will use this provider.");
         }
@@ -5444,6 +5811,13 @@ impl TuiApp {
             .iter()
             .filter(|suggestion| !suggestion.changes.is_empty())
             .count()
+    }
+
+    fn ai_active_change_count(&self) -> usize {
+        self.ai_suggestions
+            .iter()
+            .map(|suggestion| suggestion.changes.len())
+            .sum()
     }
 
     fn refresh_ai_review_state(&self, review: &mut AiReviewState) {
@@ -5555,13 +5929,13 @@ impl TuiApp {
     }
 
     fn turn_ai_off_at_path(&mut self, config_path: &Path) -> Result<(), AppError> {
-        let mut profiles = load_ai_profiles_from_path(&config_path)?;
+        let mut profiles = load_ai_profiles_from_path(config_path)?;
         profiles.turn_off();
         save_ai_profiles_to_path(config_path, &profiles)?;
         self.ai_profiles = profiles;
         let cancelled = self.cancel_ai_job(AiHistoryDisposition::Cancelled);
         let archived_answers = self.archive_active_ai_answers(AiHistoryDisposition::Cleared);
-        let kept_review_suggestions = self.ai_active_suggestion_count();
+        let kept_review_changes = self.ai_active_change_count();
         self.ai_review = None;
         let mut message = if cancelled.is_some() {
             "AI turned off and the active response was cancelled.".to_string()
@@ -5572,9 +5946,10 @@ impl TuiApp {
         if archived_answers > 0 || cancelled.is_some() {
             message.push_str(" AI Chat history was kept for this TUI session.");
         }
-        if kept_review_suggestions > 0 {
+        if kept_review_changes > 0 {
             message.push_str(&format!(
-                " Kept {kept_review_suggestions} staged Review Suggestions item(s)."
+                " Kept {} in Review Suggestions.",
+                count_phrase(kept_review_changes, "staged map edit", "staged map edits")
             ));
         }
         self.set_status(StatusTone::Success, message);
@@ -5623,34 +5998,138 @@ impl TuiApp {
         self.set_status(StatusTone::Success, message);
     }
 
+    fn ai_can_open_chat_first(&self) -> bool {
+        (self.ai_profiles.enabled && self.active_ask_ai_profile().is_some())
+            || self.ai_job.is_some()
+            || self.ai_active_answer_count() > 0
+            || self.ai_active_change_count() > 0
+            || !self.ai_history.is_empty()
+    }
+
+    fn refresh_detected_local_ai_profiles(&mut self) {
+        self.ai_local_providers = detect_local_ai_providers_for_tui();
+        add_detected_local_ai_profiles(&mut self.ai_profiles, &self.ai_local_providers);
+    }
+
+    fn open_ai_entry_point(&mut self) {
+        if !self.experimental_ai_enabled() {
+            self.set_status(
+                StatusTone::Warning,
+                "AI is experimental. Relaunch mdmind with --experimental-ai to enable AI Chat.",
+            );
+            return;
+        }
+        self.refresh_detected_local_ai_profiles();
+        if self.ai_can_open_chat_first() {
+            self.ai_panel = None;
+            self.open_ai_chat();
+        } else {
+            self.open_ai_setup_panel();
+            self.set_status(
+                StatusTone::Info,
+                "AI Settings open first. Choose a detected local provider or set up NVIDIA NIM, then press A for AI Chat.",
+            );
+        }
+    }
+
+    fn first_actionable_ai_setup_index(&self) -> usize {
+        let items = self.ai_panel_items();
+        items
+            .iter()
+            .position(|item| {
+                item.enabled
+                    && matches!(
+                        item.action,
+                        AiPanelAction::UseOllamaLocal
+                            | AiPanelAction::UseCodexLocal
+                            | AiPanelAction::UseClaudeLocal
+                            | AiPanelAction::SetupNvidiaNim
+                            | AiPanelAction::UseNvidiaNim
+                    )
+            })
+            .or_else(|| items.iter().position(|item| item.enabled))
+            .unwrap_or(0)
+    }
+
+    fn open_ai_setup_panel(&mut self) {
+        if !self.experimental_ai_enabled() {
+            self.set_status(
+                StatusTone::Warning,
+                "AI is experimental. Relaunch mdmind with --experimental-ai to enable AI Settings.",
+            );
+            return;
+        }
+        let selected = self.first_actionable_ai_setup_index();
+        self.ai_panel = Some(AiPanelState::with_selected(selected));
+    }
+
     fn open_ai_panel(&mut self) {
         if !self.experimental_ai_enabled() {
             self.set_status(
                 StatusTone::Warning,
-                "AI is experimental. Relaunch mdmind with --experimental-ai to enable the AI Panel.",
+                "AI is experimental. Relaunch mdmind with --experimental-ai to enable AI Settings.",
             );
             return;
         }
         self.ai_panel = Some(AiPanelState::new());
         self.set_status(
             StatusTone::Info,
-            "AI Panel open. Use A for Chat, X to cancel a response, S to review staged suggestions.",
+            "AI Settings open. Use A for Chat, X to cancel a response, S to review staged map edits.",
+        );
+    }
+
+    fn open_ai_settings_from_chat(&mut self) {
+        if !self.experimental_ai_enabled() {
+            self.set_status(
+                StatusTone::Warning,
+                "AI is experimental. Relaunch mdmind with --experimental-ai to enable AI Settings.",
+            );
+            return;
+        }
+        self.ai_review = None;
+        self.open_ai_panel();
+        if let Some(panel) = self.ai_panel.as_mut() {
+            panel.return_to_chat = true;
+        }
+        self.set_status(
+            StatusTone::Info,
+            "AI Settings open. Press Esc to return to AI Chat.",
         );
     }
 
     fn ai_panel_items(&self) -> Vec<AiPanelItem> {
         let active_provider = self.active_ask_ai_profile();
         let active_provider_id = active_provider.map(|profile| profile.id.as_str());
-        let nvidia_configured = self.ai_profiles.profile(NVIDIA_NIM_QUICK_ADD_ID).is_some();
+        let nvidia_profile_present = self.ai_profiles.profile(NVIDIA_NIM_QUICK_ADD_ID).is_some();
+        let nvidia_local_key_ready = nvidia_nim_local_secret_ref_if_readable().is_some();
+        let nvidia_configured = nvidia_profile_present || nvidia_local_key_ready;
         let nvidia_active = active_provider_id == Some(NVIDIA_NIM_QUICK_ADD_ID);
+        let ollama = self
+            .ai_local_providers
+            .ollama
+            .as_ref()
+            .filter(|ollama| ollama.recommended_model.is_some());
+        let ollama_active = active_provider_id == Some(OLLAMA_LOCAL_QUICK_ADD_ID);
+        let codex_available = self.ai_local_providers.codex_cli
+            || self
+                .ai_profiles
+                .profile(CODEX_LOCAL_QUICK_ADD_ID)
+                .is_some_and(|profile| self.ai_profile_is_available(profile));
         let codex_active = active_provider_id == Some(CODEX_LOCAL_QUICK_ADD_ID);
+        let claude_available = self.ai_local_providers.claude_cli
+            || self
+                .ai_profiles
+                .profile(CLAUDE_LOCAL_QUICK_ADD_ID)
+                .is_some_and(|profile| self.ai_profile_is_available(profile));
+        let claude_active = active_provider_id == Some(CLAUDE_LOCAL_QUICK_ADD_ID);
         let ai_on = self.ai_profiles.enabled;
         let active_answers = self.ai_active_answer_count();
         let staged_suggestions = self.ai_active_suggestion_count();
+        let staged_change_count = self.ai_active_change_count();
         let history_count = self.ai_history.len();
         let running_job = self.ai_job.as_ref();
 
-        vec![
+        let mut items = vec![
             AiPanelItem {
                 section: "Chat",
                 action: AiPanelAction::Ask,
@@ -5660,11 +6139,11 @@ impl TuiApp {
                 } else {
                     active_provider
                         .map(|profile| {
-                            format!("Chat with {} using the focused branch", profile.label)
+                            format!("Chat with {} using the current chat context", profile.label)
                         })
                         .unwrap_or_else(|| {
                             if ai_on {
-                                "Needs NVIDIA NIM or Codex Local first".to_string()
+                                "Needs a detected local provider or NVIDIA NIM key".to_string()
                             } else {
                                 "AI is off; choose a provider to turn it back on".to_string()
                             }
@@ -5685,45 +6164,56 @@ impl TuiApp {
                 enabled: running_job.is_some(),
             },
             AiPanelItem {
-                section: "Suggestions",
+                section: "Map edits",
                 action: AiPanelAction::ReviewSuggestions,
-                title: "Review suggestions".to_string(),
-                subtitle: if staged_suggestions == 0 {
-                    "No staged map changes to review".to_string()
+                title: "Review map edits".to_string(),
+                subtitle: if staged_change_count == 0 {
+                    "No staged map edits to review".to_string()
+                } else if staged_suggestions <= 1 {
+                    count_phrase(staged_change_count, "staged map edit", "staged map edits")
                 } else {
-                    format!("{staged_suggestions} staged map-change item(s)")
+                    format!(
+                        "{} across {}",
+                        count_phrase(staged_change_count, "staged map edit", "staged map edits"),
+                        count_phrase(staged_suggestions, "batch", "batches")
+                    )
                 },
-                enabled: staged_suggestions > 0,
+                enabled: staged_change_count > 0,
             },
-            AiPanelItem {
+        ];
+
+        if let Some(ollama) = ollama {
+            let model = ollama
+                .recommended_model
+                .as_deref()
+                .unwrap_or("(no chat model)");
+            items.push(AiPanelItem {
                 section: "Providers",
-                action: AiPanelAction::SetupNvidiaNim,
-                title: if nvidia_configured {
-                    "Update NVIDIA NIM key".to_string()
+                action: AiPanelAction::UseOllamaLocal,
+                title: if ollama_active {
+                    "Active: Ollama Local".to_string()
                 } else {
-                    "Set up NVIDIA NIM".to_string()
+                    "Use Ollama Local".to_string()
                 },
-                subtitle: "Paste a key from build.nvidia.com/settings/api-keys".to_string(),
+                subtitle: if ollama_active {
+                    format!("AI Chat is using local Ollama model {model}")
+                } else {
+                    let other_models = ollama.model_count().saturating_sub(1);
+                    if other_models == 0 {
+                        format!("Detected local chat model {model}")
+                    } else {
+                        format!(
+                            "Detected {model} and {}",
+                            count_phrase(other_models, "other local model", "other local models")
+                        )
+                    }
+                },
                 enabled: true,
-            },
-            AiPanelItem {
-                section: "Providers",
-                action: AiPanelAction::UseNvidiaNim,
-                title: if nvidia_active {
-                    "Active: NVIDIA NIM".to_string()
-                } else {
-                    "Use NVIDIA NIM".to_string()
-                },
-                subtitle: if nvidia_active {
-                    "AI Chat is using NVIDIA NIM".to_string()
-                } else if nvidia_configured {
-                    "Make NIM the active AI provider".to_string()
-                } else {
-                    "Set up NIM first".to_string()
-                },
-                enabled: nvidia_configured,
-            },
-            AiPanelItem {
+            });
+        }
+
+        if codex_available {
+            items.push(AiPanelItem {
                 section: "Providers",
                 action: AiPanelAction::UseCodexLocal,
                 title: if codex_active {
@@ -5737,13 +6227,57 @@ impl TuiApp {
                     "Use read-only local codex exec for AI Chat".to_string()
                 },
                 enabled: true,
+            });
+        }
+
+        if claude_available {
+            items.push(AiPanelItem {
+                section: "Providers",
+                action: AiPanelAction::UseClaudeLocal,
+                title: if claude_active {
+                    "Active: Claude Local".to_string()
+                } else {
+                    "Use Claude Local".to_string()
+                },
+                subtitle: if claude_active {
+                    "AI Chat is using constrained local claude -p".to_string()
+                } else {
+                    "Use constrained local claude -p for AI Chat".to_string()
+                },
+                enabled: true,
+            });
+        }
+
+        items.extend([
+            AiPanelItem {
+                section: "Providers",
+                action: AiPanelAction::SetupNvidiaNim,
+                title: if nvidia_configured {
+                    "Update NVIDIA NIM key".to_string()
+                } else {
+                    "Set up NVIDIA NIM".to_string()
+                },
+                subtitle: "Paste or replace the local NIM API key".to_string(),
+                enabled: true,
             },
             AiPanelItem {
-                section: "Automation",
-                action: AiPanelAction::AutomationHooks,
-                title: "Automation hooks".to_string(),
-                subtitle: "Configure event-triggered AI checks; planned next slice".to_string(),
-                enabled: false,
+                section: "Providers",
+                action: AiPanelAction::UseNvidiaNim,
+                title: if nvidia_active {
+                    "Active: NVIDIA NIM".to_string()
+                } else {
+                    "Use NVIDIA NIM".to_string()
+                },
+                subtitle: if nvidia_active {
+                    "AI Chat is using NVIDIA NIM".to_string()
+                } else if nvidia_local_key_ready {
+                    "Use the stored local NIM key for AI Chat".to_string()
+                } else if nvidia_profile_present {
+                    "Make NIM the active AI provider".to_string()
+                } else {
+                    "Set up NIM first".to_string()
+                },
+                enabled: nvidia_configured,
             },
             AiPanelItem {
                 section: "Settings",
@@ -5752,7 +6286,9 @@ impl TuiApp {
                 subtitle: "Stop AI activity and hide AI status; keep profiles and keys".to_string(),
                 enabled: ai_on || self.ai_job.is_some() || !self.ai_suggestions.is_empty(),
             },
-        ]
+        ]);
+
+        items
     }
 
     fn handle_ai_panel_key(&mut self, key: KeyEvent) -> Result<bool, AppError> {
@@ -5764,7 +6300,12 @@ impl TuiApp {
 
         let action = match key.code {
             KeyCode::Esc | KeyCode::Char('q') => {
-                self.set_status(StatusTone::Info, "Closed AI Panel.");
+                if panel.return_to_chat {
+                    self.open_ai_chat();
+                    self.set_status(StatusTone::Info, "Back to AI Chat.");
+                } else {
+                    self.set_status(StatusTone::Info, "Closed AI Settings.");
+                }
                 return Ok(true);
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -5785,8 +6326,9 @@ impl TuiApp {
             KeyCode::Char('o') | KeyCode::Char('O') => Some(AiPanelAction::TurnOff),
             KeyCode::Char('n') | KeyCode::Char('N') => Some(AiPanelAction::SetupNvidiaNim),
             KeyCode::Char('p') | KeyCode::Char('P') => Some(AiPanelAction::UseNvidiaNim),
+            KeyCode::Char('l') | KeyCode::Char('L') => Some(AiPanelAction::UseOllamaLocal),
             KeyCode::Char('c') | KeyCode::Char('C') => Some(AiPanelAction::UseCodexLocal),
-            KeyCode::Char('u') | KeyCode::Char('U') => Some(AiPanelAction::AutomationHooks),
+            KeyCode::Char('d') | KeyCode::Char('D') => Some(AiPanelAction::UseClaudeLocal),
             _ => None,
         };
 
@@ -5809,6 +6351,22 @@ impl TuiApp {
             self.set_status(StatusTone::Info, item.subtitle.clone());
             return Ok(());
         }
+        if item.is_none() {
+            let message = match action {
+                AiPanelAction::UseOllamaLocal => {
+                    "Ollama Local is not available. Start Ollama with at least one chat model, then reopen AI Settings."
+                }
+                AiPanelAction::UseCodexLocal => {
+                    "Codex Local is not available. Install the codex CLI, then reopen AI Settings."
+                }
+                AiPanelAction::UseClaudeLocal => {
+                    "Claude Local is not available. Install and sign in to the claude CLI, then reopen AI Settings."
+                }
+                _ => "That AI action is not available right now.",
+            };
+            self.set_status(StatusTone::Info, message);
+            return Ok(());
+        }
 
         match action {
             AiPanelAction::Ask => {
@@ -5829,14 +6387,14 @@ impl TuiApp {
             AiPanelAction::UseNvidiaNim => {
                 self.set_active_ai_profile(NVIDIA_NIM_QUICK_ADD_ID)?;
             }
+            AiPanelAction::UseOllamaLocal => {
+                self.set_active_ai_profile(OLLAMA_LOCAL_QUICK_ADD_ID)?;
+            }
             AiPanelAction::UseCodexLocal => {
                 self.set_active_ai_profile(CODEX_LOCAL_QUICK_ADD_ID)?;
             }
-            AiPanelAction::AutomationHooks => {
-                self.set_status(
-                    StatusTone::Info,
-                    "AI automation hooks will live here; this slice only stages the panel entry.",
-                );
+            AiPanelAction::UseClaudeLocal => {
+                self.set_active_ai_profile(CLAUDE_LOCAL_QUICK_ADD_ID)?;
             }
         }
         Ok(())
@@ -5851,7 +6409,7 @@ impl TuiApp {
         self.ai_review = Some(chat);
         self.set_status(
             StatusTone::Info,
-            "AI Chat open. Press Enter to write, X to cancel a streaming response, Esc to close.",
+            "AI Chat open. Press Enter to write, P for settings, X to cancel a streaming response, Esc to close.",
         );
     }
 
@@ -5863,7 +6421,7 @@ impl TuiApp {
         if !self.ai_profiles.enabled {
             self.set_status(
                 StatusTone::Info,
-                "AI is off. Open AI: Open Panel and choose a provider to turn it back on.",
+                "AI is off. Open AI: Open Chat; AI Settings will open first so you can choose a provider.",
             );
             return;
         }
@@ -5879,9 +6437,47 @@ impl TuiApp {
         } else {
             self.set_status(
                 StatusTone::Info,
-                "Write a chat message. Enter sends the current branch plus recent chat context.",
+                "Write a chat message. Enter sends whole-map context on the first turn when it fits, plus focus and chat context.",
             );
         }
+    }
+
+    fn open_ai_chat_target_prompt(&mut self) {
+        self.begin_prompt(PromptMode::AiChatTarget, String::new());
+        let target = self.ai_chat_target_label();
+        let root = self
+            .ai_chat_root_target_info()
+            .map(|target| target.label)
+            .unwrap_or_else(|| "(no root)".to_string());
+        self.set_status(
+            StatusTone::Info,
+            format!(
+                "Choose AI Chat context. Current context is '{target}'. Enter keeps map root '{root}'; type . to use the selected node."
+            ),
+        );
+    }
+
+    fn set_ai_chat_target_from_input(&mut self, value: &str) -> Result<(), AppError> {
+        match self.resolve_ai_chat_target_input(value)? {
+            Some(target) => {
+                self.ai_chat_target = Some(target.anchor);
+                self.set_status(
+                    StatusTone::Success,
+                    format!("AI Chat context: {}.", target.label),
+                );
+            }
+            None => {
+                self.ai_chat_target = None;
+                self.set_status(
+                    StatusTone::Success,
+                    format!(
+                        "AI Chat context uses the default root: {}.",
+                        self.ai_chat_target_label()
+                    ),
+                );
+            }
+        }
+        Ok(())
     }
 
     fn open_ai_quick_prompt(&mut self, index: usize) {
@@ -5921,7 +6517,7 @@ impl TuiApp {
         if !suggestion.is_conversational_answer() {
             self.set_status(
                 StatusTone::Info,
-                "That AI item is already a map-change suggestion. Open Review Suggestions with S.",
+                "That AI item is already a map-edit suggestion. Open Review Suggestions with S.",
             );
             return Ok(());
         }
@@ -5951,60 +6547,59 @@ impl TuiApp {
             );
             return Ok(());
         };
-        self.editor.set_focus_path(path)?;
-        let prompt = format!(
-            "Use this AI Chat answer to suggest reviewable map edits I can apply. Stage concise add-child suggestions under the current branch or an existing descendant when useful.\n\nSelected AI Chat answer:\n{answer}"
-        );
-        self.ask_ai_about_current_branch(&prompt)
+        let prompt = ai_chat_turn_suggestion_followup_prompt(answer);
+        let anchor_label = node_label_for_document(self.editor.document(), &path);
+        self.ask_ai_about_target(&prompt, anchor, path, anchor_label)
     }
 
-    fn ask_ai_about_current_branch(&mut self, question: &str) -> Result<(), AppError> {
+    fn ask_ai_about_chat_target(&mut self, question: &str) -> Result<(), AppError> {
+        let target = self.ai_chat_target_info().ok_or_else(|| {
+            AppError::new("The document has no AI Chat context for the AI response.")
+        })?;
+        self.ask_ai_about_target(question, target.anchor, target.path, target.label)
+    }
+
+    fn ask_ai_about_target(
+        &mut self,
+        question: &str,
+        anchor: PathAnchor,
+        anchor_path: Vec<usize>,
+        anchor_label: String,
+    ) -> Result<(), AppError> {
         if !self.ai_profiles.enabled {
             self.set_status(
                 StatusTone::Info,
-                "AI is off. Open AI: Open Panel and choose a provider to turn it back on.",
+                "AI is off. Open AI: Open Chat; AI Settings will open first so you can choose a provider.",
             );
             return Ok(());
         }
-        self.ai_profiles = load_ai_profiles_for_tui();
+        self.ai_local_providers = detect_local_ai_providers_for_tui();
+        self.ai_profiles = load_ai_profiles_for_tui(&self.ai_local_providers);
         let profile = self.active_ask_ai_profile().cloned().ok_or_else(|| {
             if let Some(profile) = self.pending_ai_profile() {
                 AppError::new(format!(
-                    "{} is configured, but that provider cannot power AI Chat yet. Use NVIDIA NIM or Codex Local in the AI Panel.",
+                    "{} is configured, but that provider cannot power AI Chat right now. Use a detected Ollama/Codex/Claude provider or NVIDIA NIM in AI Settings.",
                     profile.label
                 ))
             } else {
                 AppError::new(
-                    "No callable AI provider is configured yet. Open AI: Open Panel and set up NVIDIA NIM or use Codex Local first."
+                    "No callable AI provider is available yet. Open AI: Open Chat; AI Settings will open first for detected Ollama/Codex/Claude or NVIDIA NIM setup."
                 )
             }
         })?;
 
-        let anchor = self.current_anchor().ok_or_else(|| {
-            AppError::new("The document has no focused node for the AI response.")
-        })?;
-        let anchor_label = self
-            .editor
-            .current()
-            .map(node_display_label)
-            .unwrap_or_else(|| "(no focus)".to_string());
-        let context = self.ai_current_branch_context()?;
-        let style_notes = self.ai_current_branch_style_notes()?;
         let chat_context = self.ai_chat_context_for_prompt();
         let edit_contract = if ai_chat_explicitly_requests_map_edits(question) {
             reviewable_map_suggestion_contract()
         } else {
             conversational_only_contract()
         };
-        let user_prompt = if chat_context.is_empty() {
-            format!(
-                "Message:\n{question}\n\nAI output contract:\n{edit_contract}\n\nCurrent branch style notes:\n{style_notes}\n\nCurrent mdmind branch:\n```mdmind\n{context}\n```"
-            )
-        } else {
-            format!(
-                "Message:\n{question}\n\nRecent AI chat in this TUI session:\n{chat_context}\n\nAI output contract:\n{edit_contract}\n\nCurrent branch style notes:\n{style_notes}\n\nCurrent mdmind branch:\n```mdmind\n{context}\n```"
-            )
-        };
+        let user_prompt = self.ai_chat_user_prompt_for_target(
+            question,
+            &anchor_path,
+            edit_contract,
+            &chat_context,
+        )?;
         let profile_label = profile.label.clone();
         let job_profile_label = profile_label.clone();
         let job_anchor_label = anchor_label.clone();
@@ -6085,7 +6680,7 @@ impl TuiApp {
             receiver,
         });
         let mut message = format!(
-            "AI working with {} on '{}'. Keep the AI Panel open to watch for the response.",
+            "AI working with {} on '{}'. Response is streaming into AI Chat.",
             job_profile_label, job_anchor_label
         );
         if replaced.is_some() {
@@ -6200,11 +6795,12 @@ impl TuiApp {
             staged_change_count,
             extraction.warning.as_deref(),
         );
+        let has_chat_answer = !chat_answer.trim().is_empty();
         let source = if let Some(suggestion) = self.ai_suggestions.get_mut(suggestion_index) {
             suggestion.target = target.clone();
             suggestion.profile_label = profile_label.to_string();
             suggestion.question = question.to_string();
-            suggestion.answer = (!chat_answer.trim().is_empty()).then(|| chat_answer.clone());
+            suggestion.answer = has_chat_answer.then(|| chat_answer.clone());
             if let Some(source) = suggestion.source.as_mut() {
                 source.token_estimate =
                     Some(source.token_estimate.unwrap_or(0) + estimate_ai_tokens(answer));
@@ -6226,6 +6822,7 @@ impl TuiApp {
                 anchor_label,
                 staged_change_count,
                 extraction.warning.as_deref(),
+                has_chat_answer,
             ),
         );
         Ok(())
@@ -6266,15 +6863,18 @@ impl TuiApp {
             staged_change_count,
             extraction.warning.as_deref(),
         );
+        let has_chat_answer = !chat_answer.trim().is_empty();
         let source = self.ai_suggestion_source_for_label(
             profile_label,
             ai_reviewable_suggestion_reason(question),
             Some(estimate_ai_tokens(question) + estimate_ai_tokens(answer)),
         );
-        self.ai_suggestions.push(
-            AiSuggestion::answer(target.clone(), profile_label, question, chat_answer)
-                .with_source(source.clone()),
-        );
+        if has_chat_answer {
+            self.ai_suggestions.push(
+                AiSuggestion::answer(target.clone(), profile_label, question, chat_answer)
+                    .with_source(source.clone()),
+            );
+        }
         if !extraction.changes.is_empty() {
             self.ai_suggestions.push(
                 AiSuggestion::new(target, profile_label, question, extraction.changes)
@@ -6287,6 +6887,7 @@ impl TuiApp {
                 anchor_label,
                 staged_change_count,
                 extraction.warning.as_deref(),
+                has_chat_answer,
             ),
         );
         Ok(())
@@ -6305,48 +6906,20 @@ impl TuiApp {
             );
             return Ok(());
         }
-        for change in &suggestion.changes {
-            match change {
-                AiSuggestedChange::AddChild {
-                    target,
-                    fragment,
-                    detail,
-                } => {
-                    let (target_path, target_label) = match self
-                        .resolve_ai_suggestion_change_target(&suggestion, target.as_ref())
-                    {
-                        Ok(target) => target,
-                        Err(message) => {
-                            self.set_status(StatusTone::Error, message);
-                            return Ok(());
-                        }
-                    };
-                    self.editor.set_focus_path(target_path)?;
-                    self.apply_edit(
-                        |editor| editor.add_child_with_detail(fragment, detail),
-                        format!(
-                            "Accepted AI suggestion from {} under '{}'.",
-                            suggestion.profile_label, target_label
-                        ),
-                        Some(format!("AI suggestion accepted under '{target_label}'")),
-                    )?;
-                }
-                AiSuggestedChange::UpdateNode { .. } | AiSuggestedChange::RemoveNode { .. } => {
-                    self.set_status(
-                        StatusTone::Warning,
-                        format!(
-                            "AI {} suggestions are staged for review, but applying them is not wired yet.",
-                            change.operation_label()
-                        ),
-                    );
-                    return Ok(());
-                }
-            }
+        let checked = AiReviewState::default_checked(&suggestion, true);
+        if checked.is_empty()
+            && suggestion
+                .changes
+                .iter()
+                .any(|change| matches!(change, AiSuggestedChange::RemoveNode { .. }))
+        {
+            self.set_status(
+                StatusTone::Warning,
+                "This AI suggestion only removes nodes. Open Review Suggestions and press Space to check removal rows before applying.",
+            );
+            return Ok(());
         }
-
-        let archived = self.ai_suggestions.remove(0);
-        self.archive_ai_suggestion(archived, AiHistoryDisposition::Applied);
-        Ok(())
+        self.accept_checked_ai_review_changes(0, &checked)
     }
 
     fn open_ai_review(&mut self, mode: AiReviewMode) {
@@ -6358,7 +6931,7 @@ impl TuiApp {
             self.set_status(
                 StatusTone::Info,
                 match mode {
-                    AiReviewMode::Suggestions => "No staged map-change suggestions to review.",
+                    AiReviewMode::Suggestions => "No staged map edits to review.",
                     AiReviewMode::History => unreachable!("AI Chat opens even when it is empty."),
                 },
             );
@@ -6370,9 +6943,9 @@ impl TuiApp {
         self.set_status(
             StatusTone::Info,
             format!(
-                "Review suggestions open for '{}' with {} change row(s).",
+                "Review Suggestions open for '{}' with {}.",
                 suggestion.target.label,
-                suggestion.changes.len()
+                count_phrase(suggestion.changes.len(), "map edit", "map edits")
             ),
         );
     }
@@ -6385,7 +6958,25 @@ impl TuiApp {
 
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => {
-                let label = if review.mode == AiReviewMode::History {
+                if let Some(return_chat_index) = review.return_chat_index
+                    && review.mode == AiReviewMode::Suggestions
+                {
+                    self.open_ai_chat();
+                    let turn_start = self.ai_chat_turn_scroll_for_index(return_chat_index);
+                    let item_count = self.ai_review_item_count_for(AiReviewMode::History);
+                    if let Some(chat) = self.ai_review.as_mut()
+                        && chat.mode == AiReviewMode::History
+                    {
+                        chat.item_index = return_chat_index.min(item_count.saturating_sub(1));
+                        chat.scroll = turn_start;
+                        chat.follow_latest = item_count > 0 && chat.item_index + 1 == item_count;
+                    }
+                    self.set_status(StatusTone::Info, "Back to AI Chat.");
+                    return Ok(true);
+                }
+                let label = if self.ai_panel.is_some() {
+                    "Back to AI Settings."
+                } else if review.mode == AiReviewMode::History {
                     "Closed AI Chat."
                 } else {
                     "Closed AI review."
@@ -6448,16 +7039,26 @@ impl TuiApp {
                     }
                 }
             }
+            KeyCode::Up
+                if review.mode == AiReviewMode::History
+                    && key.modifiers.contains(KeyModifiers::SHIFT) =>
+            {
+                self.prepare_ai_chat_manual_scroll(&mut review);
+                review.scroll_up(AI_CHAT_FAST_SCROLL_LINES);
+            }
+            KeyCode::Down
+                if review.mode == AiReviewMode::History
+                    && key.modifiers.contains(KeyModifiers::SHIFT) =>
+            {
+                self.prepare_ai_chat_manual_scroll(&mut review);
+                review.scroll_down(AI_CHAT_FAST_SCROLL_LINES);
+            }
             KeyCode::PageUp => {
-                if review.mode == AiReviewMode::History {
-                    review.follow_latest = false;
-                }
+                self.prepare_ai_chat_manual_scroll(&mut review);
                 review.scroll_up(8);
             }
             KeyCode::PageDown => {
-                if review.mode == AiReviewMode::History {
-                    review.follow_latest = false;
-                }
+                self.prepare_ai_chat_manual_scroll(&mut review);
                 review.scroll_down(8);
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -6469,9 +7070,7 @@ impl TuiApp {
                     review.selected = review.selected.saturating_sub(1);
                     review.keep_selected_visible();
                 } else {
-                    if review.mode == AiReviewMode::History {
-                        review.follow_latest = false;
-                    }
+                    self.prepare_ai_chat_manual_scroll(&mut review);
                     review.scroll_up(1);
                 }
             }
@@ -6485,9 +7084,7 @@ impl TuiApp {
                         (review.selected + 1).min(item.suggestion().changes.len() - 1);
                     review.keep_selected_visible();
                 } else {
-                    if review.mode == AiReviewMode::History {
-                        review.follow_latest = false;
-                    }
+                    self.prepare_ai_chat_manual_scroll(&mut review);
                     review.scroll_down(1);
                 }
             }
@@ -6530,13 +7127,29 @@ impl TuiApp {
                 self.open_ai_quick_prompt(4);
                 return Ok(true);
             }
+            KeyCode::Char('t') | KeyCode::Char('T') if review.mode == AiReviewMode::History => {
+                self.ai_review = Some(review);
+                self.open_ai_chat_target_prompt();
+                return Ok(true);
+            }
+            KeyCode::Char('p') | KeyCode::Char('P') if review.mode == AiReviewMode::History => {
+                self.ai_review = Some(review);
+                self.open_ai_settings_from_chat();
+                return Ok(true);
+            }
             KeyCode::Char('c') | KeyCode::Char('C') if review.mode == AiReviewMode::History => {
                 self.clear_ai_chat_session();
                 return Ok(true);
             }
             KeyCode::Char('s') | KeyCode::Char('S') if review.mode == AiReviewMode::History => {
+                let return_chat_index = review.item_index;
                 self.ai_review = Some(review);
                 self.open_ai_review(AiReviewMode::Suggestions);
+                if let Some(review) = self.ai_review.as_mut()
+                    && review.mode == AiReviewMode::Suggestions
+                {
+                    review.return_chat_index = Some(return_chat_index);
+                }
                 return Ok(true);
             }
             KeyCode::Char('v') | KeyCode::Char('V') if review.mode == AiReviewMode::History => {
@@ -6584,7 +7197,7 @@ impl TuiApp {
                     self.ai_review = Some(review);
                     self.set_status(
                         StatusTone::Info,
-                        "AI Chat keeps this session's turns visible. Use Review Suggestions to dismiss staged map changes.",
+                        "AI Chat keeps this session's turns visible. Use Review Suggestions to dismiss staged map edits.",
                     );
                     return Ok(true);
                 }
@@ -6635,7 +7248,7 @@ impl TuiApp {
     ) -> Result<(), AppError> {
         let Some(suggestion) = self.ai_suggestions.get(active_index).cloned() else {
             self.ai_review = None;
-            self.set_status(StatusTone::Info, "No staged AI suggestions to accept.");
+            self.set_status(StatusTone::Info, "No staged AI map edits to accept.");
             return Ok(());
         };
         if suggestion.is_conversational_answer() {
@@ -6648,7 +7261,7 @@ impl TuiApp {
         if checked.is_empty() {
             self.set_status(
                 StatusTone::Info,
-                "No checked AI suggestion rows to apply. Toggle rows with Space.",
+                "No checked AI map edits to apply. Toggle rows with Space.",
             );
             return Ok(());
         }
@@ -6659,51 +7272,20 @@ impl TuiApp {
             if !checked.contains(&index) {
                 continue;
             }
-            match change {
-                AiSuggestedChange::AddChild {
-                    target,
-                    fragment,
-                    detail,
-                } => {
-                    let (target_path, target_label) = match self
-                        .resolve_ai_suggestion_change_target(&suggestion, target.as_ref())
-                    {
-                        Ok(target) => target,
-                        Err(message) => {
-                            self.set_status(StatusTone::Error, message);
-                            return Ok(());
-                        }
-                    };
-                    self.editor.set_focus_path(target_path)?;
-                    self.apply_edit(
-                        |editor| editor.add_child_with_detail(fragment, detail),
-                        format!(
-                            "Accepted AI suggestion from {} under '{}'.",
-                            suggestion.profile_label, target_label
-                        ),
-                        Some(format!("AI suggestion accepted under '{target_label}'")),
-                    )?;
+            match self.apply_ai_suggestion_change(&suggestion, change) {
+                Ok(target_label) => {
                     applied += 1;
                     applied_targets.push(target_label);
                 }
-                AiSuggestedChange::UpdateNode { .. } | AiSuggestedChange::RemoveNode { .. } => {
-                    self.set_status(
-                        StatusTone::Warning,
-                        format!(
-                            "AI {} suggestions are staged for review, but applying them is not wired yet.",
-                            change.operation_label()
-                        ),
-                    );
+                Err(error) => {
+                    self.set_status(StatusTone::Error, error.message().to_string());
                     return Ok(());
                 }
             }
         }
 
         if applied == 0 {
-            self.set_status(
-                StatusTone::Info,
-                "No supported checked AI suggestion rows to apply.",
-            );
+            self.set_status(StatusTone::Info, "No checked AI map edits to apply.");
             return Ok(());
         }
 
@@ -6721,19 +7303,84 @@ impl TuiApp {
         }
         applied_targets.sort();
         applied_targets.dedup();
-        let target_summary = match applied_targets.as_slice() {
-            [label] => format!(" under '{label}'"),
+        let branch_summary = match applied_targets.as_slice() {
+            [label] => format!(" {label}"),
             [] => String::new(),
-            targets => format!(" under {} targets", targets.len()),
+            branches => format!(" across {} branches", branches.len()),
         };
         self.set_status(
             StatusTone::Success,
             format!(
-                "Applied {applied} AI suggestion row(s) from {}{target_summary}.",
+                "Applied {} from {}{branch_summary}.",
+                count_phrase(applied, "AI map edit", "AI map edits"),
                 suggestion.profile_label
             ),
         );
         Ok(())
+    }
+
+    fn apply_ai_suggestion_change(
+        &mut self,
+        suggestion: &AiSuggestion,
+        change: &AiSuggestedChange,
+    ) -> Result<String, AppError> {
+        match change {
+            AiSuggestedChange::AddChild {
+                target,
+                fragment,
+                detail,
+            } => {
+                let (target_path, target_label) = self
+                    .resolve_ai_suggestion_change_target(suggestion, target.as_ref())
+                    .map_err(AppError::new)?;
+                self.editor.set_focus_path(target_path)?;
+                self.apply_edit(
+                    |editor| editor.add_child_with_detail(fragment, detail),
+                    format!(
+                        "Accepted AI add suggestion from {} under '{}'.",
+                        suggestion.profile_label, target_label
+                    ),
+                    Some(format!(
+                        "AI suggestion before adding under '{target_label}'"
+                    )),
+                )?;
+                Ok(format!("under '{target_label}'"))
+            }
+            AiSuggestedChange::UpdateNode {
+                target,
+                fragment,
+                detail,
+            } => {
+                let (target_path, target_label) = self
+                    .resolve_ai_suggestion_change_target(suggestion, Some(target))
+                    .map_err(AppError::new)?;
+                self.editor.set_focus_path(target_path)?;
+                self.apply_edit(
+                    |editor| editor.update_current_parts(fragment.as_deref(), detail.as_deref()),
+                    format!(
+                        "Accepted AI update suggestion for '{}' from {}.",
+                        target_label, suggestion.profile_label
+                    ),
+                    Some(format!("AI suggestion before updating '{target_label}'")),
+                )?;
+                Ok(format!("for '{target_label}'"))
+            }
+            AiSuggestedChange::RemoveNode { target } => {
+                let (target_path, target_label) = self
+                    .resolve_ai_suggestion_change_target(suggestion, Some(target))
+                    .map_err(AppError::new)?;
+                self.editor.set_focus_path(target_path)?;
+                self.apply_edit(
+                    |editor| editor.delete_current(),
+                    format!(
+                        "Accepted AI remove suggestion for '{}' from {}.",
+                        target_label, suggestion.profile_label
+                    ),
+                    Some(format!("AI suggestion before removing '{target_label}'")),
+                )?;
+                Ok(format!("for '{target_label}'"))
+            }
+        }
     }
 
     fn dismiss_ai_suggestion(&mut self, active_index: usize) {
@@ -6756,27 +7403,84 @@ impl TuiApp {
         self.archive_ai_suggestion(suggestion, AiHistoryDisposition::Dismissed);
     }
 
-    fn ai_current_branch_context(&self) -> Result<String, AppError> {
-        let node = self
-            .editor
-            .current()
-            .ok_or_else(|| AppError::new("The document has no focused node."))?;
+    fn ai_branch_context_for_path(&self, path: &[usize]) -> Result<String, AppError> {
+        let node = get_node(&self.editor.document().nodes, path)
+            .ok_or_else(|| AppError::new("The AI Chat context is no longer in the map."))?;
         let mut lines = Vec::new();
         lines.push(format!(
             "Breadcrumb: {}",
-            self.editor.breadcrumb().join(" / ")
+            breadcrumb_for_path(self.editor.document(), path)
         ));
         lines.push(String::new());
         render_node_for_ai_context(node, 0, &mut lines);
         Ok(lines.join("\n"))
     }
 
-    fn ai_current_branch_style_notes(&self) -> Result<String, AppError> {
-        let node = self
-            .editor
-            .current()
-            .ok_or_else(|| AppError::new("The document has no focused node."))?;
+    fn ai_branch_style_notes_for_path(&self, path: &[usize]) -> Result<String, AppError> {
+        let node = get_node(&self.editor.document().nodes, path)
+            .ok_or_else(|| AppError::new("The AI Chat context is no longer in the map."))?;
         Ok(ai_branch_style_notes(node))
+    }
+
+    fn ai_whole_map_context(&self) -> String {
+        render_document_for_ai_context(&self.editor.document().nodes)
+    }
+
+    fn ai_chat_user_prompt_for_target(
+        &self,
+        question: &str,
+        target_path: &[usize],
+        edit_contract: &str,
+        chat_context: &str,
+    ) -> Result<String, AppError> {
+        let target_context = self.ai_branch_context_for_path(target_path)?;
+        let target_style_notes = self.ai_branch_style_notes_for_path(target_path)?;
+        let focus_path = self.editor.focus_path().to_vec();
+        let focus_context = self.ai_branch_context_for_path(&focus_path)?;
+        let focus_matches_target = focus_path == target_path;
+        let first_turn = chat_context.trim().is_empty();
+        let mut sections = vec![format!("Message:\n{question}")];
+
+        if !chat_context.trim().is_empty() {
+            sections.push(format!(
+                "Recent AI chat in this TUI session:\n{chat_context}"
+            ));
+        }
+
+        sections.push(format!("AI output contract:\n{edit_contract}"));
+
+        if first_turn {
+            let whole_map_context = self.ai_whole_map_context();
+            let whole_map_tokens = estimate_ai_tokens(&whole_map_context);
+            if whole_map_tokens <= AI_WHOLE_MAP_CONTEXT_TOKEN_LIMIT {
+                sections.push(format!(
+                    "Whole mdmind map context (first AI Chat message only, about {whole_map_tokens} token(s)):\n```mdmind\n{whole_map_context}\n```"
+                ));
+            } else {
+                sections.push(format!(
+                    "Whole mdmind map context: omitted from this first AI Chat message because the map is large, about {whole_map_tokens} token(s). Use the current focus and chat context below."
+                ));
+            }
+        }
+
+        sections.push(format!(
+            "Current focus branch (what the user is looking at now):\n```mdmind\n{focus_context}\n```"
+        ));
+
+        if focus_matches_target {
+            sections.push(
+                "Chat context branch: same as the current focus branch. Use it as the default target for reviewable edits."
+                    .to_string(),
+            );
+        } else {
+            sections.push(format!(
+                "Chat context branch (where this AI Chat response is anchored; use this as the default target for reviewable edits):\n```mdmind\n{target_context}\n```"
+            ));
+        }
+
+        sections.push(format!("Chat context style notes:\n{target_style_notes}"));
+
+        Ok(sections.join("\n\n"))
     }
 
     fn ai_chat_context_for_prompt(&self) -> String {
@@ -6788,7 +7492,7 @@ impl TuiApp {
                 suggestion
                     .changes
                     .is_empty()
-                    .then(|| (Some(entry.disposition), suggestion))
+                    .then_some((Some(entry.disposition), suggestion))
             })
             .chain(
                 self.ai_suggestions
@@ -6835,6 +7539,16 @@ impl TuiApp {
     fn ai_chat_turn_scroll_for_index(&self, selected_index: usize) -> u16 {
         let items = self.ai_review_items(AiReviewMode::History);
         ai_chat_turn_start_scroll(&items, selected_index)
+    }
+
+    fn prepare_ai_chat_manual_scroll(&self, review: &mut AiReviewState) {
+        if review.mode != AiReviewMode::History {
+            return;
+        }
+        if review.follow_latest {
+            review.scroll = self.ai_chat_turn_scroll_for_index(review.item_index);
+        }
+        review.follow_latest = false;
     }
 
     fn execute_palette_target(&mut self, target: PaletteTarget) -> Result<(), AppError> {
@@ -6929,7 +7643,7 @@ impl TuiApp {
                     self.check_for_updates();
                 }
                 PaletteAction::OpenAiPanel => {
-                    self.open_ai_panel();
+                    self.open_ai_entry_point();
                 }
                 PaletteAction::ShowHelp => {
                     self.open_help(None);
@@ -7513,9 +8227,9 @@ impl TuiApp {
                 PaletteAction::CheckForUpdates,
             ),
             (
-                "AI: Open Panel",
-                "Open chat, review, setup, providers, and AI controls",
-                "ai ask chat review suggestions setup nvidia nim codex provider profile off hooks automation model assistant",
+                "AI: Open Chat",
+                "Open AI Chat; opens settings first when provider setup is needed",
+                "ai ask chat review suggestions setup settings nvidia nim ollama codex claude provider profile off model assistant",
                 PaletteAction::OpenAiPanel,
             ),
             (
@@ -9063,12 +9777,13 @@ impl TuiApp {
         self.persist_session()?;
         self.quit_armed = false;
         let message = message.into();
-        if self.autosave {
+        let status_message = if self.autosave {
             self.save_to_disk()?;
-            self.set_status(StatusTone::Success, format!("{message} Autosaved."));
+            format!("{message} Autosaved.")
         } else {
-            self.set_status(StatusTone::Success, message);
-        }
+            message
+        };
+        self.set_status(StatusTone::Success, status_message);
         Ok(())
     }
 
@@ -9104,6 +9819,18 @@ impl TuiApp {
         edit(&mut self.editor)?;
         self.after_edit(message)
     }
+}
+
+fn render_document_for_ai_context(nodes: &[Node]) -> String {
+    if nodes.is_empty() {
+        return "(empty map)".to_string();
+    }
+
+    let mut lines = Vec::new();
+    for node in nodes {
+        render_node_for_ai_context(node, 0, &mut lines);
+    }
+    lines.join("\n")
 }
 
 fn render_node_for_ai_context(node: &Node, depth: usize, lines: &mut Vec<String>) {
@@ -9168,7 +9895,7 @@ fn ai_branch_style_notes(node: &Node) -> String {
 
     let mut lines = Vec::new();
     lines.push(format!(
-        "Selected branch has {} node(s); align each suggested edit with the target branch's nearby siblings and descendants.",
+        "Selected branch has {} node(s); align each suggested edit with the context branch's nearby siblings and descendants.",
         stats.node_count
     ));
 
@@ -9316,6 +10043,18 @@ fn normalize_ai_target_label(raw: &str) -> String {
     normalized.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+fn normalize_ai_chat_target_query(raw: &str) -> String {
+    let normalized = raw
+        .trim()
+        .chars()
+        .map(|ch| match ch {
+            '/' | '>' | '\\' | '-' | '_' => ' ',
+            other => other.to_ascii_lowercase(),
+        })
+        .collect::<String>();
+    normalized.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 fn collect_ai_label_matches_anywhere(
     nodes: &[Node],
     normalized_label: &str,
@@ -9350,7 +10089,7 @@ fn ai_chat_explicitly_requests_map_edits(message: &str) -> bool {
     let strong_phrases = [
         "review suggestions",
         "reviewable suggestions",
-        "staged suggestions",
+        "staged map edits",
         "stage suggestions",
         "stage map suggestions",
         "suggest map changes",
@@ -9468,7 +10207,7 @@ fn ai_chat_requests_additive_suggestions(normalized: &str) -> bool {
             }
         }
 
-        if tokens[cursor..].iter().any(|token| *token == "add") {
+        if tokens[cursor..].contains(&"add") {
             return true;
         }
     }
@@ -9492,12 +10231,18 @@ fn ai_reviewable_suggestion_reason(message: &str) -> Option<String> {
         .then(|| "Staged because your prompt requested reviewable map edits.".to_string())
 }
 
+fn ai_chat_turn_suggestion_followup_prompt(answer: &str) -> String {
+    format!(
+        "Use this AI Chat answer to suggest reviewable map edits I can apply. Stage concise add, update, or remove suggestions. Prefer updating existing nodes when the answer improves or corrects existing content; add children only for genuinely missing structure; remove only clear duplicates or obsolete nodes.\n\nSelected AI Chat answer:\n{answer}"
+    )
+}
+
 fn ai_quick_prompt(index: usize) -> Option<&'static str> {
     match index {
         1 => Some("Summarize this branch."),
         2 => Some("Find gaps, risks, and open questions in this branch."),
         3 => Some("Extract TODOs, risks, and open questions from this branch."),
-        4 => Some("Suggest map edits I can review."),
+        4 => Some("Suggest concise add, update, or remove map edits I can review."),
         _ => None,
     }
 }
@@ -9566,7 +10311,8 @@ fn ai_chat_answer_text(
     }
     if staged_change_count > 0 {
         format!(
-            "I staged {staged_change_count} map-change suggestion row(s) in Review Suggestions."
+            "I staged {} in Review Suggestions.",
+            count_phrase(staged_change_count, "map edit", "map edits")
         )
     } else {
         String::new()
@@ -9577,18 +10323,22 @@ fn ai_response_complete_status(
     anchor_label: &str,
     staged_change_count: usize,
     warning: Option<&str>,
+    has_chat_answer: bool,
 ) -> String {
     if warning.is_some() {
         return format!(
-            "AI response complete for '{anchor_label}'. Could not stage suggestions; details are in AI Chat."
+            "AI response complete for '{anchor_label}'. Could not stage map edits; details are in AI Chat."
         );
     }
     if staged_change_count > 0 {
         format!(
-            "AI response complete for '{anchor_label}'. {staged_change_count} suggestion row(s) staged in Review Suggestions · S Review."
+            "AI response complete for '{anchor_label}'. {} staged in Review Suggestions · S Review.",
+            count_phrase(staged_change_count, "map edit", "map edits")
         )
-    } else {
+    } else if has_chat_answer {
         format!("AI response complete for '{anchor_label}'. It is open in AI Chat.")
+    } else {
+        format!("AI response complete for '{anchor_label}'. No map edits were staged.")
     }
 }
 
@@ -9596,18 +10346,22 @@ fn ai_response_ready_status(
     anchor_label: &str,
     staged_change_count: usize,
     warning: Option<&str>,
+    has_chat_answer: bool,
 ) -> String {
     if warning.is_some() {
         return format!(
-            "AI response ready for '{anchor_label}'. Could not stage suggestions; details are in AI Chat."
+            "AI response ready for '{anchor_label}'. Could not stage map edits; details are in AI Chat."
         );
     }
     if staged_change_count > 0 {
         format!(
-            "AI response ready for '{anchor_label}'. {staged_change_count} suggestion row(s) staged in Review Suggestions · S Review."
+            "AI response ready for '{anchor_label}'. {} staged in Review Suggestions · S Review.",
+            count_phrase(staged_change_count, "map edit", "map edits")
         )
-    } else {
+    } else if has_chat_answer {
         format!("AI response ready for '{anchor_label}'. It is staged in AI Chat.")
+    } else {
+        format!("AI response ready for '{anchor_label}'. No map edits were staged.")
     }
 }
 
@@ -10552,7 +11306,7 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result
 
 fn render_markdown_viewer(frame: &mut Frame, viewer: &mut MarkdownViewerState) {
     let area = frame.area();
-    let palette = ThemeId::Workbench.theme();
+    let palette = ThemeId::Mdmind.theme();
     frame.render_widget(
         Block::default().style(Style::default().bg(palette.background)),
         area,
@@ -10853,6 +11607,7 @@ fn render(frame: &mut Frame, app: &mut TuiApp) {
     }
 
     if app.experimental_ai_enabled()
+        && app.ai_review.is_none()
         && let Some(panel) = &app.ai_panel
     {
         render_ai_panel_overlay(frame, centered_rect(86, 78, area), app, panel);
@@ -10861,14 +11616,16 @@ fn render(frame: &mut Frame, app: &mut TuiApp) {
     if app.experimental_ai_enabled()
         && let Some(review) = &app.ai_review
     {
-        render_ai_review_overlay(frame, centered_rect(78, 70, area), app, review);
+        render_ai_review_overlay(frame, centered_rect(86, 78, area), app, review);
     }
 
     if let Some(palette) = &app.palette {
         render_palette_overlay(frame, centered_rect(78, 76, area), app, palette);
     }
 
-    if let Some(prompt) = &app.prompt {
+    if let Some(prompt) = &app.prompt
+        && !prompt_renders_inside_ai_chat(app, prompt)
+    {
         render_prompt_overlay(
             frame,
             prompt_overlay_rect(prompt.mode, app.ui_settings.minimal_mode, area),
@@ -10876,6 +11633,14 @@ fn render(frame: &mut Frame, app: &mut TuiApp) {
             app,
         );
     }
+}
+
+fn prompt_renders_inside_ai_chat(app: &TuiApp, prompt: &PromptState) -> bool {
+    prompt.mode == PromptMode::AiAskCurrentBranch
+        && app
+            .ai_review
+            .as_ref()
+            .is_some_and(|review| review.mode == AiReviewMode::History)
 }
 
 #[allow(non_snake_case)]
@@ -11265,18 +12030,6 @@ fn header_status_lamps(app: &TuiApp, palette: Palette) -> Vec<Span<'static>> {
         app.filter.is_some(),
         palette,
     );
-    if app.experimental_ai_enabled() {
-        push_header_lamp_separator(&mut spans, palette);
-        push_header_lamp(
-            &mut spans,
-            ai_status_lamp_label(app),
-            app.active_ask_ai_profile().is_some()
-                || app.pending_ai_profile().is_some()
-                || app.ai_job.is_some()
-                || !app.ai_suggestions.is_empty(),
-            palette,
-        );
-    }
     push_header_lamp_separator(&mut spans, palette);
     push_header_lamp(&mut spans, "MINIMAL", app.ui_settings.minimal_mode, palette);
     push_header_lamp(&mut spans, "READING", app.ui_settings.reading_mode, palette);
@@ -11292,23 +12045,6 @@ fn header_status_lamps(app: &TuiApp, palette: Palette) -> Vec<Span<'static>> {
     spans
 }
 
-fn ai_status_lamp_label(app: &TuiApp) -> String {
-    if app.ai_job.is_some() {
-        return "AI WORKING".to_string();
-    }
-    if !app.ai_suggestions.is_empty() {
-        return "AI REVIEW".to_string();
-    }
-
-    if app.active_ask_ai_profile().is_none() && app.pending_ai_profile().is_some() {
-        return "AI PENDING".to_string();
-    }
-
-    app.active_ask_ai_profile()
-        .map(|profile| format!("AI {}", compact_ai_profile_label(&profile.label)))
-        .unwrap_or_else(|| "AI OFF".to_string())
-}
-
 fn ai_session_provider_metadata(app: &TuiApp) -> (String, String, String) {
     let profile = app
         .active_ask_ai_profile()
@@ -11317,18 +12053,36 @@ fn ai_session_provider_metadata(app: &TuiApp) -> (String, String, String) {
         .map(|profile| profile.label.clone())
         .unwrap_or_else(|| "none".to_string());
     let model = profile
-        .map(|profile| {
-            profile.model.clone().unwrap_or_else(|| {
-                if ai_profile_is_codex_local_bridge(profile) {
-                    "Codex CLI default".to_string()
-                } else {
-                    "not set".to_string()
-                }
-            })
-        })
+        .map(ai_profile_display_model)
         .unwrap_or_else(|| "not set".to_string());
     let tokens = format_ai_token_estimate(ai_chat_session_token_estimate(app));
     (provider, model, tokens)
+}
+
+fn ai_profile_display_model(profile: &AiProfile) -> String {
+    profile.model.clone().unwrap_or_else(|| {
+        if ai_profile_is_codex_local_bridge(profile) {
+            "Codex CLI default".to_string()
+        } else if ai_profile_is_claude_local_bridge(profile) {
+            "Claude CLI default".to_string()
+        } else {
+            "not set".to_string()
+        }
+    })
+}
+
+fn ai_profile_unavailable_guidance(profile: &AiProfile) -> &'static str {
+    if ai_profile_is_ollama_local(profile) {
+        " Start Ollama and make sure the selected model is installed."
+    } else if ai_profile_is_codex_local_bridge(profile) {
+        " Install the codex CLI or fix the configured command path."
+    } else if ai_profile_is_claude_local_bridge(profile) {
+        " Install and sign in to the claude CLI or fix the configured command path."
+    } else if profile.adapter_type == AiAdapterType::OpenAiCompatibleHttp {
+        " Check the profile setup and credentials."
+    } else {
+        " This profile type is not callable from AI Chat."
+    }
 }
 
 fn ai_session_header_line(
@@ -11430,7 +12184,7 @@ fn ai_chat_turn_indicator_spans(
                 Style::default().fg(palette.sky),
             ),
             separator_span(),
-            Span::styled("End for latest", Style::default().fg(palette.muted)),
+            Span::styled("End jumps to latest", Style::default().fg(palette.muted)),
         ]
     }
 }
@@ -11471,12 +12225,255 @@ fn ai_current_focus_target_label(app: &TuiApp) -> String {
         .unwrap_or_else(|| "(no focus)".to_string())
 }
 
+fn ai_chat_target_label(app: &TuiApp) -> String {
+    app.ai_chat_target_label()
+}
+
 fn ai_chat_input_summary() -> &'static str {
-    "selected branch + style notes + recent chat"
+    "whole map on the first turn when it fits; focus, context, and recent chat every turn"
+}
+
+fn ai_panel_session_summary_lines(app: &TuiApp, palette: Palette) -> Vec<Line<'static>> {
+    let (provider, model, session_tokens) = ai_session_provider_metadata(app);
+    let provider_state = if app.ai_job.is_some() {
+        "streaming"
+    } else if app.active_ask_ai_profile().is_some() {
+        "ready"
+    } else if app.pending_ai_profile().is_some() {
+        "needs attention"
+    } else if app.ai_profiles.enabled {
+        "setup needed"
+    } else {
+        "off"
+    };
+    let chat_turns = app.ai_review_item_count_for(AiReviewMode::History);
+    let staged_change_count = app.ai_active_change_count();
+
+    vec![
+        Line::from(Span::styled(
+            "Current setup",
+            Style::default()
+                .fg(palette.sky)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(vec![
+            Span::styled("Provider ", Style::default().fg(palette.muted)),
+            Span::styled(provider, Style::default().fg(palette.text)),
+            separator_span(),
+            Span::styled(provider_state.to_string(), Style::default().fg(palette.sky)),
+            separator_span(),
+            Span::styled(
+                truncate_trailing(&model, 44),
+                Style::default().fg(palette.warn),
+            ),
+            separator_span(),
+            Span::styled(session_tokens, Style::default().fg(palette.muted)),
+        ]),
+        Line::from(vec![
+            Span::styled("Context ", Style::default().fg(palette.muted)),
+            Span::styled(
+                ai_chat_target_label(app),
+                Style::default()
+                    .fg(palette.text)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                count_phrase(chat_turns, "chat turn", "chat turns"),
+                Style::default().fg(palette.muted),
+            ),
+            separator_span(),
+            Span::styled(
+                if staged_change_count == 0 {
+                    "no staged map edits".to_string()
+                } else {
+                    count_phrase(staged_change_count, "staged map edit", "staged map edits")
+                },
+                Style::default().fg(if staged_change_count > 0 {
+                    palette.warn
+                } else {
+                    palette.muted
+                }),
+            ),
+        ]),
+    ]
+}
+
+fn ai_chat_empty_state_lines(
+    app: &TuiApp,
+    viewed_target_label: String,
+    palette: Palette,
+) -> Vec<Line<'static>> {
+    let mut lines = vec![
+        Line::from(Span::styled(
+            "Start a useful AI conversation.",
+            Style::default()
+                .fg(palette.sky)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(vec![
+            Span::styled("Context ", Style::default().fg(palette.muted)),
+            Span::styled(
+                viewed_target_label,
+                Style::default()
+                    .fg(palette.text)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            separator_span(),
+            Span::styled("T changes context", Style::default().fg(palette.muted)),
+        ]),
+        Line::from(Span::styled(
+            "Ask a question, find gaps, or request reviewable map edits.",
+            Style::default().fg(palette.text),
+        )),
+        Line::from(Span::styled(
+            "Enter opens the composer. Ordinary answers stay in AI Chat; explicit map-edit requests go to Review Suggestions.",
+            Style::default().fg(palette.muted),
+        )),
+        Line::from(""),
+        ai_quick_prompt_line(),
+    ];
+    if app.active_ask_ai_profile().is_none() {
+        lines.push(Line::from(Span::styled(
+            "Choose a detected Ollama/Codex/Claude provider or set up NVIDIA NIM in AI Settings before sending.",
+            Style::default().fg(palette.warn),
+        )));
+    }
+    lines
+}
+
+fn ai_chat_top_action_lines(
+    app: &TuiApp,
+    selected_item: Option<AiReviewItemRef<'_>>,
+    palette: Palette,
+) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    let staged_change_count = app.ai_active_change_count();
+    if staged_change_count > 0 {
+        lines.push(Line::from(vec![
+            Span::styled(
+                " REVIEW ",
+                Style::default()
+                    .fg(palette.background)
+                    .bg(palette.warn)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                format!(
+                    "{} ready. ",
+                    count_phrase(staged_change_count, "staged map edit", "staged map edits")
+                ),
+                Style::default()
+                    .fg(palette.text)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "Press S to review and apply map edits.",
+                Style::default()
+                    .fg(palette.sky)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]));
+    }
+
+    if selected_item.is_some_and(|item| {
+        item.suggestion().is_conversational_answer() && !app.ai_review_item_is_streaming(item)
+    }) {
+        lines.push(Line::from(vec![
+            Span::styled(
+                " SUGGEST ",
+                Style::default()
+                    .fg(palette.background)
+                    .bg(palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                "Press V to request reviewable map edits from this chat turn.",
+                Style::default()
+                    .fg(palette.text)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]));
+    }
+
+    lines
+}
+
+fn ai_chat_footer_spans(
+    app: &TuiApp,
+    new_text_below: bool,
+    palette: Palette,
+) -> Vec<Span<'static>> {
+    let mut footer = vec![
+        key_hint("Enter", "message"),
+        separator_span(),
+        key_hint("P", "settings"),
+        separator_span(),
+        key_hint("T", "context"),
+        separator_span(),
+        key_hint("↑↓", "scroll"),
+        separator_span(),
+        key_hint("[ ]", "turns"),
+    ];
+    footer.extend([separator_span(), key_hint("⇧↑↓", "fast")]);
+    if app.ai_job.is_some() {
+        footer.extend([separator_span(), key_hint("X", "cancel")]);
+    }
+    if new_text_below {
+        footer.extend([
+            separator_span(),
+            Span::styled(
+                "End follows new text",
+                Style::default()
+                    .fg(palette.warn)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]);
+    }
+    footer.extend([separator_span(), key_hint("Esc", ai_escape_key_label(app))]);
+    footer
+}
+
+fn ai_escape_key_label(app: &TuiApp) -> &'static str {
+    if app.ai_panel.is_some() {
+        "back"
+    } else {
+        "close"
+    }
+}
+
+fn ai_chat_composer_footer_spans() -> Vec<Span<'static>> {
+    vec![
+        key_hint("Enter", "send"),
+        separator_span(),
+        key_hint("Esc", "back"),
+        separator_span(),
+        key_hint("←/→", "edit"),
+        separator_span(),
+        key_hint("↑/↓", "start/end"),
+    ]
+}
+
+fn ai_chat_composer_assist_text(assist: &PromptAssist) -> String {
+    assist
+        .lines
+        .iter()
+        .find(|line| {
+            line.contains("Review Suggestions")
+                || line.contains("AI is already responding")
+                || line.contains("No callable AI profile")
+                || line.contains("Will send")
+        })
+        .or_else(|| assist.lines.first())
+        .cloned()
+        .unwrap_or_else(|| "Ready to send.".to_string())
 }
 
 fn ai_chat_reply_context(app: &TuiApp) -> String {
-    let target = ai_current_focus_target_label(app);
+    let context = ai_chat_target_label(app);
     let item_count = app.ai_review_item_count_for(AiReviewMode::History);
     let turn = if item_count == 0 {
         "Starting AI Chat".to_string()
@@ -11493,19 +12490,20 @@ fn ai_chat_reply_context(app: &TuiApp) -> String {
             format!("Replying from turn {}/{}", selected + 1, item_count)
         }
     };
-    format!("{turn} · message target {target}")
+    format!("{turn} · chat context {context}")
 }
 
 fn ai_chat_turn_start_scroll(items: &[AiReviewItemRef<'_>], selected_index: usize) -> u16 {
     let line_count = items
         .iter()
         .take(selected_index.min(items.len()))
-        .map(|item| ai_chat_turn_rendered_line_count(*item))
+        .enumerate()
+        .map(|(index, item)| ai_chat_turn_rendered_line_count(*item, index))
         .sum::<usize>();
     line_count.min(u16::MAX as usize) as u16
 }
 
-fn ai_chat_turn_rendered_line_count(item: AiReviewItemRef<'_>) -> usize {
+fn ai_chat_turn_rendered_line_count(item: AiReviewItemRef<'_>, index: usize) -> usize {
     let suggestion = item.suggestion();
     let question_lines = suggestion.question.lines().count();
     let answer_lines = suggestion
@@ -11514,19 +12512,105 @@ fn ai_chat_turn_rendered_line_count(item: AiReviewItemRef<'_>) -> usize {
         .filter(|answer| !answer.is_empty())
         .map(|answer| answer.lines().count())
         .unwrap_or(1);
-    1 + question_lines + 1 + answer_lines + 1
+    usize::from(index > 0) + 1 + question_lines + 1 + answer_lines + 1
 }
 
-fn ai_turn_key_hint() -> Span<'static> {
-    let palette = active_palette();
+fn ai_chat_turn_lines(
+    app: &TuiApp,
+    item: AiReviewItemRef<'_>,
+    index: usize,
+    selected_index: usize,
+    palette: Palette,
+) -> Vec<Line<'static>> {
+    let suggestion = item.suggestion();
+    let selected = index == selected_index;
+    let streaming = app.ai_review_item_is_streaming(item);
+    let disposition = item
+        .disposition()
+        .map(|disposition| format!(" · {}", disposition.label()))
+        .unwrap_or_default();
+    let mut lines = Vec::new();
+
+    if index > 0 {
+        lines.push(Line::from(Span::styled(
+            "  · · · · · · · · · · · · · · · ·",
+            Style::default().fg(palette.border),
+        )));
+    }
+
+    let marker_style = if selected {
+        Style::default()
+            .fg(palette.selection_text)
+            .bg(palette.selection)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(palette.muted)
+    };
+    lines.push(Line::from(vec![
+        Span::styled(if selected { ">" } else { " " }, marker_style),
+        Span::raw(" "),
+        Span::styled(
+            format!("Turn {}", index + 1),
+            Style::default().fg(palette.muted),
+        ),
+        separator_span(),
+        ai_chat_speaker_chip("YOU", palette.selection, palette.selection_text),
+        Span::raw(" "),
+        Span::styled(
+            suggestion.target.label.clone(),
+            Style::default()
+                .fg(palette.text)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]));
+    for question_line in suggestion.question.lines() {
+        lines.push(ai_chat_body_line(question_line, palette.text, palette));
+    }
+
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        ai_chat_speaker_chip("AI", palette.sky, palette.background),
+        Span::raw(" "),
+        Span::styled(
+            if streaming {
+                "streaming".to_string()
+            } else {
+                format!("{}{}", suggestion.profile_label, disposition)
+            },
+            Style::default()
+                .fg(if streaming { palette.warn } else { palette.sky })
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]));
+    match suggestion.answer.as_deref() {
+        Some(answer) if !answer.is_empty() => {
+            for answer_line in answer.lines() {
+                lines.push(ai_chat_body_line(answer_line, palette.text, palette));
+            }
+        }
+        _ if streaming => lines.push(ai_chat_body_line(
+            "Waiting for first tokens...",
+            palette.muted,
+            palette,
+        )),
+        _ => lines.push(ai_chat_body_line("No answer text.", palette.muted, palette)),
+    }
+    lines.push(Line::from(""));
+    lines
+}
+
+fn ai_chat_speaker_chip(label: &str, bg: Color, fg: Color) -> Span<'static> {
     Span::styled(
-        if ascii_accents_enabled() {
-            "Tab/[ ] turn"
-        } else {
-            "Tab/[ ]:turn"
-        },
-        Style::default().fg(palette.muted),
+        format!(" {label} "),
+        Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
     )
+}
+
+fn ai_chat_body_line(text: &str, color: Color, palette: Palette) -> Line<'static> {
+    Line::from(vec![
+        Span::styled("  │ ", Style::default().fg(palette.border)),
+        Span::styled(text.to_string(), Style::default().fg(color)),
+    ])
 }
 
 fn ai_chat_session_token_estimate(app: &TuiApp) -> usize {
@@ -11550,7 +12634,7 @@ fn estimate_ai_tokens(text: &str) -> usize {
     if text.is_empty() {
         return 0;
     }
-    let char_estimate = (text.chars().count() + 3) / 4;
+    let char_estimate = text.chars().count().div_ceil(4);
     let word_estimate = text.split_whitespace().count();
     char_estimate.max(word_estimate).max(1)
 }
@@ -11571,8 +12655,12 @@ fn compact_ai_profile_label(label: &str) -> String {
     let upper = label.to_ascii_uppercase();
     if upper.contains("NVIDIA") || upper.contains("NIM") {
         "NIM".to_string()
+    } else if upper.contains("OLLAMA") {
+        "OLLAMA".to_string()
     } else if upper.contains("CODEX") {
         "CODEX".to_string()
+    } else if upper.contains("CLAUDE") {
+        "CLAUDE".to_string()
     } else {
         upper
             .split_whitespace()
@@ -11588,11 +12676,25 @@ fn compact_ai_profile_label(label: &str) -> String {
 fn ai_profile_supports_tui_ask(profile: &AiProfile) -> bool {
     profile.enabled
         && (profile.adapter_type == AiAdapterType::OpenAiCompatibleHttp
-            || ai_profile_is_codex_local_bridge(profile))
+            || ai_profile_is_ollama_local(profile)
+            || ai_profile_is_codex_local_bridge(profile)
+            || ai_profile_is_claude_local_bridge(profile))
 }
 
 fn ai_change_apply_supported(change: &AiSuggestedChange) -> bool {
-    matches!(change, AiSuggestedChange::AddChild { .. })
+    matches!(
+        change,
+        AiSuggestedChange::AddChild { .. }
+            | AiSuggestedChange::UpdateNode { .. }
+            | AiSuggestedChange::RemoveNode { .. }
+    )
+}
+
+fn ai_change_default_checked(change: &AiSuggestedChange) -> bool {
+    matches!(
+        change,
+        AiSuggestedChange::AddChild { .. } | AiSuggestedChange::UpdateNode { .. }
+    )
 }
 
 fn push_header_lamp(
@@ -12531,7 +13633,7 @@ fn render_status(frame: &mut Frame, area: Rect, app: &TuiApp) {
                 if app.ai_job.is_some() {
                     "working in background"
                 } else if !app.ai_suggestions.is_empty() {
-                    "open AI Panel"
+                    "open AI Chat"
                 } else {
                     "available from palette"
                 },
@@ -12634,17 +13736,20 @@ fn keybar_spans(app: &TuiApp) -> Vec<Span<'static>> {
         spans.push(key_hint("[ ]", "related"));
     }
 
-    if !app.ai_suggestions.is_empty() {
-        spans.push(separator_span());
-        spans.push(key_hint(":", "ai panel"));
-    }
-
     spans
 }
 
 #[cfg(test)]
 fn keybar_text(app: &TuiApp) -> String {
     keybar_spans(app)
+        .into_iter()
+        .map(|span| span.content.into_owned())
+        .collect::<String>()
+}
+
+#[cfg(test)]
+fn header_lamps_text(app: &TuiApp) -> String {
+    header_status_lamps(app, app.theme_colors())
         .into_iter()
         .map(|span| span.content.into_owned())
         .collect::<String>()
@@ -14490,7 +15595,7 @@ fn render_ai_panel_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, panel: &
     let PALETTE = app.theme_colors();
     frame.render_widget(Clear, area);
     let block = Block::default()
-        .title(styled_title("AI Panel", PALETTE.sky))
+        .title(styled_title("AI Settings", PALETTE.sky))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(PALETTE.sky))
         .style(Style::default().bg(PALETTE.surface_alt))
@@ -14523,9 +15628,9 @@ fn render_ai_panel_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, panel: &
     };
     frame.render_widget(
         Paragraph::new(vec![
-            ai_session_header_line("AI workspace", state, &provider, &model, &session_tokens, PALETTE),
+            ai_session_header_line("AI controls", state, &provider, &model, &session_tokens, PALETTE),
             Line::from(Span::styled(
-                "Chat, staged suggestions, provider setup, and future hooks live here; the main map keeps one AI entry point.",
+                "Setup, Review Suggestions, and provider choices live here; AI Chat stays conversational.",
                 Style::default().fg(PALETTE.muted),
             )),
         ]),
@@ -14627,35 +15732,55 @@ fn render_ai_panel_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, panel: &
         body[1],
     );
 
+    let mut footer = vec![
+        key_hint("↑↓", "choose"),
+        separator_span(),
+        key_hint("Enter", "run"),
+        separator_span(),
+        key_hint("A", "chat"),
+        separator_span(),
+        key_hint("X", "cancel"),
+        separator_span(),
+        key_hint("S", "review"),
+        separator_span(),
+        key_hint("N", "nim"),
+    ];
+    if items
+        .iter()
+        .any(|item| item.action == AiPanelAction::UseOllamaLocal)
+    {
+        footer.extend([separator_span(), key_hint("L", "ollama")]);
+    }
+    if items
+        .iter()
+        .any(|item| item.action == AiPanelAction::UseCodexLocal)
+    {
+        footer.extend([separator_span(), key_hint("C", "codex")]);
+    }
+    if items
+        .iter()
+        .any(|item| item.action == AiPanelAction::UseClaudeLocal)
+    {
+        footer.extend([separator_span(), key_hint("D", "claude")]);
+    }
+    footer.extend([
+        separator_span(),
+        key_hint("O", "off"),
+        separator_span(),
+        key_hint("Esc", "close"),
+    ]);
     frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            key_hint("↑↓", "choose"),
-            separator_span(),
-            key_hint("Enter", "run"),
-            separator_span(),
-            key_hint("A", "chat"),
-            separator_span(),
-            key_hint("X", "cancel"),
-            separator_span(),
-            key_hint("S", "review"),
-            separator_span(),
-            key_hint("N", "nim"),
-            separator_span(),
-            key_hint("C", "codex"),
-            separator_span(),
-            key_hint("O", "off"),
-            separator_span(),
-            key_hint("Esc", "close"),
-        ]))
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(PALETTE.muted)),
+        Paragraph::new(Line::from(footer))
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(PALETTE.muted)),
         sections[2],
     );
 }
 
 fn ai_panel_preview_lines(app: &TuiApp, selected: Option<AiPanelAction>) -> Vec<Line<'static>> {
     let palette = active_palette();
-    let mut lines = Vec::new();
+    let mut lines = ai_panel_session_summary_lines(app, palette);
+    lines.push(Line::from(""));
 
     if let Some(job) = &app.ai_job {
         lines.push(Line::from(vec![
@@ -14770,10 +15895,10 @@ fn ai_panel_preview_lines(app: &TuiApp, selected: Option<AiPanelAction>) -> Vec<
             "Cancel stops the active response in the TUI and keeps any partial answer in AI Chat."
         }
         Some(AiPanelAction::ReviewSuggestions) => {
-            "Review suggestions shows staged map changes only. Checked rows are the ones that can edit the map."
+            "Review Suggestions shows staged map edits only. Checked rows are the ones that can edit the map."
         }
         Some(AiPanelAction::TurnOff) => {
-            "Turn off stops AI activity and clears active AI panel state, but keeps provider setup and keys."
+            "Turn off stops AI activity and clears active AI settings state, but keeps provider setup and keys."
         }
         Some(AiPanelAction::SetupNvidiaNim) => {
             "NVIDIA NIM uses an OpenAI-compatible endpoint. The key is stored as a local secret reference."
@@ -14781,11 +15906,14 @@ fn ai_panel_preview_lines(app: &TuiApp, selected: Option<AiPanelAction>) -> Vec<
         Some(AiPanelAction::UseNvidiaNim) => {
             "Select NVIDIA NIM as the active OpenAI-compatible provider for AI Chat."
         }
+        Some(AiPanelAction::UseOllamaLocal) => {
+            "Ollama Local uses a detected local model through Ollama's local HTTP server."
+        }
         Some(AiPanelAction::UseCodexLocal) => {
             "Codex Local uses codex exec in read-only, ephemeral mode for AI Chat."
         }
-        Some(AiPanelAction::AutomationHooks) => {
-            "Hooks will pair map events with instructions and send outputs into this same review flow."
+        Some(AiPanelAction::UseClaudeLocal) => {
+            "Claude Local uses claude -p with plan mode and tools disabled for AI Chat."
         }
         None => "Choose an AI action.",
     };
@@ -14804,8 +15932,9 @@ fn ai_panel_action_key(action: AiPanelAction) -> Option<&'static str> {
         AiPanelAction::TurnOff => Some("O"),
         AiPanelAction::SetupNvidiaNim => Some("N"),
         AiPanelAction::UseNvidiaNim => Some("P"),
+        AiPanelAction::UseOllamaLocal => Some("L"),
         AiPanelAction::UseCodexLocal => Some("C"),
-        AiPanelAction::AutomationHooks => Some("U"),
+        AiPanelAction::UseClaudeLocal => Some("D"),
     }
 }
 
@@ -14839,7 +15968,7 @@ fn render_ai_review_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review:
     let item_count = app.ai_review_item_count_for(review.mode);
     let Some(item) = app.ai_review_item_for(review.mode, review.item_index) else {
         let empty = match review.mode {
-            AiReviewMode::Suggestions => "No staged map-change suggestions to review.",
+            AiReviewMode::Suggestions => "No staged map edits to review.",
             AiReviewMode::History => "No AI Chat messages in this TUI session.",
         };
         frame.render_widget(
@@ -14925,13 +16054,13 @@ fn render_ai_review_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review:
             }
         } else if item.editable() {
             format!(
-                "{} staged change(s). Checked rows apply; disabled rows are review-only in this slice.",
-                suggestion.changes.len()
+                "{} staged. Checked rows apply; remove rows start unchecked.",
+                count_phrase(suggestion.changes.len(), "map edit", "map edits")
             )
         } else {
             format!(
-                "{} past change row(s). This history item is read-only.",
-                suggestion.changes.len()
+                "{} in history. This item is read-only.",
+                count_phrase(suggestion.changes.len(), "map edit", "map edits")
             )
         },
         Style::default().fg(PALETTE.sky),
@@ -15007,7 +16136,7 @@ fn render_ai_review_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review:
             footer.push(key_hint("D", "dismiss"));
         }
         footer.push(separator_span());
-        footer.push(key_hint("Esc", "close"));
+        footer.push(key_hint("Esc", ai_escape_key_label(app)));
         frame.render_widget(
             Paragraph::new(Line::from(footer))
                 .alignment(Alignment::Center)
@@ -15023,9 +16152,7 @@ fn render_ai_review_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review:
         let supported = ai_change_apply_supported(change);
         let checked = item.editable() && !streaming && review.checked.contains(&index);
         let selector = if selected { ">" } else { " " };
-        let checkbox = if !item.editable() || streaming {
-            "[-]"
-        } else if !supported {
+        let checkbox = if !item.editable() || streaming || !supported {
             "[-]"
         } else if checked {
             "[x]"
@@ -15054,7 +16181,7 @@ fn render_ai_review_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review:
             Span::raw(" "),
             Span::styled(checkbox.to_string(), Style::default().fg(PALETTE.accent)),
             Span::raw(" "),
-            Span::styled(change.operation_label().to_ascii_uppercase(), op_style),
+            Span::styled(ai_change_operation_display(change), op_style),
             Span::raw("  "),
             Span::styled(
                 ai_change_placement_label(suggestion, change),
@@ -15084,7 +16211,7 @@ fn render_ai_review_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review:
             )));
         } else if !supported {
             rows.push(Line::from(Span::styled(
-                "    Review-only until update/remove patch application is wired.",
+                "    Review-only because this row cannot be applied.",
                 Style::default().fg(PALETTE.warn),
             )));
         }
@@ -15162,14 +16289,14 @@ fn render_ai_review_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review:
             separator_span(),
             key_hint("Space", "toggle"),
             separator_span(),
-            key_hint("A", "apply"),
+            key_hint("Enter/A", "apply"),
             separator_span(),
             key_hint("D", "dismiss"),
         ]);
     } else {
         footer.extend([separator_span(), key_hint("↑↓", "scroll")]);
     }
-    footer.extend([separator_span(), key_hint("Esc", "close")]);
+    footer.extend([separator_span(), key_hint("Esc", ai_escape_key_label(app))]);
     frame.render_widget(
         Paragraph::new(Line::from(footer))
             .alignment(Alignment::Center)
@@ -15191,15 +16318,6 @@ fn render_ai_chat_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review: &
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let sections = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(8),
-            Constraint::Length(1),
-        ])
-        .split(inner);
-
     let items = app.ai_review_items(AiReviewMode::History);
     let selected_index = if items.is_empty() {
         0
@@ -15207,13 +16325,33 @@ fn render_ai_chat_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review: &
         review.item_index.min(items.len().saturating_sub(1))
     };
     let selected_item = items.get(selected_index).copied();
+    let top_action_lines = ai_chat_top_action_lines(app, selected_item, PALETTE);
+    let composer_prompt = app
+        .prompt
+        .as_ref()
+        .filter(|prompt| prompt_renders_inside_ai_chat(app, prompt));
+    let show_input_summary = composer_prompt.is_none();
+    let header_base_height = if show_input_summary { 3 } else { 2 };
+    let header_height = header_base_height + top_action_lines.len() as u16;
+    let composer_height = if composer_prompt.is_some() { 5 } else { 0 };
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(header_height),
+            Constraint::Min(if composer_prompt.is_some() { 6 } else { 8 }),
+            Constraint::Length(composer_height),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
     let selected_latest = !items.is_empty() && selected_index + 1 == items.len();
     let new_text_below = selected_item
         .is_some_and(|item| app.ai_review_item_is_streaming(item) && selected_latest)
         && !review.follow_latest;
     let viewed_target_label = selected_item
         .map(|item| item.suggestion().target.label.clone())
-        .unwrap_or_else(|| ai_current_focus_target_label(app));
+        .unwrap_or_else(|| ai_chat_target_label(app));
 
     let (provider, model, session_tokens) = ai_session_provider_metadata(app);
     let state = if app.ai_job.is_some() {
@@ -15227,7 +16365,7 @@ fn render_ai_chat_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review: &
     };
     frame.render_widget(
         Paragraph::new(ai_session_header_line(
-            "Chat session",
+            "Conversation",
             state,
             &provider,
             &model,
@@ -15254,7 +16392,7 @@ fn render_ai_chat_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review: &
                 height: 1,
             },
             vec![
-                Span::styled("Chat target ", label_style),
+                Span::styled("Context ", label_style),
                 Span::styled(
                     viewed_target_label.clone(),
                     Style::default()
@@ -15265,7 +16403,7 @@ fn render_ai_chat_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review: &
             ai_chat_turn_indicator_spans(items.len(), selected_index, PALETTE),
         );
     }
-    if sections[0].height > 2 {
+    if show_input_summary && sections[0].height > 2 {
         let label_style = Style::default()
             .fg(PALETTE.muted)
             .add_modifier(Modifier::ITALIC);
@@ -15292,57 +16430,31 @@ fn render_ai_chat_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review: &
                 height: 1,
             },
             vec![
-                Span::styled("Input ", label_style),
+                Span::styled("Sends ", label_style),
                 Span::styled(ai_chat_input_summary(), Style::default().fg(PALETTE.muted)),
             ],
             right_spans,
         );
     }
+    let action_start = header_base_height;
+    if !top_action_lines.is_empty() && sections[0].height > action_start {
+        let action_area = Rect {
+            x: sections[0].x,
+            y: sections[0].y + action_start,
+            width: sections[0].width,
+            height: top_action_lines
+                .len()
+                .min(sections[0].height.saturating_sub(action_start) as usize)
+                as u16,
+        };
+        frame.render_widget(
+            Paragraph::new(top_action_lines).wrap(Wrap { trim: false }),
+            action_area,
+        );
+    }
 
     if items.is_empty() {
-        let mut lines = vec![
-            Line::from(Span::styled(
-                "No messages yet.",
-                Style::default()
-                    .fg(PALETTE.sky)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(vec![
-                Span::styled(
-                    "Target ",
-                    Style::default()
-                        .fg(PALETTE.muted)
-                        .add_modifier(Modifier::ITALIC),
-                ),
-                Span::styled(
-                    viewed_target_label,
-                    Style::default()
-                        .fg(PALETTE.text)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "Input ",
-                    Style::default()
-                        .fg(PALETTE.muted)
-                        .add_modifier(Modifier::ITALIC),
-                ),
-                Span::styled(ai_chat_input_summary(), Style::default().fg(PALETTE.muted)),
-            ]),
-            Line::from(""),
-            Line::from(Span::styled(
-                "Press Enter to ask a question, or press 4 for reviewable map-edit suggestions.",
-                Style::default().fg(PALETTE.text),
-            )),
-            ai_quick_prompt_line(),
-        ];
-        if app.active_ask_ai_profile().is_none() {
-            lines.push(Line::from(Span::styled(
-                "Choose NVIDIA NIM or Codex Local in the AI Panel before sending.",
-                Style::default().fg(PALETTE.warn),
-            )));
-        }
+        let lines = ai_chat_empty_state_lines(app, viewed_target_label, PALETTE);
         frame.render_widget(
             Paragraph::new(lines)
                 .style(Style::default().fg(PALETTE.text))
@@ -15352,85 +16464,13 @@ fn render_ai_chat_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review: &
     } else {
         let mut lines = Vec::new();
         for (index, item) in items.iter().copied().enumerate() {
-            let suggestion = item.suggestion();
-            let selected = index == selected_index;
-            let streaming = app.ai_review_item_is_streaming(item);
-            let disposition = item
-                .disposition()
-                .map(|disposition| format!(" · {}", disposition.label()))
-                .unwrap_or_default();
-            let marker = if selected { ">" } else { " " };
-
-            lines.push(Line::from(vec![
-                Span::styled(
-                    marker,
-                    if selected {
-                        Style::default()
-                            .fg(PALETTE.selection_text)
-                            .bg(PALETTE.selection)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(PALETTE.muted)
-                    },
-                ),
-                Span::raw(" "),
-                Span::styled(
-                    format!("Turn {}", index + 1),
-                    Style::default().fg(PALETTE.muted),
-                ),
-                separator_span(),
-                Span::styled(
-                    "You",
-                    Style::default()
-                        .fg(PALETTE.text)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                separator_span(),
-                Span::styled(
-                    suggestion.target.label.clone(),
-                    Style::default()
-                        .fg(PALETTE.text)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]));
-            for question_line in suggestion.question.lines() {
-                lines.push(Line::from(Span::styled(
-                    format!("  {question_line}"),
-                    Style::default().fg(PALETTE.text),
-                )));
-            }
-            lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(
-                    if streaming {
-                        "AI · streaming".to_string()
-                    } else {
-                        format!("AI · {}{disposition}", suggestion.profile_label)
-                    },
-                    Style::default()
-                        .fg(PALETTE.sky)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]));
-            match suggestion.answer.as_deref() {
-                Some(answer) if !answer.is_empty() => {
-                    for answer_line in answer.lines() {
-                        lines.push(Line::from(Span::styled(
-                            format!("  {answer_line}"),
-                            Style::default().fg(PALETTE.text),
-                        )));
-                    }
-                }
-                _ if streaming => lines.push(Line::from(Span::styled(
-                    "  Waiting for first tokens...",
-                    Style::default().fg(PALETTE.muted),
-                ))),
-                _ => lines.push(Line::from(Span::styled(
-                    "  No answer text.",
-                    Style::default().fg(PALETTE.muted),
-                ))),
-            }
-            lines.push(Line::from(""));
+            lines.extend(ai_chat_turn_lines(
+                app,
+                item,
+                index,
+                selected_index,
+                PALETTE,
+            ));
         }
 
         let scroll = if review.follow_latest && selected_latest {
@@ -15448,60 +16488,101 @@ fn render_ai_chat_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, review: &
         );
     }
 
-    let mut footer = vec![
-        key_hint("Enter/A", "message"),
-        separator_span(),
-        key_hint("1-4", "prompts"),
-        separator_span(),
-        key_hint("C", "clear"),
-        separator_span(),
-        key_hint("↑↓", "scroll"),
-        separator_span(),
-        key_hint("PgUp/PgDn", "jump"),
-        separator_span(),
-        ai_turn_key_hint(),
-        separator_span(),
-        key_hint("Home/End", "first/latest"),
-    ];
-    if app.ai_job.is_some() {
-        footer.extend([separator_span(), key_hint("X", "cancel")]);
+    if let Some(prompt) = composer_prompt {
+        render_ai_chat_composer(frame, sections[2], app, prompt);
     }
-    let staged_suggestions = app.ai_active_suggestion_count();
-    if staged_suggestions > 0 {
-        footer.extend([
-            separator_span(),
-            key_hint("S", "review"),
-            separator_span(),
-            Span::styled(
-                format!("{staged_suggestions} staged"),
-                Style::default()
-                    .fg(PALETTE.sky)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]);
-    }
-    if selected_item.is_some_and(|item| {
-        item.suggestion().is_conversational_answer() && !app.ai_review_item_is_streaming(item)
-    }) {
-        footer.extend([separator_span(), key_hint("V", "stage edits")]);
-    }
-    if new_text_below {
-        footer.extend([
-            separator_span(),
-            Span::styled(
-                "new text below",
-                Style::default()
-                    .fg(PALETTE.warn)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]);
-    }
-    footer.extend([separator_span(), key_hint("Esc", "close")]);
+
+    let footer_line = if composer_prompt.is_some() {
+        Line::from(ai_chat_composer_footer_spans())
+    } else {
+        Line::from(ai_chat_footer_spans(app, new_text_below, PALETTE))
+    };
     frame.render_widget(
-        Paragraph::new(Line::from(footer))
+        Paragraph::new(footer_line)
             .alignment(Alignment::Center)
             .style(Style::default().fg(PALETTE.muted)),
-        sections[2],
+        sections[3],
+    );
+}
+
+fn render_ai_chat_composer(frame: &mut Frame, area: Rect, app: &TuiApp, prompt: &PromptState) {
+    if area.height == 0 {
+        return;
+    }
+    let palette = app.theme_colors();
+    let block = Block::default()
+        .title(styled_title("Message", palette.accent))
+        .borders(Borders::TOP)
+        .border_style(Style::default().fg(palette.accent))
+        .style(Style::default().bg(palette.surface_alt))
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    if inner.height == 0 {
+        return;
+    }
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .split(inner);
+
+    let (provider, model, _) = ai_session_provider_metadata(app);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("About ", Style::default().fg(palette.muted)),
+            Span::styled(
+                ai_chat_target_label(app),
+                Style::default()
+                    .fg(palette.text)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            separator_span(),
+            Span::styled(provider, Style::default().fg(palette.sky)),
+            separator_span(),
+            Span::styled(
+                truncate_trailing(&model, 40),
+                Style::default().fg(palette.warn),
+            ),
+        ])),
+        chunks[0],
+    );
+
+    render_prompt_input(
+        frame,
+        chunks[1],
+        prompt,
+        palette,
+        Block::default().style(Style::default().bg(palette.surface)),
+    );
+
+    let assist = prompt_ai_ask_current_branch_assist(app, prompt.value.as_str());
+    let assist_color = match assist.tone {
+        PromptAssistTone::Info => palette.sky,
+        PromptAssistTone::Success => palette.accent,
+        PromptAssistTone::Warning => palette.warn,
+        PromptAssistTone::Error => palette.danger,
+    };
+    let assist_text = ai_chat_composer_assist_text(&assist);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled(
+                format!(" {} ", prompt_feedback_label(assist.tone)),
+                Style::default()
+                    .fg(palette.background)
+                    .bg(assist_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" "),
+            Span::styled(assist_text, Style::default().fg(palette.muted)),
+        ]))
+        .wrap(Wrap { trim: false }),
+        chunks[2],
     );
 }
 
@@ -15554,17 +16635,18 @@ fn ai_suggestion_placement_summary(suggestion: &AiSuggestion) -> String {
 
     let target_summary = summarize_ai_target_labels(&placements, 3);
     let change_count = suggestion.changes.len();
+    let change_phrase = count_phrase(change_count, "edit", "edits");
     let target_count = placements.len();
     if target_count <= 1 {
-        format!("{change_count} edit(s) under {target_summary}")
+        format!("{change_phrase} under {target_summary}")
     } else {
-        format!("{change_count} edit(s) across {target_count} targets: {target_summary}")
+        format!("{change_phrase} across {target_count} branches: {target_summary}")
     }
 }
 
 fn summarize_ai_target_labels(labels: &[String], visible_count: usize) -> String {
     if labels.is_empty() {
-        return "the selected branch".to_string();
+        return "the chat context branch".to_string();
     }
     let mut summary = labels
         .iter()
@@ -15588,6 +16670,14 @@ fn ai_change_placement_label(suggestion: &AiSuggestion, change: &AiSuggestedChan
         AiSuggestedChange::AddChild { .. } => format!("Place under {target}"),
         AiSuggestedChange::UpdateNode { .. } => format!("Update {target}"),
         AiSuggestedChange::RemoveNode { .. } => format!("Remove {target}"),
+    }
+}
+
+fn ai_change_operation_display(change: &AiSuggestedChange) -> &'static str {
+    match change {
+        AiSuggestedChange::AddChild { .. } => "Add child",
+        AiSuggestedChange::UpdateNode { .. } => "Update node",
+        AiSuggestedChange::RemoveNode { .. } => "Remove node",
     }
 }
 
@@ -15627,7 +16717,7 @@ fn ai_target_display_label(target: &AiSuggestionTarget) -> String {
                 .join("/")
         );
     }
-    "the selected branch".to_string()
+    "the chat context branch".to_string()
 }
 
 fn ai_change_diff_preview(change: &AiSuggestedChange) -> String {
@@ -15680,7 +16770,7 @@ fn ai_selected_change_detail_lines(
     } else if !editable {
         "read-only history"
     } else if !supported {
-        "review-only in this slice"
+        "review-only"
     } else if checked {
         "checked; will apply"
     } else {
@@ -15693,7 +16783,7 @@ fn ai_selected_change_detail_lines(
     };
     let mut lines = vec![Line::from(vec![
         Span::styled(
-            change.operation_label().to_ascii_uppercase(),
+            ai_change_operation_display(change),
             Style::default()
                 .fg(palette.text)
                 .add_modifier(Modifier::BOLD),
@@ -16439,6 +17529,11 @@ fn truncate_trailing(value: &str, max_width: usize) -> String {
     truncated
 }
 
+fn count_phrase(count: usize, singular: &str, plural: &str) -> String {
+    let label = if count == 1 { singular } else { plural };
+    format!("{count} {label}")
+}
+
 impl TableColumn {
     fn header(&self) -> String {
         match self {
@@ -17064,7 +18159,7 @@ fn help_context_line(app: &TuiApp, topic: HelpTopic) -> String {
                     .map(|profile| format!("{} configured; AI Chat support pending", profile.label))
             })
             .unwrap_or_else(|| {
-                "no callable AI profile configured yet; open AI Panel from the palette".to_string()
+                "no callable AI profile configured yet; open AI Chat from the palette to reach AI Settings".to_string()
             }),
         HelpTopic::Navigation => {
             let breadcrumb = if app.editor.breadcrumb().is_empty() {
@@ -17475,6 +18570,206 @@ fn palette_match_score(query: &str, primary: &str, haystack: &str) -> Option<i64
     }
     score -= primary.len() as i64 / 8;
     Some(score)
+}
+
+fn ai_chat_target_id_candidate(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("[id:") && trimmed.ends_with(']') {
+        return trimmed[4..trimmed.len() - 1].trim().to_string();
+    }
+    if lower.starts_with("id:") {
+        return trimmed[3..].trim().to_string();
+    }
+    trimmed.to_string()
+}
+
+fn ai_chat_target_completion_value(target: &AiChatTargetInfo, breadcrumb: &str) -> String {
+    target
+        .anchor
+        .id
+        .as_ref()
+        .map(|id| format!("[id:{id}]"))
+        .unwrap_or_else(|| breadcrumb.to_string())
+}
+
+fn ai_chat_target_match_score(
+    raw: &str,
+    query: &str,
+    entry: &PaletteNodeEntry,
+    document: &Document,
+) -> Option<i64> {
+    let node = get_node(&document.nodes, &entry.path)?;
+    let id = node.id.as_deref().unwrap_or("");
+    let id_candidate = ai_chat_target_id_candidate(raw);
+    if !id_candidate.is_empty() && id.eq_ignore_ascii_case(&id_candidate) {
+        return Some(20_000 - entry.path.len() as i64);
+    }
+
+    let tokens = ai_target_words(query);
+    if tokens.is_empty() {
+        return None;
+    }
+
+    let breadcrumb = breadcrumb_for_path(document, &entry.path);
+    let primary = normalize_ai_chat_target_query(&entry.primary);
+    let breadcrumb_query = normalize_ai_chat_target_query(&breadcrumb);
+    let id_query = normalize_ai_chat_target_query(id);
+    let haystack = normalize_ai_chat_target_query(&entry.haystack);
+
+    let mut score = 0;
+    if primary == query {
+        score += 9_000;
+    } else if breadcrumb_query == query {
+        score += 8_500;
+    } else if id_query == query {
+        score += 8_000;
+    } else {
+        if primary.starts_with(query) {
+            score += 4_800;
+        } else if primary.contains(query) {
+            score += 3_400;
+        }
+        if breadcrumb_query.starts_with(query) {
+            score += 3_600;
+        } else if breadcrumb_query.contains(query) {
+            score += 2_600;
+        }
+        if id_query.starts_with(query) {
+            score += 4_200;
+        } else if id_query.contains(query) {
+            score += 3_200;
+        }
+        if haystack.contains(query) {
+            score += 1_400;
+        }
+    }
+
+    let words = ai_target_words(&format!(
+        "{} {} {} {} {} {}",
+        entry.primary, breadcrumb, id, entry.secondary, entry.preview, entry.haystack
+    ));
+    let mut token_score = 0;
+    for token in &tokens {
+        let best = words
+            .iter()
+            .filter_map(|word| ai_target_token_score(token, word))
+            .max()?;
+        token_score += best;
+    }
+    score += token_score;
+
+    let compact_query = query.split_whitespace().collect::<String>();
+    if compact_query.chars().count() >= 2 {
+        let primary_initials = ai_target_initials(&entry.primary);
+        let breadcrumb_initials = ai_target_initials(&breadcrumb);
+        if primary_initials.starts_with(&compact_query) {
+            score += 1_200;
+        } else if breadcrumb_initials.starts_with(&compact_query) {
+            score += 900;
+        } else if breadcrumb_initials.contains(&compact_query) {
+            score += 650;
+        }
+    }
+
+    score -= entry.path.len() as i64 * 8;
+    score -= entry.primary.chars().count() as i64 / 12;
+    Some(score)
+}
+
+fn ai_target_words(value: &str) -> Vec<String> {
+    normalize_ai_chat_target_query(value)
+        .split_whitespace()
+        .filter_map(|word| {
+            let cleaned = word
+                .trim_matches(|character: char| !character.is_ascii_alphanumeric())
+                .to_string();
+            if cleaned.is_empty() {
+                None
+            } else {
+                Some(cleaned)
+            }
+        })
+        .collect()
+}
+
+fn ai_target_initials(value: &str) -> String {
+    ai_target_words(value)
+        .into_iter()
+        .filter_map(|word| word.chars().next())
+        .collect()
+}
+
+fn ai_target_token_score(token: &str, word: &str) -> Option<i64> {
+    if token == word {
+        return Some(520);
+    }
+    if word.starts_with(token) {
+        return Some(440);
+    }
+
+    let token_len = token.chars().count();
+    if token_len >= 2 && word.contains(token) {
+        return Some(340);
+    }
+    if token_len >= 2 && is_subsequence(token, word) {
+        return Some(260);
+    }
+    if token_len >= 4 {
+        let max_len = token_len.max(word.chars().count());
+        let max_distance = if max_len >= 7 { 2 } else { 1 };
+        if let Some(distance) = bounded_edit_distance(token, word, max_distance) {
+            return Some(220 - distance as i64 * 35);
+        }
+    }
+
+    None
+}
+
+fn is_subsequence(needle: &str, haystack: &str) -> bool {
+    let mut needle = needle.chars();
+    let Some(mut current) = needle.next() else {
+        return true;
+    };
+
+    for character in haystack.chars() {
+        if character == current {
+            let Some(next) = needle.next() else {
+                return true;
+            };
+            current = next;
+        }
+    }
+    false
+}
+
+fn bounded_edit_distance(left: &str, right: &str, max_distance: usize) -> Option<usize> {
+    let left = left.chars().collect::<Vec<_>>();
+    let right = right.chars().collect::<Vec<_>>();
+    if left.len().abs_diff(right.len()) > max_distance {
+        return None;
+    }
+
+    let mut previous = (0..=right.len()).collect::<Vec<_>>();
+    let mut current = vec![0; right.len() + 1];
+    for (left_index, left_char) in left.iter().enumerate() {
+        current[0] = left_index + 1;
+        let mut row_min = current[0];
+        for (right_index, right_char) in right.iter().enumerate() {
+            let cost = usize::from(left_char != right_char);
+            current[right_index + 1] = (previous[right_index + 1] + 1)
+                .min(current[right_index] + 1)
+                .min(previous[right_index] + cost);
+            row_min = row_min.min(current[right_index + 1]);
+        }
+        if row_min > max_distance {
+            return None;
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+
+    let distance = previous[right.len()];
+    (distance <= max_distance).then_some(distance)
 }
 
 fn collect_palette_nodes(document: &Document) -> Vec<PaletteNodeEntry> {
@@ -18145,7 +19440,7 @@ fn render_prompt_overlay(frame: &mut Frame, area: Rect, prompt: &PromptState, ap
 
     let header_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(20), Constraint::Length(28)])
+        .constraints([Constraint::Min(18), Constraint::Length(46)])
         .split(chunks[0]);
     frame.render_widget(
         Paragraph::new(prompt.mode.hint())
@@ -18436,7 +19731,7 @@ fn prompt_token_kind(token: &str, mode: PromptMode) -> PromptTokenKind {
         }
         PromptMode::EditDetail => PromptTokenKind::Text,
         PromptMode::AttachFile => PromptTokenKind::Text,
-        PromptMode::AiAskCurrentBranch => PromptTokenKind::Text,
+        PromptMode::AiAskCurrentBranch | PromptMode::AiChatTarget => PromptTokenKind::Text,
         PromptMode::NvidiaNimApiKey => PromptTokenKind::Text,
         PromptMode::OpenId => PromptTokenKind::Id,
         PromptMode::SaveView | PromptMode::SaveCheckpoint => PromptTokenKind::Text,
@@ -18491,6 +19786,7 @@ fn prompt_input_title(mode: PromptMode) -> &'static str {
         PromptMode::EditDetail => " Details ",
         PromptMode::AttachFile => " File or URL ",
         PromptMode::AiAskCurrentBranch => " Message ",
+        PromptMode::AiChatTarget => " Context ",
         PromptMode::NvidiaNimApiKey => " API key ",
         PromptMode::OpenId => " Node id ",
         PromptMode::SaveView => " View name ",
@@ -18510,6 +19806,7 @@ fn prompt_feedback_label(tone: PromptAssistTone) -> &'static str {
 fn prompt_action_hint(mode: PromptMode) -> &'static str {
     match mode {
         PromptMode::AiAskCurrentBranch => "Enter sends  ·  Esc returns",
+        PromptMode::AiChatTarget => "Enter uses  ·  Tab completes  ·  Esc cancels",
         PromptMode::NvidiaNimApiKey => "Enter stores  ·  Esc cancels",
         _ => "Enter saves  ·  Esc cancels",
     }
@@ -18534,11 +19831,15 @@ fn prompt_footer_text(app: &TuiApp, mode: PromptMode) -> Option<String> {
             )
         }
         PromptMode::AiAskCurrentBranch => Some(format!(
-            "Enter sends to '{}'. Esc returns to AI Chat. Answers stream into chat; reviewable edits appear in Review Suggestions.",
-            ai_current_focus_target_label(app)
+            "Enter sends about '{}'. Esc returns to AI Chat. Answers stream into chat; reviewable edits appear in Review Suggestions.",
+            ai_chat_target_label(app)
+        )),
+        PromptMode::AiChatTarget => Some(format!(
+            "Type any part of a branch name, id, tag, or breadcrumb. Empty keeps map root; . uses selected. Current context is '{}'.",
+            ai_chat_target_label(app)
         )),
         PromptMode::NvidiaNimApiKey => Some(
-            "Get a key at https://build.nvidia.com/settings/api-keys. Input is masked; the profile stores only a secret reference."
+            "Key page: https://build.nvidia.com/settings/api-keys · input is masked; the profile stores only a local secret reference."
                 .to_string(),
         ),
         PromptMode::OpenId => Some("Ids come from [id:...] tokens on node lines.".to_string()),
@@ -18575,7 +19876,8 @@ fn prompt_assist(app: &TuiApp, prompt: &PromptState) -> PromptAssist {
         PromptMode::AiAskCurrentBranch => {
             prompt_ai_ask_current_branch_assist(app, prompt.value.as_str())
         }
-        PromptMode::NvidiaNimApiKey => prompt_nvidia_nim_api_key_assist(prompt.value.as_str()),
+        PromptMode::AiChatTarget => prompt_ai_chat_target_assist(app, prompt.value.as_str()),
+        PromptMode::NvidiaNimApiKey => prompt_nvidia_nim_api_key_assist(app, prompt.value.as_str()),
         PromptMode::OpenId => prompt_open_id_assist(app, prompt.value.trim()),
         PromptMode::SaveView => {
             if let Some(query) = app.current_search_query_for_save() {
@@ -18617,7 +19919,8 @@ fn prompt_ai_ask_current_branch_assist(app: &TuiApp, value: &str) -> PromptAssis
                         "{} is configured, but AI Chat cannot call it yet.",
                         profile.label
                     ),
-                    "Use NVIDIA NIM or Codex Local from the AI Panel for AI Chat.".to_string(),
+                    "Use detected Ollama/Codex/Claude or NVIDIA NIM from AI Settings for AI Chat."
+                        .to_string(),
                 ],
             };
         }
@@ -18625,13 +19928,14 @@ fn prompt_ai_ask_current_branch_assist(app: &TuiApp, value: &str) -> PromptAssis
             tone: PromptAssistTone::Warning,
             lines: vec![
                 "No callable AI profile is configured yet.".to_string(),
-                "Open AI: Open Panel and choose NVIDIA NIM or Codex Local.".to_string(),
+                "Open AI: Open Chat; AI Settings will open first for detected Ollama/Codex/Claude or NVIDIA NIM."
+                    .to_string(),
             ],
         };
     };
 
     let reply_context = ai_chat_reply_context(app);
-    let message_target = ai_current_focus_target_label(app);
+    let message_target = ai_chat_target_label(app);
     let (_, model, _) = ai_session_provider_metadata(app);
     let edit_requested = ai_chat_explicitly_requests_map_edits(trimmed);
     let edit_mode_hint = if edit_requested {
@@ -18694,29 +19998,114 @@ fn prompt_ai_ask_current_branch_assist(app: &TuiApp, value: &str) -> PromptAssis
     }
 }
 
-fn prompt_nvidia_nim_api_key_assist(value: &str) -> PromptAssist {
+fn prompt_ai_chat_target_assist(app: &TuiApp, value: &str) -> PromptAssist {
     let trimmed = value.trim();
     if trimmed.is_empty() {
+        let root = app
+            .ai_chat_root_target_info()
+            .map(|target| {
+                format!(
+                    "{} ({})",
+                    target.label,
+                    breadcrumb_for_path(app.editor.document(), &target.path)
+                )
+            })
+            .unwrap_or_else(|| "(no root)".to_string());
         return PromptAssist {
             tone: PromptAssistTone::Info,
             lines: vec![
-                "Paste a NVIDIA NIM API key here.".to_string(),
-                "Get one at https://build.nvidia.com/settings/api-keys.".to_string(),
+                format!("Enter keeps AI Chat on the map root: {root}."),
                 format!(
-                    "mdmind will store it in the local secret store as {}.",
-                    local_ai_secret_ref(NVIDIA_NIM_LOCAL_SECRET_ID)
+                    "Type . to use the selected node: {}.",
+                    ai_current_focus_target_label(app)
                 ),
+                "Type part of any branch name, id, or breadcrumb to pin a different context."
+                    .to_string(),
+                "Tab completes the best match to a stable node id when one exists.".to_string(),
             ],
         };
     }
 
+    if matches!(
+        trimmed.to_ascii_lowercase().as_str(),
+        "." | "focus" | "focused" | "current" | "current branch"
+    ) {
+        return PromptAssist {
+            tone: PromptAssistTone::Info,
+            lines: vec![
+                "AI Chat will use the selected node as context.".to_string(),
+                format!("Selected node: {}.", ai_current_focus_target_label(app)),
+                "Type part of any branch name, id, or breadcrumb to pin another context."
+                    .to_string(),
+                "Tab completes the best match to a stable node id when one exists.".to_string(),
+            ],
+        };
+    }
+
+    let matches = app.ai_chat_target_matches(trimmed, 4);
+    if let Some(best) = matches.first() {
+        let mut lines = vec![
+            format!("Enter uses best match: {}.", best.target.label),
+            format!("Best path: {}.", best.breadcrumb),
+            "Tab completes the best match; keep typing to refine.".to_string(),
+        ];
+        for candidate in matches.iter().skip(1).take(3) {
+            lines.push(format!(
+                "Also matches: {} - {}.",
+                candidate.target.label, candidate.breadcrumb
+            ));
+        }
+        PromptAssist {
+            tone: PromptAssistTone::Success,
+            lines,
+        }
+    } else {
+        PromptAssist {
+            tone: PromptAssistTone::Warning,
+            lines: vec![
+                format!("No context matches '{trimmed}' yet."),
+                "Try another word from the branch path, a tag, metadata, detail text, or an id."
+                    .to_string(),
+                "Empty + Enter keeps map root; type . to use the selected node.".to_string(),
+            ],
+        }
+    }
+}
+
+fn prompt_nvidia_nim_api_key_assist(app: &TuiApp, value: &str) -> PromptAssist {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        let mut lines = Vec::new();
+        if let Some(preview) = nvidia_nim_existing_key_preview(app) {
+            lines.push(format!(
+                "Current key: {preview}. Paste a new key only if you want to replace it."
+            ));
+        } else if app.ai_profiles.profile(NVIDIA_NIM_QUICK_ADD_ID).is_some() {
+            lines.push("NVIDIA NIM is configured, but no local key is readable yet.".to_string());
+        } else {
+            lines.push("No NVIDIA NIM key is stored yet.".to_string());
+        }
+        lines.push("Paste a NVIDIA NIM API key here; the input is masked.".to_string());
+        lines.push(format!(
+            "The profile stores only {}.",
+            local_ai_secret_ref(NVIDIA_NIM_LOCAL_SECRET_ID)
+        ));
+        return PromptAssist {
+            tone: PromptAssistTone::Info,
+            lines,
+        };
+    }
+
     let mut lines = vec![
-        "Ready to save this key outside the profile JSON.".to_string(),
+        "Ready to save this key in the local secret store.".to_string(),
         format!(
             "The NVIDIA NIM profile will reference {}.",
             local_ai_secret_ref(NVIDIA_NIM_LOCAL_SECRET_ID)
         ),
     ];
+    if nvidia_nim_existing_key_preview(app).is_some() {
+        lines.push("Saving will replace the current stored key.".to_string());
+    }
     let tone = if trimmed.starts_with("nvapi-") {
         PromptAssistTone::Success
     } else {
@@ -18728,6 +20117,99 @@ fn prompt_nvidia_nim_api_key_assist(value: &str) -> PromptAssist {
     };
 
     PromptAssist { tone, lines }
+}
+
+fn nvidia_nim_existing_key_preview(app: &TuiApp) -> Option<String> {
+    let local_secret_ref = local_ai_secret_ref(NVIDIA_NIM_LOCAL_SECRET_ID);
+    let mut secret_refs = Vec::new();
+    if let Some(profile_secret_ref) = app
+        .ai_profiles
+        .profile(NVIDIA_NIM_QUICK_ADD_ID)
+        .and_then(|profile| profile.secret_ref.as_deref())
+    {
+        secret_refs.push(profile_secret_ref);
+    }
+    if !secret_refs
+        .iter()
+        .any(|secret_ref| *secret_ref == local_secret_ref)
+    {
+        secret_refs.push(local_secret_ref.as_str());
+    }
+    secret_refs.into_iter().find_map(|secret_ref| {
+        resolve_ai_secret_ref(secret_ref)
+            .ok()
+            .as_deref()
+            .map(mask_api_key_preview)
+    })
+}
+
+fn nvidia_nim_local_secret_ref_if_readable() -> Option<String> {
+    let secret_ref = local_ai_secret_ref(NVIDIA_NIM_LOCAL_SECRET_ID);
+    resolve_ai_secret_ref(&secret_ref)
+        .ok()
+        .filter(|secret| !secret.trim().is_empty())
+        .map(|_| secret_ref)
+}
+
+fn ensure_nvidia_nim_profile_from_local_secret_if_available(
+    profiles: &mut AiProfilesConfig,
+) -> Result<bool, AppError> {
+    let Some(secret_ref) = nvidia_nim_local_secret_ref_if_readable() else {
+        return Ok(false);
+    };
+    ensure_nvidia_nim_profile_for_secret_ref(profiles, secret_ref)
+}
+
+fn ensure_nvidia_nim_profile_for_secret_ref(
+    profiles: &mut AiProfilesConfig,
+    secret_ref: String,
+) -> Result<bool, AppError> {
+    let needs_repair = profiles
+        .profile(NVIDIA_NIM_QUICK_ADD_ID)
+        .map(|profile| {
+            !profile.enabled || profile.secret_ref.as_deref() != Some(secret_ref.as_str())
+        })
+        .unwrap_or(true);
+    if !needs_repair {
+        return Ok(false);
+    }
+
+    if let Some(mut profile) = profiles.profile(NVIDIA_NIM_QUICK_ADD_ID).cloned() {
+        profile.secret_ref = Some(secret_ref);
+        profile.enabled = true;
+        profiles.upsert_profile(profile, false);
+    } else {
+        profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some(secret_ref))?,
+            false,
+        );
+    }
+    Ok(true)
+}
+
+fn mask_api_key_preview(value: &str) -> String {
+    let trimmed = value.trim();
+    let chars = trimmed.chars().collect::<Vec<_>>();
+    if chars.is_empty() {
+        return String::new();
+    }
+    let prefix_len = if trimmed.starts_with("nvapi-") {
+        6
+    } else {
+        4.min(chars.len().saturating_sub(4))
+    };
+    let suffix_len = if chars.len() > prefix_len + 4 { 4 } else { 0 };
+    let hidden_len = chars.len().saturating_sub(prefix_len + suffix_len);
+    let prefix = chars.iter().take(prefix_len).collect::<String>();
+    let suffix = if suffix_len == 0 {
+        String::new()
+    } else {
+        chars
+            .iter()
+            .skip(chars.len() - suffix_len)
+            .collect::<String>()
+    };
+    format!("{prefix}{}{suffix}", "x".repeat(hidden_len.clamp(1, 5)))
 }
 
 fn prompt_detail_assist(app: &TuiApp, value: &str) -> PromptAssist {
@@ -20432,6 +21914,24 @@ mod tests {
     use std::path::Path;
     use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+    fn line_text(line: &Line<'_>) -> String {
+        line.spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect::<String>()
+    }
+
+    fn lines_text(lines: &[Line<'_>]) -> String {
+        lines.iter().map(line_text).collect::<Vec<_>>().join("\n")
+    }
+
+    fn spans_text(spans: &[Span<'_>]) -> String {
+        spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect::<String>()
+    }
+
     fn sample_document() -> Document {
         parse_document(
             "- Product Idea [id:product]\n  - Direction #idea [id:product/direction]\n    - CLI-first MVP\n  - Tasks #todo @status:active [id:product/tasks]\n    - Build parser\n    - Ship tests\n",
@@ -20448,6 +21948,93 @@ mod tests {
 
     fn enable_ai_experiment(app: &mut TuiApp) {
         app.feature_flags.enable(TuiExperiment::Ai);
+    }
+
+    fn mark_codex_available(app: &mut TuiApp) {
+        app.ai_local_providers.codex_cli = true;
+    }
+
+    fn mark_claude_available(app: &mut TuiApp) {
+        app.ai_local_providers.claude_cli = true;
+    }
+
+    fn set_ollama_available(app: &mut TuiApp, models: &[&str], recommended_model: &str) {
+        app.ai_local_providers.ollama = Some(crate::ai::AiOllamaDiscovery {
+            base_url: crate::ai::OLLAMA_DEFAULT_BASE_URL.to_string(),
+            openai_endpoint: crate::ai::OLLAMA_OPENAI_COMPAT_ENDPOINT.to_string(),
+            models: models
+                .iter()
+                .map(|model| crate::ai::AiOllamaModel {
+                    name: (*model).to_string(),
+                    size: None,
+                })
+                .collect(),
+            recommended_model: Some(recommended_model.to_string()),
+        });
+        add_detected_local_ai_profiles(&mut app.ai_profiles, &app.ai_local_providers);
+    }
+
+    #[test]
+    fn initial_ai_state_stays_inert_until_experiment_is_enabled() {
+        let feature_flags = TuiFeatureFlags::default();
+        let detect_calls = std::cell::Cell::new(0);
+        let load_calls = std::cell::Cell::new(0);
+
+        let (local_providers, profiles) = initial_ai_state_for_tui_with(
+            &feature_flags,
+            || {
+                detect_calls.set(detect_calls.get() + 1);
+                AiLocalProviderDetection {
+                    codex_cli: true,
+                    ..AiLocalProviderDetection::default()
+                }
+            },
+            |providers| {
+                load_calls.set(load_calls.get() + 1);
+                assert!(providers.codex_cli);
+                let mut profiles = AiProfilesConfig::default();
+                profiles.upsert_profile(
+                    quick_add_profile(CODEX_LOCAL_QUICK_ADD_ID, None)
+                        .expect("Codex local profile should build"),
+                    true,
+                );
+                profiles
+            },
+        );
+
+        assert_eq!(detect_calls.get(), 0);
+        assert_eq!(load_calls.get(), 0);
+        assert_eq!(local_providers, AiLocalProviderDetection::default());
+        assert!(profiles.profiles.is_empty());
+
+        let mut feature_flags = TuiFeatureFlags::default();
+        feature_flags.enable(TuiExperiment::Ai);
+        let (local_providers, profiles) = initial_ai_state_for_tui_with(
+            &feature_flags,
+            || {
+                detect_calls.set(detect_calls.get() + 1);
+                AiLocalProviderDetection {
+                    codex_cli: true,
+                    ..AiLocalProviderDetection::default()
+                }
+            },
+            |providers| {
+                load_calls.set(load_calls.get() + 1);
+                assert!(providers.codex_cli);
+                let mut profiles = AiProfilesConfig::default();
+                profiles.upsert_profile(
+                    quick_add_profile(CODEX_LOCAL_QUICK_ADD_ID, None)
+                        .expect("Codex local profile should build"),
+                    true,
+                );
+                profiles
+            },
+        );
+
+        assert_eq!(detect_calls.get(), 1);
+        assert_eq!(load_calls.get(), 1);
+        assert!(local_providers.codex_cli);
+        assert!(profiles.profile(CODEX_LOCAL_QUICK_ADD_ID).is_some());
     }
 
     fn temp_map_path(name: &str) -> PathBuf {
@@ -21573,7 +23160,7 @@ mod tests {
     }
 
     #[test]
-    fn command_palette_surfaces_ai_panel_entry_point() {
+    fn command_palette_surfaces_ai_chat_entry_point() {
         let map_path = temp_map_path("palette-ai-setup.md");
         let document = sample_document();
         let mut app = TuiApp::new(
@@ -21586,46 +23173,207 @@ mod tests {
         );
         app.ai_profiles = AiProfilesConfig::default();
 
-        assert!(
-            app.palette_items("ai ask")
-                .into_iter()
-                .all(|item| item.title != "AI: Open Panel"),
-            "AI panel should stay hidden until experimental AI is enabled"
-        );
-        app.open_ai_panel();
+        for query in [
+            "ai", "ai ask", "ai chat", "ai setup", "nim", "nvidia", "ollama", "codex", "claude",
+            "provider",
+        ] {
+            let items = app.palette_items(query);
+            assert!(
+                items.iter().all(|item| item.title != "AI: Open Chat"),
+                "AI chat should stay hidden for {query:?} until experimental AI is enabled"
+            );
+            assert!(
+                items.iter().all(|item| {
+                    !matches!(
+                        item.target,
+                        PaletteTarget::Action(PaletteAction::OpenAiPanel)
+                    )
+                }),
+                "OpenAiPanel action should stay hidden for {query:?} until experimental AI is enabled"
+            );
+        }
+        app.open_ai_entry_point();
         assert!(app.ai_panel.is_none());
         assert!(app.status.text.contains("--experimental-ai"));
 
         enable_ai_experiment(&mut app);
-        let panel = app
+        let entry = app
             .palette_items("ai ask")
             .into_iter()
-            .find(|item| item.title == "AI: Open Panel")
-            .expect("AI panel should be discoverable");
-        assert!(panel.subtitle.contains("chat"));
+            .find(|item| item.title == "AI: Open Chat")
+            .expect("AI chat should be discoverable");
+        assert!(entry.subtitle.contains("settings first"));
         assert!(matches!(
-            panel.target,
+            entry.target,
             PaletteTarget::Action(PaletteAction::OpenAiPanel)
         ));
 
         assert!(
             app.palette_items("ai nvidia")
                 .into_iter()
-                .any(|item| item.title == "AI: Open Panel"),
-            "provider/setup searches should lead to the AI panel"
+                .any(|item| item.title == "AI: Open Chat"),
+            "provider/setup searches should lead to the AI chat/settings entry"
         );
         assert!(
             app.palette_items("ai provider codex")
                 .into_iter()
                 .all(|item| !item.title.starts_with("AI Provider:")),
-            "provider switching should live inside the AI panel"
+            "provider switching should live inside AI Settings"
         );
         assert!(
             app.palette_items("ai setup nvidia")
                 .into_iter()
                 .all(|item| item.title != "AI Setup: NVIDIA NIM"),
-            "NVIDIA setup should live inside the AI panel"
+            "NVIDIA setup should live inside AI Settings"
         );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn experimental_ai_off_keeps_startup_state_and_surfaces_hidden() {
+        let map_path = temp_map_path("ai-experiment-off.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        assert!(!app.experimental_ai_enabled());
+        assert_eq!(app.ai_local_providers, AiLocalProviderDetection::default());
+        assert!(app.ai_profiles.profiles.is_empty());
+        assert!(app.active_ask_ai_profile().is_none());
+        assert!(app.pending_ai_profile().is_none());
+        assert!(app.ai_panel.is_none());
+        assert!(app.ai_review.is_none());
+
+        for query in [
+            "", "ai", "ai ask", "ai chat", "ai setup", "nim", "nvidia", "ollama", "codex",
+            "claude", "provider",
+        ] {
+            let items = app.palette_items(query);
+            assert!(
+                items.iter().all(|item| item.title != "AI: Open Chat"),
+                "AI chat should stay hidden for {query:?} while experimental AI is off"
+            );
+            assert!(
+                items.iter().all(|item| {
+                    !matches!(
+                        item.target,
+                        PaletteTarget::Action(PaletteAction::OpenAiPanel)
+                    )
+                }),
+                "OpenAiPanel action should stay hidden for {query:?} while experimental AI is off"
+            );
+        }
+
+        assert!(
+            app.help_topics("ai")
+                .into_iter()
+                .all(|topic| topic != HelpTopic::Ai),
+            "AI help should stay hidden while experimental AI is off"
+        );
+        assert!(!header_lamps_text(&app).contains("EXPERIMENTAL AI"));
+        assert!(app.status_model().ai_summary.is_none());
+
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.ai_suggestions.push(AiSuggestion::answer(
+            AiSuggestionTarget::new(anchor.path, anchor.id, "Product Idea"),
+            "Codex Local",
+            "What changed?",
+            "A stale AI answer should not light up the UI while the experiment is off.",
+        ));
+        assert!(
+            app.status_model().ai_summary.is_none(),
+            "stale AI state should not create visible status while experimental AI is off"
+        );
+
+        app.open_ai_entry_point();
+        assert!(app.ai_panel.is_none());
+        assert!(app.ai_review.is_none());
+        assert!(app.status.text.contains("--experimental-ai"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_palette_entry_routes_to_chat_or_settings() {
+        let map_path = temp_map_path("palette-ai-chat-route.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        enable_ai_experiment(&mut app);
+        app.ai_profiles = AiProfilesConfig {
+            enabled: true,
+            default_profile: None,
+            profiles: Vec::new(),
+        };
+
+        app.open_ai_entry_point();
+        assert!(app.ai_panel.is_some());
+        assert!(app.ai_review.is_none());
+        assert!(app.status.text.contains("AI Settings open first"));
+        let panel = app
+            .ai_panel
+            .as_ref()
+            .expect("AI Settings should be open for setup");
+        let items = app.ai_panel_items();
+        assert_eq!(
+            items
+                .get(panel.selected)
+                .expect("setup selection should point at an item")
+                .action,
+            AiPanelAction::SetupNvidiaNim,
+            "setup-first Settings should land on an actionable provider/setup row"
+        );
+
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:test".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        app.open_ai_entry_point();
+        assert!(app.ai_panel.is_none());
+        assert!(
+            app.ai_review
+                .as_ref()
+                .is_some_and(|review| review.mode == AiReviewMode::History),
+            "palette should open AI Chat directly once a provider is callable"
+        );
+        assert!(app.status.text.contains("AI Chat open"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE))
+            .expect("P in AI Chat should open AI Settings");
+        assert!(
+            app.ai_panel
+                .as_ref()
+                .is_some_and(|panel| panel.return_to_chat)
+        );
+        assert!(app.ai_review.is_none());
+        assert!(app.status.text.contains("AI Settings open"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .expect("Esc from chat-opened settings should return to AI Chat");
+        assert!(app.ai_panel.is_none());
+        assert!(
+            app.ai_review
+                .as_ref()
+                .is_some_and(|review| review.mode == AiReviewMode::History),
+            "settings opened from chat should return to chat"
+        );
+        assert!(app.status.text.contains("Back to AI Chat"));
 
         cleanup_sidecars(&map_path);
     }
@@ -21651,16 +23399,171 @@ mod tests {
 
         app.open_ai_panel();
         app.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE))
-            .expect("N should open NVIDIA setup from the AI panel");
+            .expect("N should open NVIDIA setup from AI Settings");
 
         let prompt = app.prompt.as_ref().expect("prompt should be open");
         assert_eq!(prompt.mode, PromptMode::NvidiaNimApiKey);
         assert!(
             app.ai_panel.is_some(),
-            "NVIDIA setup prompt should keep the AI Panel open underneath"
+            "NVIDIA setup prompt should keep AI Settings open underneath"
         );
         assert_eq!(mask_prompt_value("nvapi-secret"), "************");
-        assert!(app.status.text.contains("build.nvidia.com"));
+        assert!(app.status.text.contains("NVIDIA NIM key setup"));
+        assert!(
+            !app.status.text.contains("build.nvidia.com"),
+            "status should not repeat the key page URL"
+        );
+        let footer = prompt_footer_text(&app, PromptMode::NvidiaNimApiKey)
+            .expect("NIM key prompt should show a key page footer");
+        assert_eq!(footer.matches("build.nvidia.com").count(), 1);
+        let assist = prompt_nvidia_nim_api_key_assist(&app, "nvapi-secret");
+        assert_eq!(assist.tone, PromptAssistTone::Success);
+        assert!(
+            assist
+                .lines
+                .iter()
+                .all(|line| !line.contains("build.nvidia.com")),
+            "assist copy should not repeat the key page URL"
+        );
+        assert_eq!(
+            mask_api_key_preview("nvapi-1234567890abcd"),
+            "nvapi-xxxxxabcd"
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn nvidia_nim_profile_repair_uses_local_secret_ref_for_switching() {
+        let secret_ref = local_ai_secret_ref(NVIDIA_NIM_LOCAL_SECRET_ID);
+        let mut profiles = AiProfilesConfig::default();
+
+        assert!(
+            ensure_nvidia_nim_profile_for_secret_ref(&mut profiles, secret_ref.clone())
+                .expect("missing NVIDIA profile should be created")
+        );
+        let profile = profiles
+            .profile(NVIDIA_NIM_QUICK_ADD_ID)
+            .expect("NVIDIA profile should exist after repair");
+        assert_eq!(profile.secret_ref.as_deref(), Some(secret_ref.as_str()));
+        assert!(profile.enabled);
+        assert_eq!(
+            profiles.default_profile.as_deref(),
+            Some(NVIDIA_NIM_QUICK_ADD_ID)
+        );
+
+        let mut existing = quick_add_profile(
+            NVIDIA_NIM_QUICK_ADD_ID,
+            Some("env:NVIDIA_API_KEY".to_string()),
+        )
+        .expect("NVIDIA profile should build");
+        existing.model = Some("nvidia/custom-chat-model".to_string());
+        existing.enabled = false;
+        profiles.upsert_profile(existing, true);
+
+        assert!(
+            ensure_nvidia_nim_profile_for_secret_ref(&mut profiles, secret_ref.clone())
+                .expect("disabled NVIDIA profile should be repaired")
+        );
+        let repaired = profiles
+            .profile(NVIDIA_NIM_QUICK_ADD_ID)
+            .expect("NVIDIA profile should remain present");
+        assert_eq!(repaired.secret_ref.as_deref(), Some(secret_ref.as_str()));
+        assert_eq!(
+            repaired.model.as_deref(),
+            Some("nvidia/custom-chat-model"),
+            "repair should preserve existing model choices"
+        );
+        assert!(repaired.enabled);
+        assert!(
+            !ensure_nvidia_nim_profile_for_secret_ref(&mut profiles, secret_ref)
+                .expect("matching NVIDIA profile should not need repair")
+        );
+    }
+
+    #[test]
+    fn ai_settings_preview_summarizes_current_setup_and_activity() {
+        let map_path = temp_map_path("ai-settings-preview-summary.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:test".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor.clone(),
+            "Product Idea",
+            "NVIDIA NIM",
+            "What gaps do you see?",
+            "Acceptance criteria are missing.",
+        )
+        .expect("AI response should stage");
+        app.ai_suggestions.push(AiSuggestion::new(
+            AiSuggestionTarget::new(anchor.path, anchor.id, "Product Idea"),
+            "NVIDIA NIM",
+            "Suggest map edits I can review.",
+            vec![AiSuggestedChange::AddChild {
+                target: None,
+                fragment: "Acceptance criteria #todo".to_string(),
+                detail: "Define done.".to_string(),
+            }],
+        ));
+
+        let text = lines_text(&ai_panel_preview_lines(
+            &app,
+            Some(AiPanelAction::ReviewSuggestions),
+        ));
+
+        assert!(text.contains("Current setup"));
+        assert!(text.contains("Provider NVIDIA NIM"));
+        assert!(text.contains("Context Product Idea"));
+        assert!(text.contains("1 chat turn"));
+        assert!(text.contains("1 staged map edit"));
+        assert!(text.contains("Latest chat"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_empty_state_is_conversational_and_not_repetitive() {
+        let map_path = temp_map_path("ai-chat-empty-state.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:test".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+
+        let text = lines_text(&ai_chat_empty_state_lines(
+            &app,
+            app.ai_chat_target_label(),
+            app.theme_colors(),
+        ));
+
+        assert!(text.contains("Start a useful AI conversation."));
+        assert!(text.contains("Ask a question, find gaps, or request reviewable map edits."));
+        assert!(text.contains("T changes context"));
+        assert!(text.contains("[4] suggest edits"));
+        assert!(!text.contains("Sends whole map"));
 
         cleanup_sidecars(&map_path);
     }
@@ -21686,7 +23589,7 @@ mod tests {
 
         app.open_ai_panel();
         app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE))
-            .expect("A should open AI Chat from the AI panel");
+            .expect("A should open AI Chat from AI Settings");
 
         assert!(app.prompt.is_none());
         assert!(
@@ -21702,8 +23605,12 @@ mod tests {
         let prompt = app.prompt.as_ref().expect("composer prompt should be open");
         assert_eq!(prompt.mode, PromptMode::AiAskCurrentBranch);
         assert!(
+            prompt_renders_inside_ai_chat(&app, prompt),
+            "AI Chat composer should render inside the chat surface instead of opening another modal"
+        );
+        assert!(
             app.ai_panel.is_some(),
-            "AI Chat composer should keep the AI Panel open underneath"
+            "AI Chat composer should keep AI Settings open underneath"
         );
         assert!(app.status.text.contains("Write a chat message"));
         let assist = prompt_ai_ask_current_branch_assist(&app, "What changes would help?");
@@ -21717,15 +23624,13 @@ mod tests {
             assist
                 .lines
                 .iter()
-                .any(|line| line.contains("message target Product Idea"))
+                .any(|line| line.contains("chat context Product Idea"))
         );
         let empty_assist = prompt_ai_ask_current_branch_assist(&app, "");
-        assert!(
-            empty_assist
-                .lines
-                .iter()
-                .any(|line| line.contains("selected branch + style notes + recent chat"))
-        );
+        assert!(empty_assist.lines.iter().any(|line| {
+            line.contains("whole map on the first turn when it fits")
+                && line.contains("focus, context, and recent chat every turn")
+        }));
         assert!(assist.lines.iter().all(|line| !line.contains("Scope:")));
         assert!(assist.lines.iter().all(|line| !line.contains("chat-only")));
         assert_eq!(
@@ -21734,16 +23639,243 @@ mod tests {
         );
         let footer = prompt_footer_text(&app, PromptMode::AiAskCurrentBranch)
             .expect("AI Chat should provide composer footer help");
-        assert!(footer.contains("Enter sends to 'Product Idea'"));
+        assert!(footer.contains("Enter sends about 'Product Idea'"));
         assert!(footer.contains("Review Suggestions"));
 
         app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
             .expect("Esc should close the AI Chat composer");
         assert!(app.prompt.is_none());
+        assert!(app.status.text.contains("Back to AI Chat"));
         assert!(
             app.ai_review.is_some(),
             "closing the composer should return to AI Chat"
         );
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .expect("Esc from AI Chat should return to AI Settings");
+        assert!(app.ai_review.is_none());
+        assert!(app.ai_panel.is_some());
+        assert!(app.status.text.contains("Back to AI Settings"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_owns_context_targeting_not_settings() {
+        let map_path = temp_map_path("ai-panel-chat-target.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:test".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        enable_ai_experiment(&mut app);
+
+        app.open_ai_panel();
+        assert!(
+            app.ai_panel_items()
+                .into_iter()
+                .all(|item| !item.title.starts_with("Context:")),
+            "AI Settings should not expose chat context as a setup action"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE))
+            .expect("A should open AI Chat from AI Settings");
+        app.handle_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE))
+            .expect("T should open AI Chat context prompt from AI Chat");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.mode),
+            Some(PromptMode::AiChatTarget)
+        );
+        let assist = prompt_ai_chat_target_assist(&app, "Tasks");
+        assert_eq!(assist.tone, PromptAssistTone::Success);
+        assert!(
+            assist
+                .lines
+                .iter()
+                .any(|line| line.contains("Enter uses best match: Tasks"))
+        );
+
+        app.set_ai_chat_target_from_input("Tasks")
+            .expect("Tasks should resolve as chat context");
+        assert_eq!(app.ai_chat_target_label(), "Tasks");
+        let footer = prompt_footer_text(&app, PromptMode::AiAskCurrentBranch)
+            .expect("AI Chat should provide composer footer help");
+        assert!(footer.contains("Enter sends about 'Tasks'"));
+        let assist = prompt_ai_ask_current_branch_assist(&app, "Summarize this");
+        assert!(
+            assist
+                .lines
+                .iter()
+                .any(|line| line.contains("chat context Tasks"))
+        );
+        assert!(
+            app.ai_panel_items()
+                .into_iter()
+                .all(|item| !item.title.starts_with("Context:")),
+            "pinning context in chat should not add a Settings context row"
+        );
+
+        app.set_ai_chat_target_from_input(".")
+            .expect(". should pin the selected node");
+        assert_eq!(app.ai_chat_target_label(), "Product Idea");
+        assert_eq!(
+            app.ai_chat_target
+                .as_ref()
+                .and_then(|anchor| anchor.id.as_deref()),
+            Some("product")
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_target_prompt_empty_keeps_the_current_root() {
+        let map_path = temp_map_path("ai-chat-target-root-default.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 1],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:test".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        enable_ai_experiment(&mut app);
+
+        assert_eq!(app.ai_chat_target_label(), "Product Idea");
+        assert!(app.ai_chat_target.is_none());
+        let ask_assist = prompt_ai_ask_current_branch_assist(&app, "Summarize this");
+        assert!(
+            ask_assist
+                .lines
+                .iter()
+                .any(|line| line.contains("chat context Product Idea"))
+        );
+        app.open_ai_panel();
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE))
+            .expect("A should open AI Chat from the panel");
+        app.handle_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE))
+            .expect("T should open AI Chat context prompt from AI Chat");
+        assert!(
+            app.ai_review
+                .as_ref()
+                .is_some_and(|review| review.mode == AiReviewMode::History),
+            "target prompt should keep AI Chat as the active surface underneath"
+        );
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.value.as_str()),
+            Some("")
+        );
+        let assist = prompt_ai_chat_target_assist(&app, "");
+        assert!(
+            assist
+                .lines
+                .iter()
+                .any(|line| line.contains("Enter keeps AI Chat on the map root: Product Idea"))
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("empty target prompt should keep the current root");
+
+        assert_eq!(app.ai_chat_target_label(), "Product Idea");
+        assert!(app.ai_chat_target.is_none());
+
+        app.set_ai_chat_target_from_input(".")
+            .expect(". should pin the selected node");
+        assert_eq!(app.ai_chat_target_label(), "Tasks");
+        assert_eq!(
+            app.ai_chat_target
+                .as_ref()
+                .and_then(|anchor| anchor.id.as_deref()),
+            Some("product/tasks")
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_target_prompt_tolerates_typos_and_completes_best_match() {
+        let map_path = temp_map_path("ai-chat-target-fuzzy.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        enable_ai_experiment(&mut app);
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:test".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+
+        let target = app
+            .resolve_ai_chat_target_input("prdct taks")
+            .expect("rough query should resolve")
+            .expect("rough query should pin a target");
+        assert_eq!(target.label, "Tasks");
+        assert_eq!(target.anchor.id.as_deref(), Some("product/tasks"));
+
+        let assist = prompt_ai_chat_target_assist(&app, "prdct taks");
+        assert_eq!(assist.tone, PromptAssistTone::Success);
+        assert!(
+            assist
+                .lines
+                .iter()
+                .any(|line| line.contains("Enter uses best match: Tasks"))
+        );
+        assert!(
+            assist
+                .lines
+                .iter()
+                .any(|line| line.contains("Tab completes"))
+        );
+
+        let missing = prompt_ai_chat_target_assist(&app, "zzqxx");
+        assert_eq!(missing.tone, PromptAssistTone::Warning);
+        assert!(
+            missing
+                .lines
+                .iter()
+                .any(|line| line.contains("No context matches"))
+        );
+
+        app.open_ai_panel();
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE))
+            .expect("A should open AI Chat from AI Settings");
+        app.handle_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE))
+            .expect("T should open AI Chat context prompt from AI Chat");
+        for character in "prdct taks".chars() {
+            app.handle_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE))
+                .expect("typing rough target should work");
+        }
+        app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE))
+            .expect("Tab should complete the best match");
+        assert_eq!(
+            app.prompt.as_ref().map(|prompt| prompt.value.as_str()),
+            Some("[id:product/tasks]")
+        );
+        assert!(app.status.text.contains("Completed AI Chat context"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("Enter should pin the completed target");
+        assert_eq!(app.ai_chat_target_label(), "Tasks");
+        assert!(app.prompt.is_none());
 
         cleanup_sidecars(&map_path);
     }
@@ -21906,11 +24038,10 @@ mod tests {
         assert_eq!(app.ai_active_answer_count(), 0);
         assert_eq!(app.ai_active_suggestion_count(), 1);
         assert_eq!(app.ai_history.len(), 1);
-        assert_eq!(ai_status_lamp_label(&app), "AI REVIEW");
         assert!(
             app.status
                 .text
-                .contains("Kept 1 staged Review Suggestions item")
+                .contains("Kept 1 staged map edit in Review Suggestions")
         );
 
         std::fs::remove_file(config_path).ok();
@@ -21945,6 +24076,100 @@ mod tests {
 
         assert!(context.contains("User: Summarize this branch."));
         assert!(context.contains("Assistant: It is a CLI-first planning branch."));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_first_turn_prompt_includes_small_whole_map_and_focus_context() {
+        let map_path = temp_map_path("ai-chat-first-turn-map-context.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 1],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let prompt = app
+            .ai_chat_user_prompt_for_target(
+                "What should I notice?",
+                app.editor.focus_path(),
+                conversational_only_contract(),
+                "",
+            )
+            .expect("first-turn prompt should build");
+
+        assert!(prompt.contains("Whole mdmind map context (first AI Chat message only"));
+        assert!(prompt.contains("- Product Idea"));
+        assert!(prompt.contains("- Tasks"));
+        assert!(prompt.contains("Current focus branch (what the user is looking at now)"));
+        assert!(prompt.contains("Chat context branch: same as the current focus branch"));
+        assert!(!prompt.contains("Recent AI chat in this TUI session"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_first_turn_prompt_omits_large_whole_map() {
+        let map_path = temp_map_path("ai-chat-large-map-context.md");
+        let huge_detail = "token ".repeat(AI_WHOLE_MAP_CONTEXT_TOKEN_LIMIT + 100);
+        let document = parse_document(&format!(
+            "- Root [id:root]\n  | {huge_detail}\n  - Focus [id:focus]\n"
+        ))
+        .document;
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let prompt = app
+            .ai_chat_user_prompt_for_target(
+                "What should I notice?",
+                app.editor.focus_path(),
+                conversational_only_contract(),
+                "",
+            )
+            .expect("large-map first-turn prompt should build");
+
+        assert!(prompt.contains("Whole mdmind map context: omitted"));
+        assert!(prompt.contains("Current focus branch (what the user is looking at now)"));
+        assert!(!prompt.contains("Whole mdmind map context (first AI Chat message only"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_followup_prompt_skips_whole_map_but_keeps_focus_context() {
+        let map_path = temp_map_path("ai-chat-followup-map-context.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 1],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let prompt = app
+            .ai_chat_user_prompt_for_target(
+                "What changed?",
+                app.editor.focus_path(),
+                conversational_only_contract(),
+                "Turn 1\nUser: What matters?\nAssistant: The launch risks.",
+            )
+            .expect("follow-up prompt should build");
+
+        assert!(prompt.contains("Recent AI chat in this TUI session"));
+        assert!(prompt.contains("Current focus branch (what the user is looking at now)"));
+        assert!(!prompt.contains("Whole mdmind map context"));
 
         cleanup_sidecars(&map_path);
     }
@@ -22014,6 +24239,40 @@ mod tests {
     }
 
     #[test]
+    fn ai_chat_metadata_names_claude_local_default_model() {
+        let map_path = temp_map_path("ai-chat-claude-metadata.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        mark_claude_available(&mut app);
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(CLAUDE_LOCAL_QUICK_ADD_ID, None)
+                .expect("Claude profile should build"),
+            true,
+        );
+
+        let (provider, model, _) = ai_session_provider_metadata(&app);
+        let source = app.ai_suggestion_source_for(
+            app.active_ask_ai_profile()
+                .expect("Claude should be callable when detected"),
+            None,
+            None,
+        );
+
+        assert_eq!(provider, "Claude Local");
+        assert_eq!(model, "Claude CLI default");
+        assert_eq!(source.model.as_deref(), Some("Claude CLI default"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
     fn ai_chat_only_stages_map_suggestions_for_explicit_edit_requests() {
         assert!(!ai_chat_explicitly_requests_map_edits(
             "What gaps do you see?"
@@ -22048,6 +24307,16 @@ mod tests {
         assert!(ai_chat_explicitly_requests_map_edits(
             "Add child nodes for the missing risks."
         ));
+    }
+
+    #[test]
+    fn ai_chat_turn_followup_prompt_does_not_bias_to_add_child_only() {
+        let prompt = ai_chat_turn_suggestion_followup_prompt("Rename Risk to Launch risks.");
+
+        assert!(prompt.contains("add, update, or remove"));
+        assert!(prompt.contains("Prefer updating existing nodes"));
+        assert!(prompt.contains("add children only for genuinely missing structure"));
+        assert!(!prompt.contains("add-child suggestions"));
     }
 
     #[test]
@@ -22132,7 +24401,7 @@ mod tests {
             .and_then(|suggestion| suggestion.answer.as_deref())
             .expect("warning should remain visible in AI Chat");
         assert!(answer.contains("Could not stage suggestions"));
-        assert!(app.status.text.contains("Could not stage suggestions"));
+        assert!(app.status.text.contains("Could not stage map edits"));
 
         cleanup_sidecars(&map_path);
     }
@@ -22191,7 +24460,11 @@ mod tests {
 
         let prompt = app.prompt.as_ref().expect("composer should be open");
         assert_eq!(prompt.mode, PromptMode::AiAskCurrentBranch);
-        assert!(prompt.value.contains("Suggest map edits"));
+        assert!(
+            prompt
+                .value
+                .contains("Suggest concise add, update, or remove map edits")
+        );
         let assist = prompt_ai_ask_current_branch_assist(&app, &prompt.value);
         assert!(
             assist
@@ -22204,8 +24477,8 @@ mod tests {
     }
 
     #[test]
-    fn ai_status_lamp_tracks_the_active_provider() {
-        let map_path = temp_map_path("ai-status-lamp.md");
+    fn ai_header_lamps_skip_ai_provider_review_and_work_states() {
+        let map_path = temp_map_path("ai-header-lamps.md");
         let document = sample_document();
         let mut app = TuiApp::new(
             map_path.clone(),
@@ -22216,27 +24489,31 @@ mod tests {
             SavedViewsState::default(),
         );
         app.ai_profiles = AiProfilesConfig::default();
-        assert_eq!(ai_status_lamp_label(&app), "AI OFF");
 
         app.ai_profiles.upsert_profile(
             quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:nim".to_string()))
                 .expect("NVIDIA profile should build"),
             true,
         );
-        assert_eq!(ai_status_lamp_label(&app), "AI NIM");
+        let header = header_lamps_text(&app);
+        assert!(!header.contains("AI NIM"));
 
+        mark_codex_available(&mut app);
         app.ai_profiles.upsert_profile(
             quick_add_profile(CODEX_LOCAL_QUICK_ADD_ID, None).expect("Codex profile should build"),
             true,
         );
-        assert_eq!(ai_status_lamp_label(&app), "AI CODEX");
+        let header = header_lamps_text(&app);
+        assert!(!header.contains("AI CODEX"));
 
         app.ai_profiles = AiProfilesConfig::default();
+        mark_codex_available(&mut app);
         app.ai_profiles.upsert_profile(
             quick_add_profile(CODEX_LOCAL_QUICK_ADD_ID, None).expect("Codex profile should build"),
             true,
         );
-        assert_eq!(ai_status_lamp_label(&app), "AI CODEX");
+        let header = header_lamps_text(&app);
+        assert!(!header.contains("AI CODEX"));
 
         let (_sender, receiver) = mpsc::channel();
         app.ai_job = Some(AiRequestJob {
@@ -22248,7 +24525,8 @@ mod tests {
             cancelled: Arc::new(AtomicBool::new(false)),
             receiver,
         });
-        assert_eq!(ai_status_lamp_label(&app), "AI WORKING");
+        let header = header_lamps_text(&app);
+        assert!(!header.contains("AI WORKING"));
         app.ai_job = None;
         app.ai_suggestions.push(AiSuggestion::new(
             AiSuggestionTarget::new(vec![0], Some("product".to_string()), "Product Idea"),
@@ -22260,11 +24538,11 @@ mod tests {
                 detail: "Add acceptance criteria.".to_string(),
             }],
         ));
-        assert_eq!(ai_status_lamp_label(&app), "AI REVIEW");
+        let header = header_lamps_text(&app);
+        assert!(!header.contains("AI REVIEW"));
 
         app.ai_profiles.turn_off();
         app.ai_suggestions.clear();
-        assert_eq!(ai_status_lamp_label(&app), "AI OFF");
 
         cleanup_sidecars(&map_path);
     }
@@ -22449,7 +24727,7 @@ mod tests {
         enable_ai_experiment(&mut app);
         app.open_ai_panel();
         app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE))
-            .expect("S should open AI suggestions review from the AI panel");
+            .expect("S should open AI suggestions review from AI Settings");
         assert!(app.ai_review.is_some());
         assert!(
             app.ai_review
@@ -22475,7 +24753,7 @@ mod tests {
             .expect("AI suggestion should be focused");
         assert_eq!(node.text, "Acceptance criteria");
         assert!(node.detail_text().contains("Add acceptance criteria."));
-        assert!(app.status.text.contains("Applied 1 AI suggestion row"));
+        assert!(app.status.text.contains("Applied 1 AI map edit"));
 
         cleanup_sidecars(&map_path);
     }
@@ -22564,7 +24842,7 @@ mod tests {
         );
         assert_eq!(
             ai_suggestion_placement_summary(&suggestion),
-            "2 edit(s) across 2 targets: Product Idea, Tasks"
+            "2 edits across 2 branches: Product Idea, Tasks"
         );
     }
 
@@ -22613,6 +24891,239 @@ mod tests {
         );
         assert!(app.ai_history.is_empty());
         assert!(app.status.text.contains("AI Chat keeps"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_promotes_review_and_suggest_actions_to_the_top() {
+        let map_path = temp_map_path("ai-chat-top-actions.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor.clone(),
+            "Product Idea",
+            "NVIDIA NIM",
+            "What gaps do you see?",
+            "Add acceptance criteria.",
+        )
+        .expect("AI response should stage");
+
+        let items = app.ai_review_items(AiReviewMode::History);
+        let selected_item = items.first().copied();
+        let top_actions = lines_text(&ai_chat_top_action_lines(
+            &app,
+            selected_item,
+            app.theme_colors(),
+        ));
+        assert!(
+            top_actions.contains("Press V to request reviewable map edits from this chat turn.")
+        );
+        assert!(!top_actions.contains("Press S"));
+
+        let footer = spans_text(&ai_chat_footer_spans(&app, false, app.theme_colors()));
+        assert!(!footer.contains("review"));
+        assert!(!footer.contains("staged"));
+        assert!(!footer.contains("stage edits"));
+
+        app.ai_suggestions.push(AiSuggestion::new(
+            AiSuggestionTarget::new(anchor.path, anchor.id, "Product Idea"),
+            "NVIDIA NIM",
+            "Suggest map edits I can review.",
+            vec![AiSuggestedChange::AddChild {
+                target: None,
+                fragment: "Acceptance criteria #todo".to_string(),
+                detail: "Define done.".to_string(),
+            }],
+        ));
+
+        let items = app.ai_review_items(AiReviewMode::History);
+        let selected_item = items.first().copied();
+        let top_actions = lines_text(&ai_chat_top_action_lines(
+            &app,
+            selected_item,
+            app.theme_colors(),
+        ));
+        assert!(top_actions.contains("1 staged map edit ready"));
+        assert!(top_actions.contains("Press S to review and apply map edits."));
+        assert!(
+            top_actions.contains("Press V to request reviewable map edits from this chat turn.")
+        );
+
+        let footer = spans_text(&ai_chat_footer_spans(&app, false, app.theme_colors()));
+        assert!(!footer.contains("review"));
+        assert!(!footer.contains("staged"));
+        assert!(!footer.contains("stage edits"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_suggest_from_turn_does_not_move_map_focus() {
+        let map_path = temp_map_path("ai-chat-suggest-keeps-focus.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0, 1],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles = AiProfilesConfig {
+            enabled: false,
+            ..AiProfilesConfig::default()
+        };
+        let turn_anchor = app
+            .anchor_for_path(&[0])
+            .expect("sample root branch should exist");
+        app.stage_ai_response(
+            turn_anchor,
+            "Product Idea",
+            "NVIDIA NIM",
+            "What gaps do you see?",
+            "Acceptance criteria are missing.",
+        )
+        .expect("AI response should stage");
+        app.open_ai_review(AiReviewMode::History);
+
+        let focus_before = app.editor.focus_path().to_vec();
+        app.suggest_edits_from_selected_ai_chat_turn()
+            .expect("AI-off status should be handled without sending");
+
+        assert!(app.status.text.contains("AI is off"));
+        assert_eq!(app.editor.focus_path(), focus_before.as_slice());
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_review_opened_from_chat_returns_to_chat_on_escape() {
+        let map_path = temp_map_path("ai-review-back-to-chat.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor.clone(),
+            "Product Idea",
+            "NVIDIA NIM",
+            "What gaps do you see?",
+            "Add acceptance criteria.",
+        )
+        .expect("AI response should stage");
+        app.ai_suggestions.push(AiSuggestion::new(
+            AiSuggestionTarget::new(anchor.path, anchor.id, "Product Idea"),
+            "NVIDIA NIM",
+            "Suggest map edits I can review.",
+            vec![AiSuggestedChange::AddChild {
+                target: None,
+                fragment: "Acceptance criteria #todo".to_string(),
+                detail: "Define done.".to_string(),
+            }],
+        ));
+        enable_ai_experiment(&mut app);
+
+        app.open_ai_panel();
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE))
+            .expect("A should open AI Chat from the panel");
+        app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE))
+            .expect("S from AI Chat should open Review Suggestions");
+        assert!(
+            app.ai_review.as_ref().is_some_and(|review| {
+                review.mode == AiReviewMode::Suggestions && review.return_chat_index == Some(0)
+            }),
+            "review opened from chat should remember that Esc returns to chat"
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .expect("Esc should return from Review Suggestions to AI Chat");
+        assert!(
+            app.ai_review.as_ref().is_some_and(
+                |review| review.mode == AiReviewMode::History && review.item_index == 0
+            ),
+            "Esc from chat-opened review should return to AI Chat"
+        );
+        assert!(app.status.text.contains("Back to AI Chat"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .expect("Esc from AI Chat should return to AI Settings");
+        assert!(app.ai_review.is_none());
+        assert!(app.ai_panel.is_some());
+        assert!(app.status.text.contains("Back to AI Settings"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_chat_transcript_separates_user_and_ai_blocks() {
+        let map_path = temp_map_path("ai-chat-thread-layout.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        app.stage_ai_response(
+            anchor.clone(),
+            "Product Idea",
+            "NVIDIA NIM",
+            "What gaps do you see?",
+            "Acceptance criteria are missing.",
+        )
+        .expect("first AI response should stage");
+        app.stage_ai_response(
+            anchor,
+            "Product Idea",
+            "NVIDIA NIM",
+            "What should happen next?",
+            "Define the release checklist.",
+        )
+        .expect("second AI response should stage");
+
+        let items = app.ai_review_items(AiReviewMode::History);
+        let lines = items
+            .iter()
+            .copied()
+            .enumerate()
+            .flat_map(|(index, item)| ai_chat_turn_lines(&app, item, index, 1, app.theme_colors()))
+            .collect::<Vec<_>>();
+        let transcript = lines_text(&lines);
+
+        assert!(transcript.contains(" YOU "));
+        assert!(transcript.contains(" AI "));
+        assert!(transcript.contains("What gaps do you see?"));
+        assert!(transcript.contains("Acceptance criteria are missing."));
+        assert!(transcript.contains("· · · ·"));
+        assert!(transcript.contains("Turn 2"));
+        assert_eq!(
+            ai_chat_turn_start_scroll(&items, 1) as usize,
+            ai_chat_turn_rendered_line_count(items[0], 0)
+        );
 
         cleanup_sidecars(&map_path);
     }
@@ -22725,7 +25236,7 @@ mod tests {
         enable_ai_experiment(&mut app);
         app.open_ai_panel();
         app.handle_key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE))
-            .expect("H should open AI Chat from the AI panel");
+            .expect("H should open AI Chat from AI Settings");
         assert_eq!(
             app.ai_review
                 .as_ref()
@@ -22797,6 +25308,66 @@ mod tests {
                 .expect("AI Chat should stay open")
                 .follow_latest
         );
+
+        let middle_turn_start = app.ai_chat_turn_scroll_for_index(1);
+        assert!(
+            middle_turn_start >= 2,
+            "middle turn needs enough preceding transcript to test scrolling above it"
+        );
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .scroll,
+            middle_turn_start
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE))
+            .expect("up should scroll above the selected middle turn");
+        app.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE))
+            .expect("up should keep moving through earlier chat content");
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .scroll,
+            middle_turn_start.saturating_sub(2),
+            "arrow scrolling should not clamp to the selected turn"
+        );
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .item_index,
+            1,
+            "manual scroll should not change the selected turn"
+        );
+
+        let scroll_before_fast = app
+            .ai_review
+            .as_ref()
+            .expect("AI Chat should stay open")
+            .scroll;
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT))
+            .expect("shift down should fast-scroll the chat transcript");
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .scroll,
+            scroll_before_fast.saturating_add(AI_CHAT_FAST_SCROLL_LINES),
+            "shift down should move by the AI Chat fast-scroll amount"
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::SHIFT))
+            .expect("shift up should fast-scroll the chat transcript");
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI Chat should stay open")
+                .scroll,
+            scroll_before_fast,
+            "shift up should move by the AI Chat fast-scroll amount"
+        );
+
         app.handle_key(KeyEvent::new(KeyCode::Char(']'), KeyModifiers::NONE))
             .expect("] should move to the latest chat turn");
         assert_eq!(
@@ -22813,14 +25384,22 @@ mod tests {
                 .follow_latest
         );
 
+        let latest_turn_start = app.ai_chat_turn_scroll_for_index(2);
         app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
             .expect("down should scroll a conversational answer");
         assert_eq!(
             app.ai_review
                 .as_ref()
                 .expect("AI review should stay open")
+                .item_index,
+            2
+        );
+        assert_eq!(
+            app.ai_review
+                .as_ref()
+                .expect("AI review should stay open")
                 .scroll,
-            1
+            latest_turn_start.saturating_add(1)
         );
         app.handle_key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE))
             .expect("page down should scroll more");
@@ -22829,7 +25408,7 @@ mod tests {
                 .as_ref()
                 .expect("AI review should stay open")
                 .scroll
-                > 1
+                > latest_turn_start.saturating_add(1)
         );
         assert!(
             !app.ai_review
@@ -22901,7 +25480,7 @@ mod tests {
         assert_eq!(app.ai_suggestions.len(), 1);
         assert!(app.ai_review.is_some());
         assert!(!serialize_document(app.editor.document()).contains("Acceptance criteria #ai"));
-        assert!(app.status.text.contains("No checked AI suggestion rows"));
+        assert!(app.status.text.contains("No checked AI map edits"));
 
         cleanup_sidecars(&map_path);
     }
@@ -22991,8 +25570,8 @@ mod tests {
     }
 
     #[test]
-    fn ai_update_suggestions_wait_for_review_ui_apply_support() {
-        let map_path = temp_map_path("ai-suggestion-unsupported-change.md");
+    fn ai_update_suggestions_apply_to_existing_nodes() {
+        let map_path = temp_map_path("ai-suggestion-update-node.md");
         let document = sample_document();
         let mut app = TuiApp::new(
             map_path.clone(),
@@ -23012,24 +25591,95 @@ mod tests {
             "Clean this up.",
             vec![AiSuggestedChange::UpdateNode {
                 target,
-                fragment: Some("Updated Product Idea".to_string()),
-                detail: None,
+                fragment: Some("Product Concept #idea [id:product]".to_string()),
+                detail: Some("Sharper positioning for the concept.".to_string()),
             }],
         ));
 
         app.accept_next_ai_suggestion()
-            .expect("unsupported AI suggestion should be reported, not applied");
+            .expect("update AI suggestion should apply");
 
-        assert_eq!(app.ai_suggestions.len(), 1);
+        assert!(app.ai_suggestions.is_empty());
         assert_eq!(
             app.editor
                 .current()
-                .expect("focus should remain on original branch")
+                .expect("focus should stay on the updated branch")
                 .text,
-            "Product Idea"
+            "Product Concept"
         );
+        let current = app.editor.current().expect("updated node should exist");
+        assert_eq!(current.id.as_deref(), Some("product"));
+        assert!(current.tags.iter().any(|tag| tag == "#idea"));
+        assert!(current.detail_text().contains("Sharper positioning"));
+        assert_eq!(app.status.tone, StatusTone::Success);
+        assert!(app.status.text.contains("Applied 1 AI map edit"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_remove_suggestions_require_explicit_review_check() {
+        let map_path = temp_map_path("ai-suggestion-remove-node.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let anchor = app
+            .current_anchor()
+            .expect("sample document should have a focused branch");
+        let remove_target =
+            AiSuggestionTarget::new(vec![0, 1], Some("product/tasks".to_string()), "Tasks");
+        app.ai_suggestions.push(AiSuggestion::new(
+            AiSuggestionTarget::new(anchor.path, anchor.id, "Product Idea"),
+            "NVIDIA NIM",
+            "Remove duplicate branches.",
+            vec![AiSuggestedChange::RemoveNode {
+                target: remove_target,
+            }],
+        ));
+
+        app.accept_next_ai_suggestion()
+            .expect("quick accept should not apply unchecked remove rows");
+        assert_eq!(app.ai_suggestions.len(), 1);
+        assert!(serialize_document(app.editor.document()).contains("Tasks #todo"));
         assert_eq!(app.status.tone, StatusTone::Warning);
-        assert!(app.status.text.contains("applying them is not wired yet"));
+        assert!(app.status.text.contains("only removes nodes"));
+
+        app.open_ai_review(AiReviewMode::Suggestions);
+        assert!(
+            app.ai_review
+                .as_ref()
+                .expect("AI review should open")
+                .checked
+                .is_empty(),
+            "remove rows should start unchecked"
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("enter with unchecked remove should not change the map");
+        assert_eq!(app.ai_suggestions.len(), 1);
+        assert!(serialize_document(app.editor.document()).contains("Tasks #todo"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE))
+            .expect("space should check the remove row");
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .expect("checked remove row should apply");
+
+        assert!(app.ai_suggestions.is_empty());
+        assert!(!serialize_document(app.editor.document()).contains("Tasks #todo"));
+        assert_eq!(
+            app.editor
+                .current()
+                .expect("focus should move after delete")
+                .text,
+            "Direction"
+        );
+        assert_eq!(app.status.tone, StatusTone::Success);
+        assert!(app.status.text.contains("Applied 1 AI map edit"));
 
         cleanup_sidecars(&map_path);
     }
@@ -23052,6 +25702,7 @@ mod tests {
                 .expect("NVIDIA profile should build"),
             true,
         );
+        mark_codex_available(&mut app);
         app.ai_profiles.upsert_profile(
             quick_add_profile(CODEX_LOCAL_QUICK_ADD_ID, None).expect("Codex profile should build"),
             false,
@@ -23061,7 +25712,7 @@ mod tests {
         let codex = items
             .iter()
             .find(|item| item.action == AiPanelAction::UseCodexLocal)
-            .expect("Codex provider switch should be discoverable in the AI panel");
+            .expect("Codex provider switch should be discoverable in AI Settings");
         assert_eq!(codex.title, "Use Codex Local");
         assert!(codex.subtitle.contains("codex exec"));
         assert!(codex.enabled);
@@ -23069,7 +25720,7 @@ mod tests {
         let nvidia = items
             .iter()
             .find(|item| item.action == AiPanelAction::UseNvidiaNim)
-            .expect("NVIDIA provider switch should be discoverable in the AI panel");
+            .expect("NVIDIA provider switch should be discoverable in AI Settings");
         assert_eq!(nvidia.title, "Active: NVIDIA NIM");
         assert!(nvidia.subtitle.contains("using NVIDIA NIM"));
         assert!(nvidia.enabled);
@@ -23081,6 +25732,202 @@ mod tests {
             "provider switching should no longer appear as top-level palette commands"
         );
 
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_panel_hides_unavailable_local_providers_and_surfaces_detected_ollama() {
+        let map_path = temp_map_path("ai-panel-local-provider-detection.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles = AiProfilesConfig::default();
+        app.ai_local_providers = AiLocalProviderDetection::default();
+
+        let items = app.ai_panel_items();
+        assert!(
+            items
+                .iter()
+                .all(|item| item.action != AiPanelAction::UseCodexLocal),
+            "Codex should be hidden when the codex CLI is not detected"
+        );
+        assert!(
+            items
+                .iter()
+                .all(|item| item.action != AiPanelAction::UseOllamaLocal),
+            "Ollama should be hidden when no local Ollama chat model is detected"
+        );
+        assert!(
+            items
+                .iter()
+                .all(|item| item.action != AiPanelAction::UseClaudeLocal),
+            "Claude should be hidden when the claude CLI is not detected"
+        );
+
+        set_ollama_available(
+            &mut app,
+            &["nomic-embed-text:latest", "llama3.2:latest"],
+            "llama3.2:latest",
+        );
+
+        let items = app.ai_panel_items();
+        let ollama = items
+            .iter()
+            .find(|item| item.action == AiPanelAction::UseOllamaLocal)
+            .expect("Ollama provider should appear once a chat model is detected");
+        assert_eq!(ollama.title, "Active: Ollama Local");
+        assert!(ollama.subtitle.contains("llama3.2:latest"));
+        assert!(!header_lamps_text(&app).contains("AI OLLAMA"));
+        assert_eq!(
+            app.active_ask_ai_profile()
+                .and_then(|profile| profile.model.as_deref()),
+            Some("llama3.2:latest")
+        );
+
+        mark_claude_available(&mut app);
+        add_detected_local_ai_profiles(&mut app.ai_profiles, &app.ai_local_providers);
+        let items = app.ai_panel_items();
+        let claude = items
+            .iter()
+            .find(|item| item.action == AiPanelAction::UseClaudeLocal)
+            .expect("Claude provider should appear once the claude CLI is detected");
+        assert_eq!(claude.title, "Use Claude Local");
+        assert!(claude.subtitle.contains("claude -p"));
+        assert!(!header_lamps_text(&app).contains("AI OLLAMA"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn ai_panel_ollama_row_uses_plain_copy_for_one_detected_model() {
+        let map_path = temp_map_path("ai-panel-single-ollama-model.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:test".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        set_ollama_available(&mut app, &["llama3.2:latest"], "llama3.2:latest");
+
+        let items = app.ai_panel_items();
+        let ollama = items
+            .iter()
+            .find(|item| item.action == AiPanelAction::UseOllamaLocal)
+            .expect("Ollama provider should appear once a chat model is detected");
+        assert_eq!(ollama.title, "Use Ollama Local");
+        assert_eq!(ollama.subtitle, "Detected local chat model llama3.2:latest");
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn default_unavailable_local_provider_does_not_silently_fallback() {
+        let map_path = temp_map_path("ai-default-unavailable-local-provider.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let mut profiles = AiProfilesConfig::default();
+        profiles.upsert_profile(
+            quick_add_profile(OLLAMA_LOCAL_QUICK_ADD_ID, None)
+                .expect("Ollama profile should build"),
+            true,
+        );
+        profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:nim".to_string()))
+                .expect("NVIDIA profile should build"),
+            false,
+        );
+        app.ai_profiles = profiles;
+        app.ai_local_providers = AiLocalProviderDetection::default();
+
+        assert!(
+            app.active_ask_ai_profile().is_none(),
+            "AI Chat should not silently fall back from unavailable default Ollama to NIM"
+        );
+        assert_eq!(
+            app.pending_ai_profile().map(|profile| profile.id.as_str()),
+            Some(OLLAMA_LOCAL_QUICK_ADD_ID)
+        );
+        assert!(
+            app.ai_panel_items()
+                .iter()
+                .any(|item| item.action == AiPanelAction::UseNvidiaNim
+                    && item.title == "Use NVIDIA NIM"
+                    && item.enabled),
+            "the panel should still let the user explicitly choose another configured provider"
+        );
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn selecting_unavailable_local_provider_keeps_current_provider() {
+        let map_path = temp_map_path("ai-select-unavailable-local-provider.md");
+        let config_path = temp_map_path("ai-select-unavailable-local-provider-profiles.json");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        let mut profiles = AiProfilesConfig::default();
+        profiles.upsert_profile(
+            quick_add_profile(NVIDIA_NIM_QUICK_ADD_ID, Some("local:nim".to_string()))
+                .expect("NVIDIA profile should build"),
+            true,
+        );
+        profiles.upsert_profile(
+            quick_add_profile(OLLAMA_LOCAL_QUICK_ADD_ID, None)
+                .expect("Ollama profile should build"),
+            false,
+        );
+        save_ai_profiles_to_path(&config_path, &profiles)
+            .expect("test AI profiles should be saved");
+        app.ai_profiles = profiles;
+        app.ai_local_providers = AiLocalProviderDetection::default();
+
+        app.set_active_ai_profile_at_path(OLLAMA_LOCAL_QUICK_ADD_ID, &config_path)
+            .expect("unavailable provider selection should be handled in the UI");
+
+        assert_eq!(app.status.tone, StatusTone::Warning);
+        assert!(app.status.text.contains("Ollama Local is not available"));
+        assert!(app.status.text.contains("Start Ollama"));
+        assert!(app.status.text.contains("still using NVIDIA NIM"));
+        assert_eq!(
+            app.ai_profiles.default_profile.as_deref(),
+            Some(NVIDIA_NIM_QUICK_ADD_ID)
+        );
+        let reloaded =
+            load_ai_profiles_from_path(&config_path).expect("test profiles should reload");
+        assert_eq!(
+            reloaded.default_profile.as_deref(),
+            Some(NVIDIA_NIM_QUICK_ADD_ID)
+        );
+
+        std::fs::remove_file(config_path).ok();
         cleanup_sidecars(&map_path);
     }
 
@@ -23110,6 +25957,7 @@ mod tests {
         save_ai_profiles_to_path(&config_path, &profiles)
             .expect("test AI profiles should be saved");
         app.ai_profiles = profiles;
+        mark_codex_available(&mut app);
 
         let anchor = app
             .current_anchor()
@@ -23572,6 +26420,28 @@ mod tests {
     }
 
     #[test]
+    fn details_help_try_it_explains_the_detail_editor() {
+        let map_path = temp_map_path("help-details-try-it.md");
+        let document = sample_document();
+        let app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+
+        let rendered = lines_text(&help_preview_lines(&app, HelpTopic::Details));
+
+        assert!(rendered.contains("Try It"));
+        assert!(rendered.contains("Press d, then add:"));
+        assert!(!rendered.contains("\n| This branch still depends"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
     fn help_topics_report_when_more_rows_are_below() {
         let map_path = temp_map_path("help-more-topics.md");
         let document = sample_document();
@@ -23880,10 +26750,10 @@ mod tests {
             .expect("escape should close the palette");
 
         assert!(app.palette.is_none(), "palette should close on escape");
-        assert_eq!(app.ui_settings.theme, ThemeId::Workbench);
+        assert_eq!(app.ui_settings.theme, ThemeId::Mdmind);
         let loaded_settings =
             load_ui_settings_for(&map_path).expect("ui settings should still load");
-        assert_eq!(loaded_settings.theme, ThemeId::Workbench);
+        assert_eq!(loaded_settings.theme, ThemeId::Mdmind);
 
         cleanup_sidecars(&map_path);
     }
@@ -24257,7 +27127,7 @@ mod tests {
             SavedViewsState::default(),
         );
 
-        assert_eq!(app.ui_settings.theme, ThemeId::Workbench);
+        assert_eq!(app.ui_settings.theme, ThemeId::Mdmind);
         assert!(app.ui_settings.motion_enabled);
         assert!(!app.ui_settings.ascii_accents);
 
@@ -25023,6 +27893,8 @@ mod tests {
             PromptMode::Edit,
             PromptMode::AttachFile,
             PromptMode::AiAskCurrentBranch,
+            PromptMode::AiChatTarget,
+            PromptMode::NvidiaNimApiKey,
             PromptMode::OpenId,
             PromptMode::SaveView,
             PromptMode::SaveCheckpoint,
@@ -26360,6 +29232,35 @@ mod tests {
         assert!(!rendered.contains("n/N"));
         assert!(!rendered.contains("[ ]"));
         assert!(!rendered.contains("m:mindmap"));
+
+        cleanup_sidecars(&map_path);
+    }
+
+    #[test]
+    fn keybar_hides_ai_panel_hint_when_review_suggestions_are_staged() {
+        let map_path = temp_map_path("keybar-ai-review.md");
+        let document = sample_document();
+        let mut app = TuiApp::new(
+            map_path.clone(),
+            document,
+            vec![0],
+            None,
+            false,
+            SavedViewsState::default(),
+        );
+        app.ai_suggestions.push(AiSuggestion::new(
+            AiSuggestionTarget::new(vec![0], Some("product".to_string()), "Product Idea"),
+            "NVIDIA NIM",
+            "Suggest map edits.",
+            vec![AiSuggestedChange::AddChild {
+                target: None,
+                fragment: "Acceptance criteria #todo".to_string(),
+                detail: "Define done.".to_string(),
+            }],
+        ));
+
+        let rendered = keybar_text(&app);
+        assert!(!rendered.contains("ai panel"));
 
         cleanup_sidecars(&map_path);
     }

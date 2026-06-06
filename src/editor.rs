@@ -269,6 +269,43 @@ impl Editor {
         })
     }
 
+    pub fn update_current_parts(
+        &mut self,
+        fragment: Option<&str>,
+        detail: Option<&str>,
+    ) -> Result<(), AppError> {
+        let Some(current) = self.current().cloned() else {
+            return Err(AppError::new("The document has no focused node."));
+        };
+        if fragment.is_none() && detail.is_none() {
+            return Err(AppError::new("No node update was provided."));
+        }
+
+        let replacement = fragment.map(parse_fragment).transpose()?;
+        let detail_lines = detail.map(normalize_detail);
+        let focus_path = self.focus_path.clone();
+        self.apply_change(move |document| {
+            let node = get_node_mut(&mut document.nodes, &focus_path)
+                .expect("focus path should be valid before mutation");
+            if let Some(replacement) = replacement {
+                node.text = replacement.text;
+                node.task = replacement.task;
+                node.tags = replacement.tags;
+                node.metadata = replacement.metadata;
+                node.id = replacement.id;
+                node.references = replacement.references;
+                node.relations = replacement.relations;
+            }
+            if let Some(detail_lines) = detail_lines {
+                node.detail = detail_lines;
+            } else {
+                node.detail = current.detail;
+            }
+            node.children = current.children;
+            focus_path
+        })
+    }
+
     pub fn toggle_current_task(&mut self) -> Result<TaskState, AppError> {
         let Some(current) = self.current() else {
             return Err(AppError::new("The document has no focused node."));
