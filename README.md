@@ -43,7 +43,19 @@ It is not trying to be:
 
 ## What A Map Looks Like
 
-Maps are plain-text tree files with lightweight inline structure:
+At its simplest, a map is just a Markdown-ish outline:
+
+```text
+- Product Roadmap
+  - First workflow
+    - Create a small map
+    - Edit a few branches
+    - Search when it gets noisy
+  - Open questions
+    - What should stay simple on day one?
+```
+
+That is enough to start. When a map becomes more durable, you can add lightweight inline structure:
 
 - `#tag` for grouping and workflow markers
 - `@key:value` for structured metadata
@@ -51,7 +63,7 @@ Maps are plain-text tree files with lightweight inline structure:
 - `[[target/id]]` or `[[rel:kind->target/id]]` for cross-branch references
 - `| detail text` for longer notes attached to a node
 
-Example:
+Structured example:
 
 ```text
 - Onboarding Research #project @status:active [id:onboarding]
@@ -105,7 +117,25 @@ For Codex, Claude, or other agent clients, see [plugins/mdmind/README.md](plugin
 
 ## Quick Start
 
-Create a map from a starter template:
+Open the TUI and choose a starting point:
+
+```bash
+mdmind
+```
+
+The startup screen can open an existing Markdown file, create a blank map, start from a template, or copy a bundled example.
+
+Once a map is open:
+
+- move with `↑` / `↓`
+- press `a` to add a child
+- press `e` to rename the focused node
+- press `d` to add longer details
+- press `/` to search
+- press `:` or `Ctrl+P` for the command palette
+- press `s` to save in KEYSAVE mode
+
+You can also create a map directly from a starter template:
 
 ```bash
 mdm init roadmap.md --template product

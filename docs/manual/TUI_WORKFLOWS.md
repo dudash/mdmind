@@ -21,7 +21,7 @@ Everything else, including ids, cross-links, themes, and the visual mindmap, exi
 
 If you are new:
 
-1. open a small map in `mdmind`
+1. run `mdmind` without a target and choose a small example, template, or blank map
 2. move with `↑` and `↓`
 3. use `→` to expand or enter a branch
 4. press `a` to add a child
@@ -31,6 +31,8 @@ If you are new:
 8. press `?` to open built-in help
 
 That is enough to become productive.
+
+A plain label is enough when you are starting. Add tags, metadata, ids, or relations only when the branch needs that structure.
 
 If you naturally think in nested notes or outlines, also read [USING_MDMIND_AS_OUTLINER.md](USING_MDMIND_AS_OUTLINER.md). It frames the same product in a simpler outline-first way.
 
@@ -103,6 +105,8 @@ Use details when one branch needs:
 - a short research excerpt
 
 In the raw file, details are stored as `| ...` lines directly under the node. In the TUI, press `d` to open the detail editor, use `Enter` for new lines, `Ctrl+K` to delete the current line, and `Ctrl+S` to save.
+
+In full mode, details appear in their own panel. In minimal mode, they stay inside Focus. Reading mode expands long details inline while you navigate.
 
 ## Narrowing The Working Set
 

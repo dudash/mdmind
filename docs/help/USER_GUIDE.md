@@ -14,6 +14,7 @@
       - first learn focus, moving around the tree, adding a child, editing a line, and opening search or the palette
       - the structured features become useful as the map gets bigger and more long-lived
       - move with the arrow keys
+      - run `mdmind` without a target when you want to choose, create, or copy a starter map
       - press a to add a child
       - press A to add a sibling
       - press e to edit nodes you have already made
@@ -58,10 +59,10 @@
       - | path: current branch                                 |
       - |                                                      |
       - | MAP OUTLINE                            | FOCUS       |
-      - |  > root                                | selected    |
-      - |    - branch                            | facts       |
-      - |    - branch                            | context     |
-      - |                                        | side lanes  |
+      - |  > root                                | DETAILS     |
+      - |    - branch                            | PARENT+LINKS|
+      - |    - branch                            | CHILDREN    |
+      - |                                        |             |
       - |                                                      |
       - | status: latest result                  | keys        |
       - +------------------------------------------------------+
@@ -73,7 +74,8 @@
       - the focus panel explains the selected node
       - it shows the node label, tags, metadata, id, line number, relation counts, and child counts
       - use it when you want to inspect one branch without changing anything
-    - Side lanes #guide [id:guide/tui/lanes]
+    - Details and context panels #guide [id:guide/tui/lanes]
+      - details show longer notes attached to the focused node
       - parent shows where you came from
       - backlinks show incoming references
       - children preview what sits below the current node
@@ -285,6 +287,8 @@
       - details stay attached to a node without bloating the main tree label
       - in raw files, detail lines use | ... directly under the node
       - in mdmind, d opens the detail editor and Ctrl+S saves it
+      - in full mode, details get their own panel; in minimal mode, they stay inside Focus
+      - reading mode expands long details inline while you navigate
       - in the detail editor, Ctrl+K deletes the current line
     - Reshaping the tree #reference [id:guide/editing/reshape]
       - Alt+↑ and Alt+↓ reorder a node among siblings
@@ -456,7 +460,7 @@
       - Esc restores the previous surface
     - Minimal mode #reference [id:guide/themes/minimal]
       - type minimal in the palette to toggle the quieter pro layout
-      - minimal mode condenses the shell, hides the keybar, reduces overlay chrome, and gives more room to the main tree by trimming the right-side context lanes
+      - minimal mode condenses the shell, hides the keybar, reduces overlay chrome, and gives more room to the main tree by keeping details inside Focus and trimming the right-side context panels
     - Reading mode #reference [id:guide/themes/reading]
       - type reading in the palette to toggle the detail-focused reading layout
       - reading mode keeps the outline visible but expands the current node's details inline into a larger calmer reading block

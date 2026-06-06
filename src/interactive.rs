@@ -84,6 +84,8 @@ const REFERENCE_PREVIEW_MAX_LINES: usize = 80;
 const WEB_REFERENCE_PREVIEW_MAX_BYTES: usize = 64 * 1024;
 const AI_WHOLE_MAP_CONTEXT_TOKEN_LIMIT: usize = 5_000;
 const AI_CHAT_FAST_SCROLL_LINES: u16 = 4;
+const MINIMAL_FOCUS_DETAIL_PREVIEW_LINES: usize = 2;
+const DETAILS_PANEL_PREVIEW_LINES: usize = 6;
 
 type Palette = MindmapTheme;
 
@@ -303,7 +305,7 @@ impl PromptMode {
             Self::EditDetail => {
                 "Write longer notes for the selected node. Enter adds lines. Ctrl+S saves."
             }
-            _ => "Use full node syntax: Label #tag @key:value [id:path/to/node] [[target]]",
+            _ => "Type a short label. Optional: add #tag @key:value [id:path] [[target]].",
         }
     }
 
@@ -642,7 +644,7 @@ impl HelpTopic {
                 "start begin beginner intro getting started first steps first five minutes overview basics new user welcome next steps"
             }
             Self::TuiTour => {
-                "tui screen tour layout map outline focus panel side lanes context top bar status lamps keybar overlays palette search help visual map terminal interface"
+                "tui screen tour layout map outline focus panel details panel parent backlinks children context top bar status lamps keybar overlays palette search help visual map terminal interface"
             }
             Self::Changelog => {
                 "changelog release notes release-notes whats new what's new version current latest upgrade features fixes added changed fixed"
@@ -765,12 +767,13 @@ impl HelpTopic {
                 "A good first map is small and concrete. One project, one trip, one feature area, one story outline. Add ids and relations later, once the shape starts to matter.",
                 "Good next steps are small experiments: pick a theme that feels comfortable, try minimal mode after the keybar feels familiar, turn on reading mode for a node with details, add a tag like #todo or #idea, then filter by it with search.",
                 "Once tags feel natural, try one metadata field such as @status:active or @owner:mira. Before a bigger restructure, create a checkpoint so you can explore without being timid.",
-                "If you do not want a blank file, start from mdm init and one of the built-in templates.",
+                "If you do not want a blank file, run mdmind without a target and choose a template or bundled example from the startup screen.",
             ],
             Self::TuiTour => &[
                 "Start with the map. The outline is the main working surface: move through visible rows, expand or collapse branches, add or edit nodes, and keep your attention on the current branch.",
                 "The focus panel explains the selected node. It shows the node label, tags, metadata, id, line number, relation counts, and child counts so you can inspect one branch without leaving the outline.",
-                "The side lanes are supporting context. Parent shows where you came from, Backlinks shows incoming references, and Children previews what sits below the current node.",
+                "The details panel keeps longer notes separate from the compact focus facts. Press d when the panel is empty or when a branch needs more than one line.",
+                "The relationship area is supporting context. Parent and Backlinks sit above Children so you can see where you came from, what points here, and what sits below the current node.",
                 "The top bar is an instrument panel. Its lamps show view and filter state first, then minimal or reading mode, then save mode and whether the file is modified.",
                 "The path line is your breadcrumb. It shows where the focused branch lives in the map, which matters more as the tree gets deeper.",
                 "The bottom status tells you what just happened and what context is active. The keybar is a reminder strip for common actions; minimal mode hides it when you want a quieter surface.",
@@ -817,6 +820,7 @@ impl HelpTopic {
             Self::Details => &[
                 "Details live under a node instead of inside its main label. That means the visible tree can stay compact even when a branch needs a paragraph, quote, scene note, meeting rationale, or a few lines of research context.",
                 "In the raw file, detail lines use | ... directly under the node they belong to. In the TUI, press d to edit them in a larger text area, then save with Ctrl+S.",
+                "In full mode, details get their own panel. In minimal mode, they stay inside Focus. Reading mode expands long details inline while you navigate.",
             ],
             Self::Search => &[
                 "Start with the simplest version: press /, type a normal word or phrase, and press Enter. Once that feels natural, move on to #tags and then @key:value filters.",
@@ -838,7 +842,7 @@ impl HelpTopic {
             ],
             Self::Themes => &[
                 "A good theme should reduce fatigue and make hierarchy easier to read. It should not feel like decoration pasted on top. That is why themes apply across the header, outline, overlays, status surfaces, and mindmap together.",
-                "Minimal mode belongs here too. It is the pro layout choice when you want less instructional chrome and more working room. It condenses the shell, widens the main outline, and trims the right-side context lanes down to the essentials.",
+                "Minimal mode belongs here too. It is the pro layout choice when you want less instructional chrome and more working room. It condenses the shell, widens the main outline, keeps details inside Focus, and trims the right-side context panels down to the essentials.",
             ],
             Self::Mindmap => &[
                 "The mindmap is most useful for cluster recognition, branch shape, and presentation. It is less about direct editing and more about seeing the current scope when the outline stops being enough. The spatial canvas is the fuller navigation surface when you want to stay inside that visual layout for a while.",
@@ -9781,7 +9785,7 @@ impl TuiApp {
             self.save_to_disk()?;
             format!("{message} Autosaved.")
         } else {
-            message
+            format!("{message} Press s to save.")
         };
         self.set_status(StatusTone::Success, status_message);
         Ok(())
@@ -12744,7 +12748,7 @@ fn render_body(frame: &mut Frame, area: Rect, app: &TuiApp) {
         .constraints(if app.ui_settings.minimal_mode {
             [Constraint::Percentage(62), Constraint::Percentage(38)]
         } else {
-            [Constraint::Percentage(40), Constraint::Percentage(60)]
+            [Constraint::Percentage(48), Constraint::Percentage(52)]
         })
         .split(area);
 
@@ -13008,30 +13012,48 @@ fn render_outline(frame: &mut Frame, area: Rect, app: &TuiApp) {
 fn render_focus_cluster(frame: &mut Frame, area: Rect, app: &TuiApp) {
     let focus_height = focus_card_height(app);
 
-    let sections = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(focus_height), Constraint::Min(8)])
-        .split(area);
-
-    render_focus_card(frame, sections[0], app);
-
     if app.ui_settings.minimal_mode {
+        let sections = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(focus_height), Constraint::Min(8)])
+            .split(area);
+
+        render_focus_card(frame, sections[0], app);
         render_children_lane(frame, sections[1], app);
         return;
     }
 
+    let details_height = details_card_height(app);
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(focus_height),
+            Constraint::Length(details_height),
+            Constraint::Min(8),
+        ])
+        .split(area);
+
+    render_focus_card(frame, sections[0], app);
+    render_details_lane(frame, sections[1], app);
+    render_relationship_cluster(frame, sections[2], app);
+}
+
+fn render_relationship_cluster(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let relationship_height = relationship_header_height(app, area.height);
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(relationship_height), Constraint::Min(5)])
+        .split(area);
+
     let lanes = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(28),
-            Constraint::Percentage(32),
-            Constraint::Percentage(40),
-        ])
-        .split(sections[1]);
+        .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
+        .split(sections[0]);
 
     render_parent_lane(frame, lanes[0], app);
     render_backlinks_lane(frame, lanes[1], app);
-    render_children_lane(frame, lanes[2], app);
+    render_children_lane(frame, sections[1], app);
 }
 
 fn focus_card_height(app: &TuiApp) -> u16 {
@@ -13042,11 +13064,31 @@ fn focus_card_height(app: &TuiApp) -> u16 {
         .unwrap_or(0);
 
     if !app.ui_settings.minimal_mode {
-        let mut height = if app.filter.is_some() { 9 } else { 8 };
-        if detail_lines > 0 {
-            height += detail_lines + 1;
+        let Some(node) = app.editor.current() else {
+            return 4;
+        };
+
+        let mut content_lines = 4_u16;
+        if !node.tags.is_empty() || !node.metadata.is_empty() {
+            content_lines += 1;
         }
-        return height.min(13);
+        if !node.relations.is_empty() {
+            content_lines += 1;
+        }
+        if !node.references.is_empty() {
+            content_lines += 1;
+        }
+        if app.filter.is_some() {
+            content_lines += 1;
+        }
+        if motion_level(MotionTarget::Scope) > 0 {
+            content_lines += 1;
+        }
+        if app.view_mode == ViewMode::SubtreeOnly && app.subtree_root_node().is_some() {
+            content_lines += 1;
+        }
+
+        return (content_lines + 2).clamp(6, 10);
     }
 
     let Some(node) = app.editor.current() else {
@@ -13074,6 +13116,33 @@ fn focus_card_height(app: &TuiApp) -> u16 {
     }
 
     height.min(12)
+}
+
+fn details_card_height(app: &TuiApp) -> u16 {
+    let Some(node) = app.editor.current() else {
+        return 3;
+    };
+    if node.detail.is_empty() {
+        return 3;
+    }
+
+    let visible_lines = node.detail.len().min(DETAILS_PANEL_PREVIEW_LINES) as u16;
+    let overflow_line = u16::from(node.detail.len() > DETAILS_PANEL_PREVIEW_LINES);
+    (visible_lines + overflow_line + 2).clamp(4, 9)
+}
+
+fn relationship_header_height(app: &TuiApp, available_height: u16) -> u16 {
+    if available_height == 0 {
+        return 0;
+    }
+
+    let content_lines = parent_lines(app)
+        .len()
+        .max(backlink_lines(app).len())
+        .min(5) as u16;
+    let desired = (content_lines + 2).clamp(4, 7);
+    let max_header = available_height.saturating_sub(5).max(3);
+    desired.min(max_header).min(available_height)
 }
 
 #[allow(non_snake_case)]
@@ -13204,10 +13273,10 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     ),
                 ]));
             }
-            if !node.detail.is_empty() {
+            if minimal && !node.detail.is_empty() {
                 lines.extend(focus_detail_lines(
                     &node.detail,
-                    if minimal { 2 } else { 3 },
+                    MINIMAL_FOCUS_DETAIL_PREVIEW_LINES,
                     PALETTE.muted,
                     PALETTE.text,
                     PALETTE.sky,
@@ -13267,19 +13336,6 @@ fn render_focus_card(frame: &mut Frame, area: Rect, app: &TuiApp) {
                     Span::raw(" returns here"),
                 ]));
             }
-            if !minimal {
-                lines.push(Line::from(vec![
-                    Span::styled("save mode ", Style::default().fg(PALETTE.muted)),
-                    Span::styled(
-                        if app.autosave {
-                            "autosave after each structural edit"
-                        } else {
-                            "keysave: press s to save"
-                        },
-                        Style::default().fg(PALETTE.text),
-                    ),
-                ]));
-            }
             if let Some(filter) = &app.filter {
                 let is_direct_match = current_node_matches_filter(app);
                 let mut filter_query_style = Style::default().fg(PALETTE.query);
@@ -13335,6 +13391,28 @@ fn focus_detail_lines(
         Style::default().fg(muted),
     ))];
 
+    lines.extend(detail_body_lines(
+        detail,
+        visible_lines,
+        muted,
+        text,
+        accent,
+        None,
+    ));
+
+    lines
+}
+
+fn detail_body_lines(
+    detail: &[String],
+    visible_lines: usize,
+    muted: Color,
+    text: Color,
+    accent: Color,
+    overflow_hint: Option<&str>,
+) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+
     for detail_line in detail.iter().take(visible_lines) {
         let text_value = if detail_line.is_empty() {
             " ".to_string()
@@ -13348,12 +13426,13 @@ fn focus_detail_lines(
     }
 
     if detail.len() > visible_lines {
+        let overflow_text = match overflow_hint {
+            Some(hint) => format!("… {} more line(s). {hint}", detail.len() - visible_lines),
+            None => format!("… {} more line(s)", detail.len() - visible_lines),
+        };
         lines.push(Line::from(vec![
             Span::styled("  ", Style::default().fg(muted)),
-            Span::styled(
-                format!("… {} more line(s)", detail.len() - visible_lines),
-                Style::default().fg(accent),
-            ),
+            Span::styled(overflow_text, Style::default().fg(accent)),
         ]));
     }
 
@@ -13433,6 +13512,19 @@ fn render_backlinks_lane(frame: &mut Frame, area: Rect, app: &TuiApp) {
         area,
         title,
         backlink_lines(app),
+        Style::default().bg(PALETTE.surface),
+    );
+}
+
+#[allow(non_snake_case)]
+fn render_details_lane(frame: &mut Frame, area: Rect, app: &TuiApp) {
+    let PALETTE = app.theme_colors();
+    let title = styled_title("Details", PALETTE.sky);
+    render_simple_lane(
+        frame,
+        area,
+        title,
+        details_panel_lines(app),
         Style::default().bg(PALETTE.surface),
     );
 }
@@ -13674,34 +13766,36 @@ fn keybar_spans(app: &TuiApp) -> Vec<Span<'static>> {
         separator_span(),
         key_hint("←→", "tree"),
         separator_span(),
-        key_hint("⌥←→", "nest"),
-        separator_span(),
-        key_hint("⌥↑↓", "swap"),
-        separator_span(),
         key_hint("a/A", "add"),
         separator_span(),
         key_hint("e", "edit"),
         separator_span(),
         key_hint("d", "details"),
         separator_span(),
-        key_hint("f", "attach"),
-        separator_span(),
-        key_hint("x", "delete"),
-        separator_span(),
-        key_hint("u/U", "undo"),
-        separator_span(),
         key_hint(":", "palette"),
-        separator_span(),
-        key_hint("v/V", "mode"),
         separator_span(),
         key_hint("/", "find"),
         separator_span(),
-        key_hint("s", "save"),
+        key_hint("v/V", "view"),
         separator_span(),
-        key_hint("r", "revert"),
+        key_hint("s/S", "save"),
         separator_span(),
         key_hint("?", "help"),
     ];
+
+    if !app.undo_history.is_empty() || !app.redo_history.is_empty() {
+        spans.push(separator_span());
+        spans.push(key_hint("u/U", "undo"));
+    }
+
+    if app
+        .editor
+        .current()
+        .is_some_and(|node| !node.children.is_empty())
+    {
+        spans.push(separator_span());
+        spans.push(key_hint("z/Z", "fold"));
+    }
 
     if app.filter.is_some() {
         spans.push(separator_span());
@@ -14920,9 +15014,9 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
             Line::from(vec![
                 Span::styled(
                     if app.ui_settings.ascii_accents {
-                        "// One Entry Point //"
+                        "// Command Palette //"
                     } else {
-                        "One Entry Point"
+                        "Command Palette"
                     },
                     Style::default()
                         .fg(PALETTE.text)
@@ -14931,9 +15025,9 @@ fn render_palette_overlay(frame: &mut Frame, area: Rect, app: &TuiApp, palette: 
                 Span::raw("  "),
                 Span::styled(
                     if minimal {
-                        "Ids, filters, history, views, help."
+                        "Go, filter, act, recover, learn."
                     } else {
-                        "Jump to ids, apply #tag or @metadata filters, revisit frequent places and recent locations, browse recent actions, restore checkpoints, preview themes and settings, open saved views, or find the right help topic."
+                        "Type what you intend: go somewhere, filter the map, act on the current node, recover work, change the surface, or learn a feature."
                     },
                     Style::default().fg(PALETTE.muted),
                 ),
@@ -19816,7 +19910,7 @@ fn prompt_footer_text(app: &TuiApp, mode: PromptMode) -> Option<String> {
     match mode {
         PromptMode::AddChild | PromptMode::AddSibling | PromptMode::AddRoot | PromptMode::Edit => {
             Some(
-                "Single-line node syntax: Label #tag @key:value [id:path] [[target]]. ↑/↓ jumps start/end; Alt+←/→ jumps words; Alt+Backspace deletes a word."
+                "A plain label is enough. Add optional #tag @key:value [id:path] [[target]] when the branch needs structure. ↑/↓ jumps start/end; Alt+←/→ jumps words."
                     .to_string(),
             )
         }
@@ -21045,6 +21139,7 @@ fn help_getting_started_lines(app: &TuiApp, palette: Palette) -> Vec<Line<'stati
         palette.sky,
         &[
             "Move with the arrow keys.",
+            "Run mdmind without a target when you want to choose, create, or copy a starter map.",
             "Press a to add a child, A to add a sibling, and e to edit nodes you have already made.",
             "Press / and search for a normal word before learning tag or metadata syntax.",
             "Press : or Ctrl+P when you know the branch, action, setting, or help topic you want.",
@@ -21121,10 +21216,10 @@ fn help_tui_tour_lines(app: &TuiApp, palette: Palette) -> Vec<Line<'static>> {
         "| path: current branch                                 |",
         "|                                                      |",
         "| MAP OUTLINE                            | FOCUS       |",
-        "|  > root                                | selected    |",
-        "|    - branch                            | facts       |",
-        "|    - branch                            | context     |",
-        "|                                        | side lanes  |",
+        "|  > root                                | DETAILS     |",
+        "|    - branch                            | PARENT+LINKS|",
+        "|    - branch                            | CHILDREN    |",
+        "|                                        |             |",
         "|                                                      |",
         "| status: latest result                  | keys        |",
         "+------------------------------------------------------+",
@@ -21143,7 +21238,8 @@ fn help_tui_tour_lines(app: &TuiApp, palette: Palette) -> Vec<Line<'static>> {
         &[
             "Map outline: move through rows, expand or collapse branches, and add or edit nodes.",
             "Focus panel: read the selected node's label, tags, metadata, id, line, relations, and child count.",
-            "Side lanes: use Parent, Backlinks, and Children when you need nearby context.",
+            "Details panel: read or add longer notes for the selected node.",
+            "Context panels: Parent and Backlinks sit above Children for nearby structure.",
         ],
     ));
     lines.push(Line::from(""));
@@ -21515,6 +21611,28 @@ fn current_node_matches_filter(app: &TuiApp) -> bool {
             .iter()
             .any(|path| *path == app.editor.focus_path())
     })
+}
+
+fn details_panel_lines(app: &TuiApp) -> Vec<Line<'static>> {
+    let palette = app.theme_colors();
+    match app.editor.current() {
+        Some(node) if !node.detail.is_empty() => detail_body_lines(
+            &node.detail,
+            DETAILS_PANEL_PREVIEW_LINES,
+            palette.muted,
+            palette.text,
+            palette.sky,
+            Some("Reading mode shows full details."),
+        ),
+        Some(_) => vec![Line::from(Span::styled(
+            "No details yet. Press d to add details.",
+            Style::default().fg(palette.muted),
+        ))],
+        None => vec![Line::from(Span::styled(
+            "No node is focused.",
+            Style::default().fg(palette.muted),
+        ))],
+    }
 }
 
 fn count_nodes(nodes: &[Node]) -> usize {
@@ -22399,7 +22517,7 @@ mod tests {
 
         let rendered = serialize_document(app.editor.document());
         assert!(rendered.contains("- [x] Open task #todo [id:project/open]"));
-        assert_eq!(app.status.text, "Marked task done.");
+        assert_eq!(app.status.text, "Marked task done. Press s to save.");
         assert_eq!(
             app.editor.current().expect("focus should exist").task,
             Some(TaskState::Done)

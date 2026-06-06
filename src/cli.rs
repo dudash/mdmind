@@ -324,9 +324,13 @@ enum AiCommands {
 #[command(
     name = "mdmind",
     version,
-    about = "Navigate and edit a map in a focused interactive terminal flow."
+    about = "Navigate and edit a map in a focused interactive terminal flow.",
+    after_help = "Examples:\n  mdmind\n  mdmind roadmap.md\n  mdmind roadmap.md#product/mvp\n  mdmind --preview roadmap.md\n  mdmind --as markdown README.md\n  mdmind --autosave TODO.md"
 )]
 struct TuiPreviewCli {
+    #[arg(
+        help = "Map, deep link, or Markdown file to open. Omit it to choose or create a map interactively."
+    )]
     target: Option<String>,
     #[arg(
         long = "as",
@@ -334,9 +338,15 @@ struct TuiPreviewCli {
         help = "Force how the target opens: map or markdown."
     )]
     open_as: Option<TuiOpenAs>,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Print a read-only tree preview instead of opening the full TUI."
+    )]
     preview: bool,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Start with AUTOSAVE enabled; future edits write to disk immediately."
+    )]
     autosave: bool,
     #[arg(
         long = "experimental",
@@ -356,7 +366,7 @@ struct TuiPreviewCli {
         help = "Show how this terminal reports keys to mdmind, including Alt+arrow compatibility."
     )]
     check_keys: bool,
-    #[arg(long)]
+    #[arg(long, help = "Limit preview depth when using --preview.")]
     max_depth: Option<usize>,
 }
 

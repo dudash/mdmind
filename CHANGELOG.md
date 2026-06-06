@@ -31,6 +31,15 @@ the release shape rather than every internal commit.
 
 - `mdm view-markdown <target>` opens ordinary Markdown files from the CLI.
 
+### Changed
+
+- **The main TUI is calmer and more outline-first**: full mode gives the map
+  more horizontal room, moves Details into its own panel, stacks Parent and
+  Backlinks above Children, and keeps minimal mode compact.
+- Startup, prompts, built-in help, and docs now teach `mdmind` without a target
+  and plain labels first, with save and detail hints moved into contextual
+  status or empty states.
+
 ### Changed Commands
 
 - `mdm changelog` now defaults to pretty terminal rendering; use
