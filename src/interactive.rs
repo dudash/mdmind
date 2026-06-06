@@ -792,6 +792,7 @@ impl HelpTopic {
             ],
             Self::Agents => &[
                 "Ask agents for native mdmind maps when you want a structured plan, research synthesis, writing outline, decision tree, or project breakdown that a human will keep working in. The format is better than a prose blob when branch structure, tags, metadata, ids, or cross-links actually matter.",
+                "Install the shipped agent skills with mdm skills install, or use mdm skills install --print to see the underlying npx skills add dudash/mdmind command.",
                 "When your agent environment supports skills, name the skill you want. Use mdmind-map-authoring for creating or restructuring maps, and mdm-cli-inspection for validation, search, export, and structural checks.",
                 "A good collaborative shape is a TODO map. Keep durable branches short, then ask agents to append child tasks and fill in detail lines under the branch they own instead of replacing the whole file.",
                 "For larger work, decompose the map first: one branch per workstream, owner, question, or artifact. Agents can then extend their branch with notes, decisions, risks, and next actions while the parent map stays readable.",
@@ -927,6 +928,10 @@ impl HelpTopic {
                 ("/ and :", "Search the outline or jump straight to intent"),
             ],
             Self::Agents => &[
+                (
+                    "mdm skills install",
+                    "Install the shipped mdmind skills for skill-aware agents",
+                ),
                 (
                     "mdm init map.md --template product",
                     "Start from a map scaffold instead of a blank file",
@@ -1193,6 +1198,7 @@ impl HelpTopic {
             ],
             Self::Agents => &[
                 "Ask the agent for concise node labels first. Use detail lines only when a branch genuinely needs prose, rationale, or quoted material.",
+                "Install the shipped skills with mdm skills install, or run mdm skills install --print when you only want the underlying npx command.",
                 "If skills are available, ask for the map-authoring skill when creating or restructuring a map and the CLI-inspection skill when checking one.",
                 "For shared work, assign each agent a branch. Let them append child tasks and details under that branch instead of rewriting unrelated parts of the map.",
                 "Prefer a few stable keys like @owner, @status, and [id:...] over lots of one-off metadata invented in one run.",
@@ -21391,6 +21397,7 @@ fn help_agents_lines(app: &TuiApp, palette: Palette) -> Vec<Line<'static>> {
         palette,
         palette.accent,
         &[
+            "Install the shipped skills with mdm skills install, or run mdm skills install --print to see the underlying npx command.",
             "Ask for the mdmind-map-authoring skill when creating, restructuring, or cleaning up a map.",
             "Ask for the mdm-cli-inspection skill when validating, querying, exporting, or auditing a map.",
             "Tell the agent what should stay human-readable: concise labels, useful details, and sparse ids.",

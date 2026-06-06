@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
-use std::process::ExitCode;
+use std::process::{Command as ProcessCommand, ExitCode};
 
 #[cfg(test)]
 use clap::CommandFactory;
@@ -55,13 +55,16 @@ use crate::templates::TemplateKind;
 use crate::updates::{UpdateCheck, check_for_updates};
 use crate::validate::validate_document;
 
+const MDMIND_SKILL_INSTALL_PROGRAM: &str = "npx";
+const MDMIND_SKILL_INSTALL_ARGS: &[&str] = &["skills", "add", "dudash/mdmind"];
+
 #[derive(Debug, Parser)]
 #[command(
     name = "mdm",
     version,
     about = "Inspect and validate local markdown-like thought maps.",
     long_about = "mdm is the CLI for local-first structured maps. It reads plain-text tree files, renders them for humans, and exports machine-friendly output when you ask for --json or --plain.",
-    after_help = "Examples:\n  mdm version\n  mdm changelog\n  mdm view-markdown README.md\n  mdm init ideas.md --template product\n  mdm init TODO.md --template todo\n  mdm import notes.opml\n  mdm import map.mm\n  mdm import article.html --preview --report\n  mdm import outline.md --from markdown -o map.md\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm refs ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
+    after_help = "Examples:\n  mdm version\n  mdm changelog\n  mdm skills install\n  mdm view-markdown README.md\n  mdm init ideas.md --template product\n  mdm init TODO.md --template todo\n  mdm import notes.opml\n  mdm import map.mm\n  mdm import article.html --preview --report\n  mdm import outline.md --from markdown -o map.md\n  mdm view ideas.md\n  mdm find ideas.md \"rate limit\"\n  mdm find ideas.md \"#todo\" --plain\n  mdm kv ideas.md --keys status,owner\n  mdm links ideas.md\n  mdm refs ideas.md\n  mdm relations ideas.md#product/api-design\n  mdm validate ideas.md\n  mdm export ideas.md --format json\n  mdm export ideas.md#product/mvp --format mermaid\n  mdm export ideas.md --format opml\n  mdm export ideas.md --query \"#todo @status:active\" --format json\n  mdm open ideas.md#product/api-design"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -230,6 +233,11 @@ enum Commands {
         #[command(subcommand)]
         command: AiCommands,
     },
+    #[command(about = "Install or print agent skill setup commands.")]
+    Skills {
+        #[command(subcommand)]
+        command: SkillCommands,
+    },
     #[command(
         name = "commands",
         about = "Print the mdm command catalog for agents and scripts."
@@ -317,6 +325,22 @@ enum AiCommands {
         default: bool,
         #[arg(long, help = "Override the AI profile config path.")]
         config: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum SkillCommands {
+    #[command(
+        about = "Install the bundled mdmind agent skills through the skills CLI.",
+        after_help = "Runs:\n  npx skills add dudash/mdmind\n\nExamples:\n  mdm skills install\n  mdm skills install --print"
+    )]
+    Install {
+        #[arg(
+            long,
+            action = ArgAction::SetTrue,
+            help = "Print the underlying npx command without running it."
+        )]
+        print: bool,
     },
 }
 
@@ -764,6 +788,7 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
         ),
         Commands::Examples { command } => dispatch_examples(command),
         Commands::Ai { command } => dispatch_ai(command),
+        Commands::Skills { command } => dispatch_skills(command),
         Commands::Catalog { json } => dispatch_commands(json),
         Commands::Changelog {
             version,
@@ -789,6 +814,63 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
         Commands::CheckKeys => run_key_diagnostics().map_err(CliError::from_app),
         Commands::Version { check, json } => dispatch_version(check, json),
     }
+}
+
+fn skill_install_command_text() -> String {
+    std::iter::once(MDMIND_SKILL_INSTALL_PROGRAM)
+        .chain(MDMIND_SKILL_INSTALL_ARGS.iter().copied())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn dispatch_skills(command: SkillCommands) -> Result<(), CliError> {
+    match command {
+        SkillCommands::Install { print } => dispatch_skills_install(print),
+    }
+}
+
+fn dispatch_skills_install(print: bool) -> Result<(), CliError> {
+    let command_text = skill_install_command_text();
+    if print {
+        println!("{command_text}");
+        return Ok(());
+    }
+
+    eprintln!("Running: {command_text}");
+    let status = ProcessCommand::new(MDMIND_SKILL_INSTALL_PROGRAM)
+        .args(MDMIND_SKILL_INSTALL_ARGS)
+        .status()
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                CliError::runtime(format!(
+                    "Could not find `npx`. Install Node.js/npm, then run `{command_text}` manually."
+                ))
+            } else {
+                CliError::runtime(format!("Could not run `{command_text}`: {error}"))
+            }
+        })?;
+
+    if status.success() {
+        eprintln!("Installed mdmind agent skills.");
+        return Ok(());
+    }
+
+    let exit_summary = status
+        .code()
+        .map(|code| format!("exit code {code}"))
+        .unwrap_or_else(|| "no exit code".to_string());
+    Err(CliError {
+        message: Some(format!(
+            "Skill install command failed with {exit_summary}. You can run it manually: {command_text}"
+        )),
+        exit_code: status
+            .code()
+            .and_then(|code| u8::try_from(code).ok())
+            .filter(|code| *code != 0)
+            .unwrap_or(1),
+        code: "skill_install_failed",
+        category: "external_command",
+    })
 }
 
 fn import_source(
@@ -1871,6 +1953,32 @@ fn command_catalog() -> CommandCatalog {
                     "mdm ai quick-add nvidia-nim --secret-ref env:NVIDIA_API_KEY --default",
                     "mdm ai quick-add codex-local --default",
                 ],
+            ),
+            command_info!(
+                "skills",
+                "Install or print agent skill setup commands.",
+                &["bundled_skill_reference"],
+                &["agent_skills"],
+                true,
+                false,
+                &["pretty"],
+                &[],
+                &[],
+                &[],
+                &["mdm skills install", "mdm skills install --print"],
+            ),
+            command_info!(
+                "skills install",
+                "Install the bundled mdmind agent skills through the skills CLI.",
+                &["bundled_skill_reference"],
+                &["agent_skills"],
+                true,
+                false,
+                &["pretty"],
+                &[],
+                &[flag("--print")],
+                &[],
+                &["mdm skills install", "mdm skills install --print"],
             ),
             command_info!(
                 "commands",

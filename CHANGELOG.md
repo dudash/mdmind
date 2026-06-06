@@ -30,6 +30,9 @@ the release shape rather than every internal commit.
 ### New Commands
 
 - `mdm view-markdown <target>` opens ordinary Markdown files from the CLI.
+- `mdm skills install` installs the shipped mdmind skills by running the
+  documented `npx skills add dudash/mdmind` command; use `--print` to show the
+  command without running it.
 
 ### Changed
 

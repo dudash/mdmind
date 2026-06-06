@@ -236,6 +236,8 @@ fn commands_json_lists_agent_command_catalog() {
         "ai",
         "ai presets",
         "ai quick-add",
+        "skills",
+        "skills install",
         "commands",
         "changelog",
         "open",
@@ -272,6 +274,14 @@ fn commands_json_lists_agent_command_catalog() {
             .unwrap()
             .contains(&"session_sidecars".into())
     );
+}
+
+#[test]
+fn skills_install_prints_the_underlying_npx_command() {
+    let output = run_mdm(&["skills", "install", "--print"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    assert_eq!(stdout(&output), "npx skills add dudash/mdmind\n");
 }
 
 #[test]

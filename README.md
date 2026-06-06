@@ -113,7 +113,8 @@ Release notes live in [CHANGELOG.md](CHANGELOG.md) and can be read locally with
 To check GitHub Releases for a newer build when you have network access, run
 `mdm version --check`.
 
-For Codex, Claude, or other agent clients, see [plugins/mdmind/README.md](plugins/mdmind/README.md).
+For Codex, Claude, or other agent clients, install the shipped skills with
+`mdm skills install` and see [plugins/mdmind/README.md](plugins/mdmind/README.md).
 
 ## Quick Start
 

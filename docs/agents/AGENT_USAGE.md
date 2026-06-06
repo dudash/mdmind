@@ -32,6 +32,20 @@ Agents are especially useful for:
 
 The better pattern is to ask the agent for a structured first draft, then use `mdmind` yourself to refine it.
 
+## Install The Skills
+
+For skill-aware agents, install the shipped mdmind skills with:
+
+```bash
+mdm skills install
+```
+
+To see the underlying command without running it:
+
+```bash
+mdm skills install --print
+```
+
 ## Recommended Workflow
 
 1. Ask the agent for a native `mdmind` map, not a prose summary.

@@ -5,8 +5,8 @@ This plugin bundles the two mdmind skills for agents:
 - `mdmind-map-authoring`
 - `mdm-cli-inspection`
 
-> Install with `npx skills add dudash/mdmind`, then pick the agent or agents
-> where you want the mdmind skills available.
+> Install with `mdm skills install`, then pick the agent or agents where you
+> want the mdmind skills available.
 
 The plugin-bundled skill folders under `skills/` are the canonical mdmind skill
 sources. The same plugin root is used for Claude Code and Codex:
@@ -35,6 +35,18 @@ both are needed, author first and inspect second.
 ## Skills CLI
 
 Run the installer and choose your agent target when prompted:
+
+```bash
+mdm skills install
+```
+
+To print the underlying command without running it:
+
+```bash
+mdm skills install --print
+```
+
+That wrapper runs:
 
 ```bash
 npx skills add dudash/mdmind

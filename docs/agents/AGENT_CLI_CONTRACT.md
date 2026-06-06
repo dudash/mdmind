@@ -249,6 +249,7 @@ listed as interactive in `mdm commands --json`.
 | `mdm examples list` | bundled examples | no | no | no | Human-readable list; use `mdm commands --json` for machine discovery metadata. |
 | `mdm examples path` | installed examples | no | no | no | Prints examples directory when available. |
 | `mdm examples copy <name>` | bundled examples | files | no | no | Use `all` to materialize examples; use `--force` only when intentional. |
+| `mdm skills install` | bundled skill reference | agent skills | yes | no | Convenience wrapper for `npx skills add dudash/mdmind`; use `--print` to show the command without running it. |
 | `mdm changelog` | bundled changelog | no | no | no | Reads pretty release notes for the bundled version; use `--version` or `--all` for other sections, `--plain` for raw Markdown, and `--json` for scripts. |
 | `mdm open <target>` | map | session/location sidecars in interactive mode | no | yes by default | Agents should use `--preview` or `--json`; avoid bare `open`. |
 | `mdm check-keys` | terminal input | no | no | yes | Humans only; agents should not run it. |

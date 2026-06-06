@@ -98,6 +98,8 @@
       - use normal Markdown for short prose answers, loose brainstorming, or temporary scratch notes
       - ask for concise node labels first, then detail lines where a branch needs rationale, evidence, or drafts
     - Use skills deliberately #guide [id:guide/agents/skills]
+      - run `mdm skills install` to install the shipped mdmind skills for skill-aware agents
+      - run `mdm skills install --print` when you only want the underlying `npx skills add dudash/mdmind` command
       - ask for the mdmind-map-authoring skill when creating, restructuring, or cleaning up a map
       - ask for the mdm-cli-inspection skill when validating, querying, exporting, or auditing a map
       - tell the agent what should stay human-readable: concise labels, useful details, sparse ids, and a tree that still scans
