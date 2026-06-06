@@ -343,6 +343,30 @@ pre {
   gap: 10px;
 }
 
+.brand-logo {
+  display: block;
+  width: clamp(136px, 16vw, 178px);
+  height: 44px;
+  border-radius: 10px;
+  object-fit: cover;
+  object-position: center;
+  box-shadow: 0 10px 28px rgba(4, 26, 49, 0.22);
+  transition:
+    width 220ms ease,
+    height 220ms ease,
+    border-radius 220ms ease,
+    box-shadow 220ms ease,
+    transform 220ms ease;
+}
+
+.site-header.is-scrolled .brand-logo {
+  width: 136px;
+  height: 34px;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(4, 26, 49, 0.18);
+  transform: translateY(-1px);
+}
+
 .brand-mark {
   display: inline-flex;
   align-items: center;
@@ -1298,6 +1322,20 @@ pre code {
 
 [data-theme="terminal"] .brand {
   gap: 10px;
+}
+
+[data-theme="terminal"] .brand-logo {
+  width: 128px;
+  height: 30px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-theme="terminal"] .site-header.is-scrolled .brand-logo {
+  width: 112px;
+  height: 26px;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 [data-theme="terminal"] .brand-mark {
