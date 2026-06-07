@@ -14,6 +14,7 @@
       - first learn focus, moving around the tree, adding a child, editing a line, and opening search or the palette
       - the structured features become useful as the map gets bigger and more long-lived
       - move with the arrow keys
+      - run `mdmind` without a target when you want to choose, create, or copy a starter map
       - press a to add a child
       - press A to add a sibling
       - press e to edit nodes you have already made
@@ -58,10 +59,10 @@
       - | path: current branch                                 |
       - |                                                      |
       - | MAP OUTLINE                            | FOCUS       |
-      - |  > root                                | selected    |
-      - |    - branch                            | facts       |
-      - |    - branch                            | context     |
-      - |                                        | side lanes  |
+      - |  > root                                | DETAILS     |
+      - |    - branch                            | PARENT+LINKS|
+      - |    - branch                            | CHILDREN    |
+      - |                                        |             |
       - |                                                      |
       - | status: latest result                  | keys        |
       - +------------------------------------------------------+
@@ -73,7 +74,8 @@
       - the focus panel explains the selected node
       - it shows the node label, tags, metadata, id, line number, relation counts, and child counts
       - use it when you want to inspect one branch without changing anything
-    - Side lanes #guide [id:guide/tui/lanes]
+    - Details and context panels #guide [id:guide/tui/lanes]
+      - details show longer notes attached to the focused node
       - parent shows where you came from
       - backlinks show incoming references
       - children preview what sits below the current node
@@ -96,6 +98,8 @@
       - use normal Markdown for short prose answers, loose brainstorming, or temporary scratch notes
       - ask for concise node labels first, then detail lines where a branch needs rationale, evidence, or drafts
     - Use skills deliberately #guide [id:guide/agents/skills]
+      - run `mdm skills install` to install the shipped mdmind skills for skill-aware agents
+      - run `mdm skills install --print` when you only want the underlying `npx skills add dudash/mdmind` command
       - ask for the mdmind-map-authoring skill when creating, restructuring, or cleaning up a map
       - ask for the mdm-cli-inspection skill when validating, querying, exporting, or auditing a map
       - tell the agent what should stay human-readable: concise labels, useful details, sparse ids, and a tree that still scans
@@ -113,6 +117,97 @@
       - use checkpoints before large agent rewrites so you can compare outcomes
       - validate with mdm validate before trusting generated structure
       - inspect with mdm view, mdm find, or mdmind before handing the file to another tool
+  - AI Assistance #guide @section:ai [id:guide/ai]
+    - Current state #guide [id:guide/ai/current]
+      - AI assistance is experimental and hidden unless mdmind is launched with --experimental-ai or --experimental=ai
+      - when enabled, the header shows a warning-colored EXPERIMENTAL AI badge
+      - AI is optional and quiet until you open AI Chat
+      - setup lives in AI Settings, not in a separate developer workflow
+      - detected local providers appear only when mdmind can see them on this machine
+      - ordinary provider, chat, and review state does not add an AI lamp to the header
+      - when AI has state to show, it appears on its own status row underneath the normal INFO message
+      - the global palette has one AI entry: AI: Open Chat
+      - AI Chat is the default destination; AI Settings owns detected local providers, provider setup, on/off, cancel response, and Review Suggestions
+      - setup prompts keep AI Settings open underneath, so Esc returns to AI controls instead of the map
+      - if multiple providers are configured, use AI Settings to choose the active one
+      - if the active local provider is not available anymore, AI Chat waits for you to start it again or choose another provider instead of silently switching
+      - switching providers starts a fresh AI Chat conversation so old turns are not sent to the new provider; staged Review Suggestions are kept
+      - use O in AI Settings to stop AI activity without deleting provider profiles, stored keys, or staged Review Suggestions
+      - use X in AI Settings or AI Chat to cancel a streaming response without turning AI off
+      - choose a provider in AI Settings later to turn AI back on
+      - use P in AI Chat to open AI Settings
+      - AI Chat and AI Settings show the active provider, model name, and an estimated total token count for the current TUI session
+      - on the first message, AI Chat sends the whole map when it is reasonably sized; if the map is large, mdmind omits the whole-map snapshot to avoid wasting tokens
+      - every message sends the current focus branch, AI Chat context, compact context style notes, and recent chat context to the active provider
+      - AI Chat fills in text as the provider sends response chunks
+      - Review Suggestions are staged only when your message explicitly asks for map edits or changes that can be reviewed and applied
+      - use suggest with new, missing, or additional items, or with map/branch/node/outline edits, when you want AI to return staged Review Suggestions
+      - sending a new message while one is running cancels the previous response and keeps any partial output in AI Chat
+      - turning AI off also cancels any streaming response and keeps staged Review Suggestions available for review
+      - conversational answers stay in AI Chat for the TUI session instead of needing a dismiss action
+      - cancelled AI answers and applied or dismissed Review Suggestions move into in-memory session history that is available from AI Chat until the TUI exits
+      - use Review Suggestions from AI Settings or AI Chat to inspect staged map edits, see the original Prompt line and Placement summary, toggle supported edit rows, apply checked rows, or dismiss the item
+      - in AI Chat, use Enter or A to compose, C to clear the chat and start a new conversation, Up/Down to scroll, PageUp/PageDown to jump, Tab or ] / [ to move through turns, and Home/End to jump to first/latest
+      - add-child suggestions can be applied under the chat context branch or an existing descendant branch; update suggestions can replace an existing node label or detail; remove suggestions are supported but start unchecked
+    - Ollama Local setup #guide [id:guide/ai/ollama-local]
+      - start Ollama locally and install at least one chat-capable model
+      - launch mdmind with --experimental-ai
+      - open the palette with : or Ctrl+P
+      - type ai
+      - choose AI: Open Chat
+      - if Ollama is running and has a chat model, mdmind shows Use Ollama Local
+      - press L
+      - mdmind picks a sensible installed chat model and does not ask for an API key
+      - AI Chat uses the local Ollama HTTP server and keeps the map-edit review flow unchanged
+    - NVIDIA NIM setup #guide [id:guide/ai/nvidia-nim]
+      - launch mdmind with --experimental-ai
+      - open the palette with : or Ctrl+P
+      - type ai
+      - choose AI: Open Chat
+      - press N
+      - get a key from https://build.nvidia.com/settings/api-keys
+      - paste it into the masked prompt
+      - mdmind stores the key outside the profile JSON and stores only a local secret reference in the profile
+    - Codex Local setup #guide [id:guide/ai/codex-local]
+      - install and sign in to the local codex CLI outside mdmind
+      - launch mdmind with --experimental-ai
+      - open the palette with : or Ctrl+P
+      - type ai
+      - choose AI: Open Chat
+      - if the codex CLI is detected, mdmind shows Use Codex Local
+      - press C
+      - mdmind records Codex Local as the active provider without asking for an API key
+      - AI Chat calls codex exec in read-only, ephemeral mode and sends the same first-turn whole-map snapshot, current focus branch, chat context, compact style notes, and recent chat context through stdin
+    - Claude Local setup #guide [id:guide/ai/claude-local]
+      - install and sign in to the local claude CLI outside mdmind
+      - launch mdmind with --experimental-ai
+      - open the palette with : or Ctrl+P
+      - type ai
+      - choose AI: Open Chat
+      - if the claude CLI is detected, mdmind shows Use Claude Local
+      - press D
+      - mdmind records Claude Local as the active provider without asking for an API key
+      - AI Chat calls claude -p in stream-json mode with plan permissions, disabled tools, one turn, and no session persistence
+    - Chat about a branch #recipe [id:guide/ai/chat-branch]
+      - launch mdmind with --experimental-ai
+      - focus the branch you want help with
+      - open the palette with : or Ctrl+P
+      - type ai
+      - choose AI: Open Chat
+      - press A
+      - AI Chat uses the current root as context by default; press T in AI Chat only when you want to pin a different branch, type any part of a branch name/path and press Tab to complete, or type . to pin the selected node
+      - press Enter to open the message composer
+      - if another response is streaming, the composer explains that Enter will cancel it before sending this message
+      - ask a concrete question, request cleanup, ask a follow-up, or ask for reviewable map edits
+      - say something like suggest new characters or suggest map edits I can review when you want applicable Review Suggestions
+      - if you opened AI Chat at the root, add-child Review Suggestions can target existing branches farther down when the model names a valid target
+      - Review Suggestions labels each row with Place under so you know exactly where checked add-child edits will land
+      - after submitting, AI Chat stays open on the streaming response
+      - watch response text appear in realtime
+      - conversational answers can be read there without changing the map
+      - press C in AI Chat to clear the in-memory transcript and stop sending those turns as conversation context
+      - for edit suggestions, open Review Suggestions, then press Space to toggle supported rows
+      - press Enter or A to apply checked edit rows, or D to dismiss without changing the map
   - Core Mental Model #guide @section:model [id:guide/model]
     - Focus is the center of the interface #guide [id:guide/model/focus]
       - the outline, focus card, spatial canvas, and visual map follow the current node
@@ -194,6 +289,8 @@
       - details stay attached to a node without bloating the main tree label
       - in raw files, detail lines use | ... directly under the node
       - in mdmind, d opens the detail editor and Ctrl+S saves it
+      - in full mode, details get their own panel; in minimal mode, they stay inside Focus
+      - reading mode expands long details inline while you navigate
       - in the detail editor, Ctrl+K deletes the current line
     - Reshaping the tree #reference [id:guide/editing/reshape]
       - Alt+↑ and Alt+↓ reorder a node among siblings
@@ -365,7 +462,7 @@
       - Esc restores the previous surface
     - Minimal mode #reference [id:guide/themes/minimal]
       - type minimal in the palette to toggle the quieter pro layout
-      - minimal mode condenses the shell, hides the keybar, reduces overlay chrome, and gives more room to the main tree by trimming the right-side context lanes
+      - minimal mode condenses the shell, hides the keybar, reduces overlay chrome, and gives more room to the main tree by keeping details inside Focus and trimming the right-side context panels
     - Reading mode #reference [id:guide/themes/reading]
       - type reading in the palette to toggle the detail-focused reading layout
       - reading mode keeps the outline visible but expands the current node's details inline into a larger calmer reading block

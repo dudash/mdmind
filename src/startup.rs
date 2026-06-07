@@ -367,7 +367,7 @@ impl StartupState {
             StartupAction::CreateBlank => {
                 let path = self.blank_path.trim();
                 format!(
-                    "Create a fresh map in the current directory.\n\nFile: `{}`\n\nStarter contents:\n{}\n\nUse this when you want the lightest possible starting point.",
+                    "Create a fresh map in the current directory.\n\nFile: `{}`\n\nStarter contents:\n{}\n\nAfter it opens, press e to rename the root, a to add a child, and d to add details.",
                     if path.is_empty() { "mind.md" } else { path },
                     BLANK_MAP_CONTENTS.trim_end()
                 )

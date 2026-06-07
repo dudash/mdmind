@@ -11,6 +11,7 @@ use ratatui::prelude::Color;
 #[serde(rename_all = "kebab-case")]
 pub enum ThemeId {
     #[default]
+    Mdmind,
     Workbench,
     Paper,
     Blueprint,
@@ -26,7 +27,8 @@ pub enum ThemeId {
 }
 
 impl ThemeId {
-    pub const ALL: [ThemeId; 12] = [
+    pub const ALL: [ThemeId; 13] = [
+        ThemeId::Mdmind,
         ThemeId::Workbench,
         ThemeId::Paper,
         ThemeId::Blueprint,
@@ -43,6 +45,7 @@ impl ThemeId {
 
     pub fn label(self) -> &'static str {
         match self {
+            Self::Mdmind => "mdmind",
             Self::Workbench => "Workbench",
             Self::Paper => "Paper",
             Self::Blueprint => "Blueprint",
@@ -60,6 +63,9 @@ impl ThemeId {
 
     pub fn summary(self) -> &'static str {
         match self {
+            Self::Mdmind => {
+                "The mdmind brand surface: deep navy focus, orange action, teal structure, and crisp cyan anchors."
+            }
             Self::Workbench => {
                 "A midnight workbench for everyday mapping, with teal structure, blue anchors, and amber metadata close at hand."
             }
@@ -101,7 +107,8 @@ impl ThemeId {
 
     pub fn keywords(self) -> &'static str {
         match self {
-            Self::Workbench => "theme workbench navy cyan amber default planning project manager",
+            Self::Mdmind => "theme mdmind default brand navy orange teal cyan logo focused",
+            Self::Workbench => "theme workbench navy cyan amber planning project manager",
             Self::Paper => "theme paper light cream ink warm writer meeting notes drafting",
             Self::Blueprint => {
                 "theme blueprint blue technical grid engineer decomposer architecture"
@@ -126,6 +133,27 @@ impl ThemeId {
 
     pub fn theme(self) -> Theme {
         match self {
+            Self::Mdmind => Theme {
+                background: Color::Rgb(0, 20, 43),
+                surface: Color::Rgb(3, 31, 60),
+                surface_alt: Color::Rgb(8, 48, 86),
+                border: Color::Rgb(33, 91, 125),
+                accent: Color::Rgb(255, 138, 0),
+                sky: Color::Rgb(49, 200, 184),
+                warn: Color::Rgb(255, 188, 82),
+                danger: Color::Rgb(255, 103, 103),
+                tag: Color::Rgb(49, 200, 184),
+                metadata: Color::Rgb(255, 138, 0),
+                id: Color::Rgb(117, 226, 238),
+                query: Color::Rgb(180, 246, 239),
+                attention: Color::Rgb(255, 165, 52),
+                relation: Color::Rgb(49, 200, 184),
+                count: Color::Rgb(255, 188, 82),
+                selection: Color::Rgb(8, 48, 86),
+                selection_text: Color::Rgb(235, 250, 255),
+                text: Color::Rgb(230, 244, 250),
+                muted: Color::Rgb(137, 173, 190),
+            },
             Self::Workbench => Theme {
                 background: Color::Rgb(8, 15, 24),
                 surface: Color::Rgb(15, 25, 38),
@@ -410,7 +438,7 @@ impl<'de> Deserialize<'de> for UiSettings {
     {
         let raw = RawUiSettings::deserialize(deserializer)?;
         Ok(Self {
-            theme: raw.theme.unwrap_or(ThemeId::Workbench),
+            theme: raw.theme.unwrap_or(ThemeId::Mdmind),
             motion_enabled: raw
                 .motion_enabled
                 .unwrap_or_else(|| raw.reduced_motion.map(|reduced| !reduced).unwrap_or(true)),
@@ -425,7 +453,7 @@ impl<'de> Deserialize<'de> for UiSettings {
 impl Default for UiSettings {
     fn default() -> Self {
         Self {
-            theme: ThemeId::Workbench,
+            theme: ThemeId::Mdmind,
             motion_enabled: true,
             ascii_accents: false,
             minimal_mode: false,

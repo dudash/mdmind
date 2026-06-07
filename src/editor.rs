@@ -163,6 +163,24 @@ impl Editor {
         }
 
         let node = parse_fragment(fragment)?;
+        self.add_child_node(node)
+    }
+
+    pub fn add_child_with_detail(&mut self, fragment: &str, detail: &str) -> Result<(), AppError> {
+        let mut node = parse_fragment(fragment)?;
+        node.detail = normalize_detail(detail);
+        if self.focus_path.is_empty() && self.document.nodes.is_empty() {
+            let next_index = self.document.nodes.len();
+            return self.apply_change(move |document| {
+                document.nodes.push(node);
+                vec![next_index]
+            });
+        }
+
+        self.add_child_node(node)
+    }
+
+    fn add_child_node(&mut self, node: Node) -> Result<(), AppError> {
         let focus_path = self.focus_path.clone();
         self.apply_change(move |document| {
             let parent = get_node_mut(&mut document.nodes, &focus_path)
@@ -247,6 +265,43 @@ impl Editor {
             let node = get_node_mut(&mut document.nodes, &focus_path)
                 .expect("focus path should be valid before mutation");
             node.detail = detail_lines;
+            focus_path
+        })
+    }
+
+    pub fn update_current_parts(
+        &mut self,
+        fragment: Option<&str>,
+        detail: Option<&str>,
+    ) -> Result<(), AppError> {
+        let Some(current) = self.current().cloned() else {
+            return Err(AppError::new("The document has no focused node."));
+        };
+        if fragment.is_none() && detail.is_none() {
+            return Err(AppError::new("No node update was provided."));
+        }
+
+        let replacement = fragment.map(parse_fragment).transpose()?;
+        let detail_lines = detail.map(normalize_detail);
+        let focus_path = self.focus_path.clone();
+        self.apply_change(move |document| {
+            let node = get_node_mut(&mut document.nodes, &focus_path)
+                .expect("focus path should be valid before mutation");
+            if let Some(replacement) = replacement {
+                node.text = replacement.text;
+                node.task = replacement.task;
+                node.tags = replacement.tags;
+                node.metadata = replacement.metadata;
+                node.id = replacement.id;
+                node.references = replacement.references;
+                node.relations = replacement.relations;
+            }
+            if let Some(detail_lines) = detail_lines {
+                node.detail = detail_lines;
+            } else {
+                node.detail = current.detail;
+            }
+            node.children = current.children;
             focus_path
         })
     }

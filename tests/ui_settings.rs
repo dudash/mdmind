@@ -51,6 +51,19 @@ fn ui_settings_round_trip_through_disk() {
 }
 
 #[test]
+fn ui_settings_default_to_mdmind_theme() {
+    let map_path = temp_map_path("default-theme.md");
+    std::fs::write(&map_path, "- Root\n").expect("fixture map should be writable");
+
+    let loaded = load_ui_settings_for(&map_path).expect("missing settings should load defaults");
+    assert_eq!(loaded.theme, ThemeId::Mdmind);
+    assert_eq!(ThemeId::Mdmind.label(), "mdmind");
+    assert!(ThemeId::Mdmind.summary().contains("brand surface"));
+
+    std::fs::remove_file(map_path).ok();
+}
+
+#[test]
 fn ui_settings_load_older_sidecars_without_minimal_mode() {
     let map_path = temp_map_path("older-product.md");
     std::fs::write(&map_path, "- Root\n").expect("fixture map should be writable");

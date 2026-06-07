@@ -1,9 +1,10 @@
 # Themes And Minimal Mode
 
-`mdmind` now has a real surface system, not just one default theme.
+`mdmind` now has a branded default theme and a broader surface system.
 
 Current built-in themes:
 
+- mdmind (default)
 - Workbench
 - Paper
 - Blueprint
