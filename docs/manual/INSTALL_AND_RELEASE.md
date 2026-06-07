@@ -60,6 +60,25 @@ Current release flow:
 6. Generate checksums and a Homebrew formula from the release assets.
 7. Optionally publish the formula into a tap repo.
 
+## GitHub Actions Workflows
+
+Use **Release / Prepare, Tag, Build** for normal releases. Run it from `main`
+with the semver version input, such as `0.9.0`. It validates the changelog,
+updates `Cargo.toml` and `Cargo.lock` when needed, commits that version prep
+when there is a diff, creates the `vX.Y.Z` tag, creates the GitHub release,
+builds the platform archives, and uploads install metadata. If the version files
+are already prepared, the prep commit is skipped and the release continues.
+
+| Workflow | When it runs | What it does |
+| --- | --- | --- |
+| `CI / PR Checks` | Pull requests and pushes to `main` | Runs format, clippy, tests, and doc link checks. |
+| `Pages / Website Deploy` | Site changes on `main`, or manual dispatch | Publishes the static site to GitHub Pages. |
+| `Release / Prepare, Tag, Build` | Manual dispatch from `main` | Normal release path: validate, prepare version, tag, create release, build archives, and upload installer metadata. |
+| `Release / Tag Push Build` | A manually pushed `vX.Y.Z` tag | Fallback release path when the tag already exists or is created outside the normal manual workflow. |
+
+The `Copilot` and `Copilot code review` entries in the Actions sidebar are
+GitHub-managed integrations, not workflows defined in this repository.
+
 ## Changelog
 
 `CHANGELOG.md` is the durable source for user-facing release notes. Keep it

@@ -1,4 +1,4 @@
-name: Prepare Release
+name: Release / Prepare, Tag, Build
 
 on:
   workflow_dispatch:
@@ -110,6 +110,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml Cargo.lock
+          if git diff --cached --quiet -- Cargo.toml Cargo.lock; then
+            echo "Cargo.toml and Cargo.lock are already prepared for v${VERSION}; skipping release prep commit."
+            exit 0
+          fi
           git commit -m "chore(release): prepare v${VERSION}"
 
       - name: Create tag
