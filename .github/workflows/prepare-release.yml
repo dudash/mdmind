@@ -29,7 +29,7 @@ jobs:
           echo "tag_name=v${VERSION}" >> "${GITHUB_OUTPUT}"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -136,7 +136,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout release tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ needs.prepare-release.outputs.tag_name }}
 
@@ -153,7 +153,7 @@ jobs:
         run: cargo run --bin mdm -- changelog --version "${VERSION}" > mdmind-release-notes.md
 
       - name: Create release entry
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.prepare-release.outputs.tag_name }}
           name: ${{ needs.prepare-release.outputs.tag_name }}
@@ -183,7 +183,7 @@ jobs:
             archive_ext: zip
     steps:
       - name: Checkout release tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ needs.prepare-release.outputs.tag_name }}
 
@@ -233,7 +233,7 @@ jobs:
           "ASSET=$artifact" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload release artifact
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.prepare-release.outputs.tag_name }}
           files: ${{ env.ASSET }}
@@ -253,7 +253,7 @@ jobs:
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - name: Checkout release tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ needs.prepare-release.outputs.tag_name }}
 
@@ -291,7 +291,7 @@ jobs:
             > mdmind.rb
 
       - name: Upload install metadata to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.prepare-release.outputs.tag_name }}
           files: |
@@ -300,7 +300,7 @@ jobs:
 
       - name: Publish Homebrew tap
         if: ${{ env.HOMEBREW_TAP_REPO != '' && env.HOMEBREW_TAP_TOKEN != '' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ${{ env.HOMEBREW_TAP_REPO }}
           token: ${{ env.HOMEBREW_TAP_TOKEN }}
