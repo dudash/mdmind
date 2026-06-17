@@ -2,6 +2,12 @@
 
 Mindspace is the optional folder-level workspace layer for mdmind.
 
+The corrected UX bet is agent-first but still local-first: users ask Claude
+Code, Codex, Hermes, or another capable agent to organize, link, generate,
+move, and maintain a workspace; `mdmind .` is where humans inspect, edit,
+navigate, and review the result; `mdm mindspace ...` is the deterministic
+contract underneath.
+
 It is deliberately self-contained. The core product remains:
 
 - one file is a useful map
@@ -16,6 +22,7 @@ checkpoints.
 ## Start Here
 
 - [VALUE.md](VALUE.md): user value, real-world examples, and the product wedge.
+- [EXPERIENCE_MODEL.md](EXPERIENCE_MODEL.md): the agent-first, `mdmind`-reviewed, CLI-backed UX model.
 - [USER_STORIES.md](USER_STORIES.md): detailed persona journeys, aha moments, and delight tests for the target Mindspace experience.
 - [REFERENCE.md](REFERENCE.md): manifest schema, core objects, command vocabulary, JSON formats, phases, and safety model.
 - [BOUNDARIES.md](BOUNDARIES.md): how Mindspace stays optional and avoids bleeding into core map behavior.
@@ -35,7 +42,8 @@ Examples:
 
 - A new `.mdmind/mindspace.json` field belongs in this section.
 - A `mdm mindspace scan` JSON format belongs in this section and the agent CLI
-  contract.
+  contract, but user-facing docs should lead with the agent or `mdmind` flow
+  unless they are explicitly about scripting.
 - A new map syntax feature belongs in `docs/reference/`, with a note here only
   if Mindspace uses it.
 - A TUI workspace switcher or cross-file navigation design belongs here; a

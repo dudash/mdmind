@@ -14,10 +14,16 @@ first-class. Mindspace adds a folder inventory and safety model around maps,
 Markdown pages, sources, generated artifacts, agent sessions, reviews, and
 checkpoints.
 
+For the user-facing experience model, see
+[EXPERIENCE_MODEL.md](EXPERIENCE_MODEL.md). The short version is: users ask an
+agent to organize, link, generate, or maintain a workspace; `mdmind .` is where
+they inspect and edit the result; `mdm mindspace ...` is the deterministic
+contract agents and tests rely on underneath.
+
 ## Product Model
 
-A mindspace is a local folder that `mdm` and `mdmind` can inspect as one working
-context while keeping files plain, local, and inspectable.
+A mindspace is a local folder that agents, `mdm`, and `mdmind` can treat as one
+working context while keeping files plain, local, and inspectable.
 
 A mindspace can contain mixed roles:
 
@@ -34,8 +40,17 @@ A mindspace can contain mixed roles:
 
 The manifest records roles. It does not require every Markdown file to become a
 native mdmind map, and it does not ask users to choose visible adoption profiles
-such as `obsidian-vault` or `llm-wiki`. The onboarding path is inspect first,
-then explicitly set up:
+such as `obsidian-vault` or `llm-wiki`.
+
+The user-facing onboarding path is agent-first:
+
+```text
+Organize this folder as a mindspace. Keep sources read-only, identify maps and
+ordinary pages, propose a manifest, and show me what you would write before you
+write it.
+```
+
+The deterministic substrate is inspect first, then explicitly set up:
 
 ```bash
 mdm mindspace scan .
@@ -43,6 +58,9 @@ mdm mindspace setup . --preview
 mdm mindspace setup . --write
 mdmind .
 ```
+
+Docs for scripts and agents may show these commands directly. Product stories
+should lead with the natural-language request and `mdmind` review surface.
 
 ## Manifest Schema
 
@@ -162,6 +180,10 @@ behavior belong to `mdm mindspace scan`, `mdm mindspace lint`, and `mdmind .`.
 Mindspace commands are future commands unless already implemented. Existing
 single-file commands remain unchanged. Future session and review commands live
 under `mdm mindspace`, not a broad `mdm agent` namespace.
+
+These commands are the public contract, not the required primary UI. Agent
+skills, project instructions, MCP adapters, and the TUI should all use this same
+behavior instead of creating hidden alternatives.
 
 | Command | Stage | Contract |
 | --- | --- | --- |

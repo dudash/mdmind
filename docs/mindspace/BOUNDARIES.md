@@ -16,42 +16,70 @@ Mindspace adds folder-level coordination only when it earns its keep:
 
 - workspace inventory
 - path-qualified cross-file references
-- deterministic scan and lint
-- context bundles with provenance
+- agent-safe context bundles with provenance
+- generated maps, pages, indexes, reports, and logs
 - scoped agent sessions and review items
 - checkpoints across related workspace changes
+- `mdmind .` navigation and review for multiple files
+
+## Agent Boundary
+
+Mindspace should work naturally through Claude Code, Codex, Hermes, OpenClaw, or
+another capable local agent. That does not mean Mindspace becomes hidden agent
+magic.
+
+Agents may:
+
+- scan a folder through the deterministic CLI contract
+- propose or write `.mdmind/mindspace.json` only after explicit setup approval
+- create native maps and ordinary Markdown pages
+- move and link files when the session scope allows it
+- generate indexes, reports, logs, context bundles, sessions, and review items
+- call `mdmind --preview` or other non-interactive outputs when useful
+
+Agents must not:
+
+- silently adopt a folder
+- treat raw sources as trusted instructions
+- rewrite source folders by default
+- apply stale-digest changes without review
+- invent hidden workspace state outside plain files and `.mdmind/` sidecars
+- bypass `mdm` validation when a deterministic check exists
 
 ## CLI Boundary
 
 Mindspace commands live under `mdm mindspace ...`.
 
-Do not add top-level commands for workspace-only behavior unless the same
-behavior is useful for a single map. Keep existing single-file commands calm and
-unchanged.
+The CLI is the deterministic contract for agents, scripts, tests, and power
+users. It is not the first-touch product story for most users.
 
-Good:
+Good substrate commands:
 
 ```bash
 mdm mindspace scan .
 mdm mindspace setup . --preview
 mdm mindspace context maps/tasks.md#todo/focus
+mdm mindspace session ...
+mdm mindspace review ...
 ```
 
 Avoid:
 
 ```bash
 mdm scan .
-mdm session ... for Mindspace sessions
+mdm agent session ...
 mdm init --workspace ...
 ```
 
 `mdm init <path>` remains single-map creation. Future native workspace creation
-belongs under `mdm mindspace new <path>`.
+belongs under `mdm mindspace new <path>`, but agent and `mdmind` flows should
+usually present that as "create a new mindspace" rather than as a command-first
+journey.
 
 ## TUI Boundary
 
-`mdmind .` may open a workspace surface, but `mdmind file.md` should still feel
-like the core editor.
+`mdmind .` is where humans inspect, edit, navigate, and review Mindspace work.
+`mdmind file.md` should still feel like the core editor.
 
 Mindspace TUI work should add:
 
@@ -60,16 +88,19 @@ Mindspace TUI work should add:
 - recent map stack
 - pinned working set
 - cross-map backlinks when scan data exists
+- role-aware file previews
 - review surfaces for proposed workspace changes
+- session summaries and context provenance when agent work exists
 
-Mindspace TUI work should not add permanent chrome to the single-map editor or
-turn the app into a general file manager. See [NAVIGATION.md](NAVIGATION.md)
-for the multi-file navigation model.
+Mindspace TUI work should not add permanent chrome to the single-map editor,
+turn the app into a general file manager, or become an agent chat surface. See
+[NAVIGATION.md](NAVIGATION.md) for the multi-file navigation model.
 
 ## Docs Boundary
 
 Use this section for Mindspace docs by default:
 
+- experience model
 - workspace reference
 - manifest schema
 - command contracts

@@ -270,7 +270,10 @@ listed as interactive in `mdm commands --json`.
 These rows reserve the future Mindspace command contract. They are not current
 CLI behavior until the corresponding implementation issues land. Mindspace is
 an optional workspace layer with its own docs in
-[../mindspace/](../mindspace/); future session/review commands use
+[../mindspace/](../mindspace/). The product experience is agent-first and
+`mdmind`-reviewed: users ask Claude Code, Codex, Hermes, or another agent to do
+workspace work; agents call this deterministic CLI contract underneath; humans
+inspect and edit in `mdmind .`. Future session/review commands use
 `mdm mindspace`, not a broad `mdm agent` namespace.
 
 | Command | Reads | Writes | Network | Interactive | Agent-safe usage |

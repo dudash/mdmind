@@ -1,11 +1,14 @@
 # Mindspace Navigation
 
 Mindspace needs stronger multi-file navigation than the single-file TUI has
-today, but it should not become an Obsidian-style vault browser.
+today, because agents will be creating, moving, linking, and generating files
+across a workspace. The TUI is where humans inspect and edit that structured
+result, but it should not become an Obsidian-style vault browser.
 
 Obsidian is page-first and many-files-first. `mdmind` is map-first and
-tree-first. Mindspace should make a set of things navigable while preserving one
-active editing surface.
+tree-first. Agent conversation is request-first. Mindspace should connect those
+realities: the agent can organize the folder, and `mdmind .` should make the
+result navigable while preserving one active editing surface.
 
 ## Current Baseline
 
@@ -25,7 +28,8 @@ reports, sessions, reviews, and checkpoints.
 Yes, Mindspace should strengthen external-file navigation. The right model is
 workspace navigation, not general file browsing.
 
-The TUI should help users move among known workspace objects:
+The TUI should help users move among known workspace objects, especially after
+an agent has proposed or written changes:
 
 - maps
 - branch ids
@@ -38,6 +42,10 @@ The TUI should help users move among known workspace objects:
 - session and review records
 
 It should avoid making the left side of the product a permanent file tree.
+
+The user should be able to ask an agent to create a map, link a source, move an
+inbox item, or generate a report, then open `mdmind .` and immediately see where
+that work landed.
 
 ## Interaction Model
 
@@ -60,6 +68,8 @@ Cross-file targets should support a quick peek when possible:
 - ordinary Markdown page: show title/heading preview and role
 - source file: show path, type, digest/mtime when available, and read-only
   status
+- agent-generated file: show generator/session, target, validation state, and
+  whether it is review-only
 - missing target: show a clear unresolved-target message and suggested
   follow-up
 
@@ -80,7 +90,8 @@ When the user commits:
   features exist
 
 The user should always know whether they are editing a map, reading a page, or
-reviewing a generated object.
+reviewing a generated object. Agent-created content should never feel
+indistinguishable from human-authored content until the user accepts it.
 
 ### 4. Workspace Switcher
 
@@ -100,6 +111,10 @@ Switcher entries should include:
 
 This is the primary many-file affordance. It should be searchable and keyboard
 first.
+
+When an agent has just worked on the mindspace, the switcher should make the
+agent's touched files and review items easy to find without turning them into
+permanent chrome.
 
 ### 5. Role-Aware Browse
 
@@ -128,6 +143,7 @@ Users need a small remembered set more than they need a full file browser:
 - pinned maps
 - last focused branch per map
 - back/forward across file and branch jumps
+- files touched by the latest agent session
 - optional "workspace landing" that shows current work, warnings, and open
   reviews
 
@@ -143,6 +159,8 @@ navigation:
 - path-qualified map refs can peek and then switch maps
 - ordinary file refs can peek or open read-only
 - non-text files remain external-open or metadata-only preview
+- proposed agent write targets can show diff, rationale, validation, and stale
+  digest status
 
 The preview should answer "what is this target?" The switcher and navigation
 stack answer "move me there and let me come back."
@@ -156,9 +174,12 @@ Mindspace TUI navigation should not initially provide:
 - freeform vault tagging for every Markdown file
 - background ingestion when opening a folder
 - automatic conversion of ordinary Markdown to mdmind maps
+- an embedded agent chat UI
 
 Those features would make Mindspace feel like a second notes app instead of an
-optional workspace layer.
+optional workspace layer. Agent conversation can stay in Claude Code, Codex,
+Hermes, or another agent surface; `mdmind` should be the place for local
+inspection, editing, navigation, and review.
 
 ## MVP Navigation Slice
 
@@ -171,6 +192,8 @@ The first useful navigation slice should include:
 5. Missing targets show a helpful unresolved-target state.
 6. Ordinary Markdown and sources remain read-only unless explicitly imported or
    edited through a future review flow.
+7. Agent-touched files and proposed review items are discoverable from the
+   landing and switcher.
 
 This gives Mindspace its own many-file feel without losing the single-map heart
 of mdmind.

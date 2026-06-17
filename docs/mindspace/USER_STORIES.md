@@ -5,8 +5,8 @@ personas in `docs/art/`.
 
 They are intentionally concrete. Mindspace should not feel like a vague
 "workspace for notes." It should feel like a quiet local workshop where people
-can understand a folder, move by branch-level meaning, invite agents safely, and
-trust what changed.
+can ask an agent to organize real files, then use `mdmind` to understand the
+folder, move by branch-level meaning, and trust what changed.
 
 Implementation note: these are product stories for the Mindspace arc. Core
 relation target classification and path-qualified branch validation exist now.
@@ -14,14 +14,19 @@ Folder scan, setup, context bundles, workspace landing, sessions, reviews, and
 source reports remain staged in the Mindspace roadmap unless marked as current
 single-map behavior.
 
+Experience note: these stories lead with agent requests because that is the
+intended user habit. The `mdm mindspace ...` commands are still shown where they
+matter, but as the deterministic substrate an agent, script, or power user can
+audit. See [EXPERIENCE_MODEL.md](EXPERIENCE_MODEL.md).
+
 ## Cast
 
-| Persona | Avatar | Core need | Mindspace promise |
+| Persona | Avatar | Primary interaction | Mindspace promise |
 | --- | --- | --- | --- |
-| Priya Planner | <img src="../art/priya-planner.png" alt="Priya Planner" width="120"> | Turn scattered product work into a navigable operating map. | "Show me what matters, what is blocked, what changed, and what needs review." |
-| Mateo Techie | <img src="../art/mateo-techie.png" alt="Mateo Techie" width="120"> | Keep technical decisions, tasks, docs, and agent handoffs synchronized. | "Give agents exact branch context and make cross-file references verifiable." |
-| Ren Writer | <img src="../art/ren-writer.png" alt="Ren Writer" width="120"> | Manage a living story world without flattening it into a generic notes vault. | "Let the tree carry the draft, while sources, scenes, and references stay close." |
-| Nova Researcher | <img src="../art/nova-researcher.png" alt="Nova Researcher" width="120"> | Preserve source-grounded synthesis and know when claims need attention. | "Keep sources read-only, claims branch-addressable, and context packets cited." |
+| Priya Planner | <img src="../art/priya-planner.png" alt="Priya Planner" width="120"> | Ask an agent to organize launch work; review and edit in `mdmind .`. | "Show me what matters, what is blocked, what changed, and what needs review." |
+| Mateo Techie | <img src="../art/mateo-techie.png" alt="Mateo Techie" width="120"> | Drive Codex, Claude Code, Hermes, scripts, and `mdm` directly when useful. | "Give agents exact branch context and make cross-file references verifiable." |
+| Ren Writer | <img src="../art/ren-writer.png" alt="Ren Writer" width="120"> | Ask an assistant editor for continuity passes; keep authorship in `mdmind .`. | "Let the tree carry the draft, while sources, scenes, and references stay close." |
+| Nova Researcher | <img src="../art/nova-researcher.png" alt="Nova Researcher" width="120"> | Ask an agent for source-grounded synthesis; audit claims in `mdmind .`. | "Keep sources read-only, claims branch-addressable, and context packets cited." |
 
 ## Story 1: Priya Turns A Launch Folder Into A Calm Operating Room
 
@@ -58,10 +63,18 @@ What Priya is thinking:
 Narrator insight:
 
 Priya does not need another place to put notes. She needs a way to see the
-roles her files are already playing. Her first relief should come before any AI
-or automation appears.
+roles her files are already playing. Her first relief should come before any
+write happens, even if the discovery is being driven by an agent.
 
-Target interaction:
+What Priya asks Claude Code or Codex:
+
+```text
+Organize this launch folder as a mindspace. Identify the maps, docs, inbox, log,
+and trusted instructions. Do not write anything yet; show me the proposed model
+first.
+```
+
+Under the hood:
 
 ```bash
 mdm mindspace scan launch-q3
@@ -98,7 +111,7 @@ Priya's first aha:
 
 ### 8 Minutes In: Setup Feels Like Consent, Not Capture
 
-Priya runs:
+The agent proposes:
 
 ```bash
 mdm mindspace setup launch-q3 --preview
@@ -125,7 +138,11 @@ The preview calls out:
 - sources, if configured later, default read-only
 - generated reports and logs are explicit roles
 
-Priya approves:
+Priya tells the agent:
+
+> Yes, write only the manifest. Do not move any files yet.
+
+The agent applies:
 
 ```bash
 mdm mindspace setup launch-q3 --write
@@ -138,7 +155,8 @@ The only write is `.mdmind/mindspace.json`.
 Priya opens the human surface:
 
 ```bash
-mdmind launch-q3
+cd launch-q3
+mdmind .
 ```
 
 The workspace landing shows:
@@ -210,9 +228,13 @@ and checkable by a deterministic tool.
 
 ### 52 Minutes In: Agent Help Becomes Reviewable
 
-Priya asks an agent to prepare the launch review packet for the pricing branch.
+Priya asks an agent:
 
-Target future command:
+> Prepare the launch review packet for the pricing branch. Use linked decisions,
+> customer insight branches, and the relevant PRD headings. Leave proposed file
+> changes for review.
+
+Under the hood:
 
 ```bash
 mdm mindspace context maps/roadmap.md#launch/pricing \
@@ -325,7 +347,7 @@ Mateo mistypes:
 [[rel:depends-on->maps/decisions.md#decision/auth-tokens]]
 ```
 
-He runs:
+Mateo or the agent runs:
 
 ```bash
 mdm validate maps/tasks.md
@@ -345,7 +367,14 @@ confidence before any large workspace automation exists.
 
 ### 20 Minutes In: Context Bundle Instead Of Folder Dump
 
-Target future command:
+What Mateo asks the agent:
+
+```text
+Work on maps/tasks.md#todo/auth-retry. Use linked decisions and API docs only.
+If you update project memory, submit the changes as review items.
+```
+
+Under the hood:
 
 ```bash
 mdm mindspace context maps/tasks.md#todo/auth-retry \
@@ -390,7 +419,7 @@ The agent proposes:
 
 Mindspace turns the proposed map edits into a session record and review items.
 
-Target future commands:
+Future substrate commands:
 
 ```bash
 mdm mindspace session submit <session-id>
@@ -464,7 +493,7 @@ The scene branch:
 
 ### 12 Minutes In: Relations Become Creative Handles
 
-Ren runs:
+Ren asks the TUI or agent to inspect the relation targets. Under the hood:
 
 ```bash
 mdm relations maps/book.md#chapter/08/reunion --plain
@@ -520,7 +549,12 @@ turning the session into file browsing.
 
 ### 42 Minutes In: Working Set Becomes A Writer's Desk
 
-Ren opens `mdmind novel/`.
+Ren opens:
+
+```bash
+cd novel
+mdmind .
+```
 
 The workspace landing shows:
 
@@ -547,7 +581,7 @@ Ren asks an agent:
 > Find continuity risks for Chapter 8 using the linked character, place, and
 > theme branches. Do not rewrite the draft.
 
-Target future command:
+Under the hood:
 
 ```bash
 mdm mindspace context maps/book.md#chapter/08/reunion \
@@ -612,7 +646,15 @@ visible without turning raw sources into editable map content.
 
 ### 10 Minutes In: Roles Change The Mood
 
-Target interaction:
+What Nova asks an agent:
+
+```text
+Inspect this research folder. Keep sources read-only, identify synthesis maps
+and ordinary pages, and tell me what should be reviewed before you write
+anything.
+```
+
+Under the hood:
 
 ```bash
 mdm mindspace scan research-brief
@@ -669,7 +711,7 @@ relations explain structure.
 
 ### 40 Minutes In: Context With Provenance Beats A Summary
 
-Target future command:
+Under the hood:
 
 ```bash
 mdm mindspace context maps/claims.md#claim/local-review-trust \
@@ -707,7 +749,7 @@ opaque summary.
 
 ### 70 Minutes In: Staleness Becomes Review, Not Panic
 
-Target future source check:
+Under the hood:
 
 ```bash
 mdm mindspace lint research-brief
@@ -746,6 +788,7 @@ These stories point to the same design spine:
 
 | Moment | What the user feels | Product behavior |
 | --- | --- | --- |
+| Agent request before commands | "I can ask for the workspace I want." | Agent skills translate natural-language work into deterministic Mindspace operations. |
 | Inspection before setup | "It understands the folder without taking it over." | `scan` is read-only; `setup --preview` comes before writes. |
 | Branch-level targeting | "This points at the actual idea, not just the file." | Stable ids and path-qualified branch refs. |
 | Role separation | "Sources, maps, pages, logs, and reviews are different kinds of things." | Manifest roles and role-aware navigation. |
@@ -757,15 +800,17 @@ These stories point to the same design spine:
 
 The stories become useful only if future slices can prove them:
 
-- Priya test: scan a mixed planning folder, preview a manifest, open a roadmap
-  branch, and show cross-file relation diagnostics.
+- Priya test: ask an agent to organize a mixed planning folder, preview a
+  manifest, open a roadmap branch in `mdmind .`, and show cross-file relation
+  diagnostics.
 - Mateo test: classify and validate `maps/decisions.md#decision/auth-token-model`
-  from a task map, then produce a bounded context packet with a trusted
-  `AGENTS.md`.
+  from a task map, then have an agent produce a bounded context packet with a
+  trusted `AGENTS.md`.
 - Ren test: peek a cross-file branch without switching the active map, then
   open it and return to the previous branch.
-- Nova test: include source refs with provenance, flag changed sources, and turn
-  stale synthesis into review items rather than automatic edits.
+- Nova test: ask an agent for source-grounded synthesis, include source refs
+  with provenance, flag changed sources, and turn stale synthesis into review
+  items rather than automatic edits.
 
 Each test should include the user's visible moment of relief. If a slice cannot
 produce one of those moments, it is probably infrastructure, not product value.
