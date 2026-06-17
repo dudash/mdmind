@@ -1,7 +1,9 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
-use crate::model::{Diagnostic, Document, Node, Severity, TaskState};
+use crate::model::{Diagnostic, Document, Node, RelationTarget, Severity, TaskState};
+use crate::parser::parse_document;
 
 pub fn validate_document(document: &Document) -> Vec<Diagnostic> {
     validate_document_with_base_path(document, None)
@@ -55,21 +57,184 @@ pub fn validate_document_with_base_path(
     let id_counts = seen_ids;
     walk_nodes(&document.nodes, &mut |node| {
         for relation in &node.relations {
-            match id_counts.get(&relation.target) {
-                Some(_) => {}
-                None => diagnostics.push(Diagnostic {
-                    severity: Severity::Warning,
-                    line: node.line,
-                    message: format!(
-                        "Relation target '{}' does not match any node id.",
-                        relation.target
-                    ),
-                }),
-            }
+            validate_relation_target(
+                node,
+                relation.target_kind(),
+                base_path,
+                &id_counts,
+                &mut diagnostics,
+            );
         }
     });
 
     diagnostics
+}
+
+fn validate_relation_target(
+    node: &Node,
+    target: RelationTarget<'_>,
+    base_path: Option<&Path>,
+    same_file_ids: &HashMap<String, usize>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    match target {
+        RelationTarget::SameFileId(id) => {
+            if !same_file_ids.contains_key(id) {
+                diagnostics.push(Diagnostic {
+                    severity: Severity::Warning,
+                    line: node.line,
+                    message: format!("Relation target '{id}' does not match any node id."),
+                });
+            }
+        }
+        RelationTarget::PathQualifiedBranch { path, id } => {
+            validate_path_qualified_branch(node.line, path, id, base_path, diagnostics);
+        }
+        RelationTarget::ExternalFile(path) => {
+            validate_relation_file_target(node.line, path, base_path, diagnostics);
+        }
+        RelationTarget::Url(_) => {}
+    }
+}
+
+fn validate_path_qualified_branch(
+    line: usize,
+    path: &str,
+    id: &str,
+    base_path: Option<&Path>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let Some(base_path) = base_path else {
+        return;
+    };
+
+    let resolved = resolve_relative_target(base_path, path);
+    if !resolved.exists() {
+        diagnostics.push(Diagnostic {
+            severity: Severity::Warning,
+            line,
+            message: format!(
+                "Relation target file '{path}' does not exist relative to '{}'.",
+                base_path.display()
+            ),
+        });
+        return;
+    }
+
+    if !is_markdown_path(&resolved) {
+        diagnostics.push(Diagnostic {
+            severity: Severity::Warning,
+            line,
+            message: format!(
+                "Relation target '{}#{id}' points to a non-Markdown file; branch id was not checked.",
+                path
+            ),
+        });
+        return;
+    }
+
+    let source = match fs::read_to_string(&resolved) {
+        Ok(source) => source,
+        Err(error) => {
+            diagnostics.push(Diagnostic {
+                severity: Severity::Warning,
+                line,
+                message: format!("Relation target file '{path}' could not be read: {error}."),
+            });
+            return;
+        }
+    };
+
+    let parsed = parse_document(&source);
+    if parsed
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        diagnostics.push(Diagnostic {
+            severity: Severity::Warning,
+            line,
+            message: format!(
+                "Relation target '{}#{id}' could not be checked because '{path}' has parser errors.",
+                path
+            ),
+        });
+        return;
+    }
+
+    let id_count = count_id_occurrences(&parsed.document, id);
+    match id_count {
+        0 => diagnostics.push(Diagnostic {
+            severity: Severity::Warning,
+            line,
+            message: format!(
+                "Relation target '{}#{id}' does not match any node id in '{path}'.",
+                path
+            ),
+        }),
+        1 => {}
+        _ => diagnostics.push(Diagnostic {
+            severity: Severity::Warning,
+            line,
+            message: format!(
+                "Relation target '{}#{id}' is ambiguous because '{path}' contains duplicate ids.",
+                path
+            ),
+        }),
+    }
+}
+
+fn validate_relation_file_target(
+    line: usize,
+    path: &str,
+    base_path: Option<&Path>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let Some(base_path) = base_path else {
+        return;
+    };
+
+    let resolved = resolve_relative_target(base_path, path);
+    if !resolved.exists() {
+        diagnostics.push(Diagnostic {
+            severity: Severity::Warning,
+            line,
+            message: format!(
+                "Relation target file '{path}' does not exist relative to '{}'.",
+                base_path.display()
+            ),
+        });
+    }
+}
+
+fn resolve_relative_target(base_path: &Path, target: &str) -> PathBuf {
+    let candidate = Path::new(target);
+    if candidate.is_absolute() {
+        candidate.to_path_buf()
+    } else {
+        base_path.join(candidate)
+    }
+}
+
+fn is_markdown_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "md" | "markdown" | "mdown" | "mkd"
+            )
+        })
+}
+
+fn count_id_occurrences(document: &Document, id: &str) -> usize {
+    let mut count = 0;
+    walk_nodes(&document.nodes, &mut |node| {
+        if node.id.as_deref() == Some(id) {
+            count += 1;
+        }
+    });
+    count
 }
 
 fn validate_references(node: &Node, base_path: Option<&Path>, diagnostics: &mut Vec<Diagnostic>) {

@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use crate::editor::get_node;
 use crate::model::{
     Document, LinkEntry, MetadataEntry, MetadataKeyCount, MetadataRow, MetadataValueCount, Node,
-    ReferenceRow, RelationDirection, RelationRow, SearchMatch, TagCount, TaskQuery,
+    ReferenceRow, Relation, RelationDirection, RelationRow, RelationTarget, SearchMatch, TagCount,
+    TaskQuery,
 };
 
 pub fn find_matches(document: &Document, query: &str) -> Vec<SearchMatch> {
@@ -199,16 +200,13 @@ pub fn relation_entries(document: &Document) -> Vec<RelationRow> {
     walk_nodes(&document.nodes, &mut Vec::new(), &mut |node, breadcrumb| {
         let breadcrumb_text = breadcrumb.join(" / ");
         for relation in &node.relations {
-            rows.push(RelationRow {
-                direction: RelationDirection::Outgoing,
-                line: node.line,
-                breadcrumb: breadcrumb_text.clone(),
-                text: node.text.clone(),
-                id: node.id.clone(),
-                relation: relation.label(),
-                target: relation.target.clone(),
-                resolved_path: find_relation_target_breadcrumb(document, &relation.target),
-            });
+            rows.push(relation_row(
+                document,
+                RelationDirection::Outgoing,
+                node,
+                &breadcrumb_text,
+                relation,
+            ));
         }
     });
     rows
@@ -240,31 +238,25 @@ pub fn relation_entries_for_anchor(document: &Document, anchor_id: &str) -> Vec<
         let breadcrumb_text = breadcrumb.join(" / ");
         if node.id.as_deref() == Some(anchor_id) {
             for relation in &node.relations {
-                rows.push(RelationRow {
-                    direction: RelationDirection::Outgoing,
-                    line: node.line,
-                    breadcrumb: breadcrumb_text.clone(),
-                    text: node.text.clone(),
-                    id: node.id.clone(),
-                    relation: relation.label(),
-                    target: relation.target.clone(),
-                    resolved_path: find_relation_target_breadcrumb(document, &relation.target),
-                });
+                rows.push(relation_row(
+                    document,
+                    RelationDirection::Outgoing,
+                    node,
+                    &breadcrumb_text,
+                    relation,
+                ));
             }
         }
 
         for relation in &node.relations {
-            if relation.target == anchor_id {
-                rows.push(RelationRow {
-                    direction: RelationDirection::Incoming,
-                    line: node.line,
-                    breadcrumb: breadcrumb_text.clone(),
-                    text: node.text.clone(),
-                    id: node.id.clone(),
-                    relation: relation.label(),
-                    target: relation.target.clone(),
-                    resolved_path: find_relation_target_breadcrumb(document, &relation.target),
-                });
+            if matches!(relation.target_kind(), RelationTarget::SameFileId(id) if id == anchor_id) {
+                rows.push(relation_row(
+                    document,
+                    RelationDirection::Incoming,
+                    node,
+                    &breadcrumb_text,
+                    relation,
+                ));
             }
         }
     });
@@ -286,15 +278,14 @@ pub fn relation_entries_for_path(document: &Document, path: &[usize]) -> Vec<Rel
     let mut rows = node
         .relations
         .iter()
-        .map(|relation| RelationRow {
-            direction: RelationDirection::Outgoing,
-            line: node.line,
-            breadcrumb: breadcrumb.clone(),
-            text: node.text.clone(),
-            id: node.id.clone(),
-            relation: relation.label(),
-            target: relation.target.clone(),
-            resolved_path: find_relation_target_breadcrumb(document, &relation.target),
+        .map(|relation| {
+            relation_row(
+                document,
+                RelationDirection::Outgoing,
+                node,
+                &breadcrumb,
+                relation,
+            )
         })
         .collect::<Vec<_>>();
 
@@ -487,6 +478,31 @@ fn find_relation_target_breadcrumb(document: &Document, target: &str) -> Option<
         }
     });
     resolved
+}
+
+fn relation_row(
+    document: &Document,
+    direction: RelationDirection,
+    node: &Node,
+    breadcrumb: &str,
+    relation: &Relation,
+) -> RelationRow {
+    RelationRow {
+        direction,
+        line: node.line,
+        breadcrumb: breadcrumb.to_string(),
+        text: node.text.clone(),
+        id: node.id.clone(),
+        relation: relation.label(),
+        target_kind: relation.target_kind().label().to_string(),
+        target: relation.target.clone(),
+        resolved_path: match relation.target_kind() {
+            RelationTarget::SameFileId(id) => find_relation_target_breadcrumb(document, id),
+            RelationTarget::PathQualifiedBranch { .. }
+            | RelationTarget::ExternalFile(_)
+            | RelationTarget::Url(_) => None,
+        },
+    }
 }
 
 fn walk_nodes<F>(nodes: &[Node], breadcrumb: &mut Vec<String>, visitor: &mut F)

@@ -51,6 +51,14 @@ pub struct Relation {
     pub target: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelationTarget<'a> {
+    SameFileId(&'a str),
+    PathQualifiedBranch { path: &'a str, id: &'a str },
+    ExternalFile(&'a str),
+    Url(&'a str),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExternalRef {
     pub label: String,
@@ -141,6 +149,7 @@ pub struct RelationRow {
     pub text: String,
     pub id: Option<String>,
     pub relation: String,
+    pub target_kind: String,
     pub target: String,
     pub resolved_path: Option<String>,
 }
@@ -454,6 +463,81 @@ impl Relation {
     pub fn label(&self) -> String {
         self.kind.clone().unwrap_or_else(|| "ref".to_string())
     }
+
+    pub fn target_kind(&self) -> RelationTarget<'_> {
+        RelationTarget::parse(&self.target)
+    }
+}
+
+impl RelationTarget<'_> {
+    pub fn parse(target: &str) -> RelationTarget<'_> {
+        if is_url_target(target) {
+            return RelationTarget::Url(target);
+        }
+
+        if let Some((path, id)) = target.split_once('#') {
+            if path.is_empty() {
+                return RelationTarget::SameFileId(id);
+            }
+            if id.is_empty() {
+                return RelationTarget::ExternalFile(path);
+            }
+            return RelationTarget::PathQualifiedBranch { path, id };
+        }
+
+        if looks_like_external_file_target(target) {
+            return RelationTarget::ExternalFile(target);
+        }
+
+        RelationTarget::SameFileId(target)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            RelationTarget::SameFileId(_) => "same_file_id",
+            RelationTarget::PathQualifiedBranch { .. } => "path_qualified_branch",
+            RelationTarget::ExternalFile(_) => "external_file",
+            RelationTarget::Url(_) => "url",
+        }
+    }
+}
+
+fn is_url_target(target: &str) -> bool {
+    let lower = target.to_lowercase();
+    lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("mailto:")
+        || lower.starts_with("file://")
+}
+
+fn looks_like_external_file_target(target: &str) -> bool {
+    let Some((_, extension)) = target.rsplit_once('.') else {
+        return false;
+    };
+    matches!(
+        extension.to_ascii_lowercase().as_str(),
+        "csv"
+            | "docx"
+            | "gif"
+            | "htm"
+            | "html"
+            | "jpeg"
+            | "jpg"
+            | "json"
+            | "md"
+            | "markdown"
+            | "mdown"
+            | "mkd"
+            | "mm"
+            | "opml"
+            | "pdf"
+            | "png"
+            | "pptx"
+            | "svg"
+            | "txt"
+            | "webp"
+            | "xlsx"
+    )
 }
 
 pub fn has_errors(diagnostics: &[Diagnostic]) -> bool {

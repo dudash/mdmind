@@ -643,6 +643,34 @@ fn relations_can_list_outgoing_links_and_backlinks() {
 }
 
 #[test]
+fn relations_cli_reports_path_qualified_branch_targets() {
+    let root = temp_file("mindspace-relations");
+    std::fs::create_dir_all(root.join("maps")).expect("temp mindspace should be writable");
+    std::fs::write(
+        root.join("maps/decisions.md"),
+        "- Decision Log [id:decision]\n  - API Shape [id:decision/api-shape]\n",
+    )
+    .expect("target map should be writable");
+    let source = root.join("research.md");
+    std::fs::write(
+        &source,
+        "- Research [id:research] [[rel:implements->maps/decisions.md#decision/api-shape]]\n",
+    )
+    .expect("source map should be writable");
+
+    let relations = run_mdm(&["relations", source.to_str().unwrap(), "--plain"]);
+    assert!(relations.status.success(), "stderr: {}", stderr(&relations));
+    let relations_stdout = stdout(&relations);
+    assert!(relations_stdout.contains("path_qualified_branch"));
+    assert!(relations_stdout.contains("maps/decisions.md#decision/api-shape"));
+
+    let validate = run_mdm(&["validate", source.to_str().unwrap()]);
+    assert!(validate.status.success(), "stderr: {}", stderr(&validate));
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
 fn export_outputs_json() {
     let output = run_mdm(&["export", &fixture("sample.md"), "--format", "json"]);
     assert!(output.status.success(), "stderr: {}", stderr(&output));

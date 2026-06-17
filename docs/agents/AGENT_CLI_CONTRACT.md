@@ -126,6 +126,11 @@ payload lives in `data`:
 `mdm export --format json` intentionally remains raw document export because
 downstream tools use it as document data, not command metadata.
 
+`RelationRow[]` includes `target_kind` for relation target classification.
+Current values are `same_file_id`, `path_qualified_branch`, `external_file`,
+and `url`. Agents should use `target_kind` before deciding whether a relation
+can be followed inside the current map or needs future mindspace inventory.
+
 Target success envelope:
 
 ```json
@@ -241,7 +246,7 @@ listed as interactive in `mdm commands --json`.
 | `mdm kv <target>` | map | no | no | no | Use `--keys a,b` to narrow audits; use `--json` for rows. |
 | `mdm links <target>` | map | no | no | no | Use before deep-linking if ids are unknown. |
 | `mdm refs <target>` | map | no | no | no | Use for external Markdown links and images; do not confuse with relations. |
-| `mdm relations <target>` | map | no | no | no | Whole-map target lists outgoing relations; deep-linked target lists incoming and outgoing context for that node. |
+| `mdm relations <target>` | map | no | no | no | Whole-map target lists outgoing relations; deep-linked target lists incoming and outgoing context for that node. Rows classify same-file ids, path-qualified branch refs, external files, and URLs. |
 | `mdm validate <target>` | map | no | no | no | Run after generated or edited maps; exit `1` when diagnostics include errors. |
 | `mdm export <target>` | map | no | no | no | Use `--format json`, `mermaid`, or `opml`; use `--query` for filtered exports. |
 | `mdm init <path>` | templates | map file | no | no | Requires `--template`; use `--force` only when overwriting intentionally. |

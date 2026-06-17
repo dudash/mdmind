@@ -118,6 +118,45 @@ preserves the contract.
 | Review item | A proposed writeback, relation, repair, move, or stale-digest fallback with target, rationale, diff or proposed record, validation state, and accept/reject status. |
 | Checkpoint | A restorable local safety snapshot before risky writes, covering affected maps, generated artifacts, reviews, source metadata, or the whole mindspace when needed. |
 
+## Branch Refs And Relations
+
+Mindspace branch refs use one canonical shape:
+
+```text
+maps/tasks.md#todo/focus
+```
+
+Same-file ids remain scoped to the current map:
+
+```text
+[[todo/focus]]
+[[rel:supports->todo/focus]]
+```
+
+Cross-file branch refs include the path and id:
+
+```text
+[[maps/decisions.md#decision/api-shape]]
+[[rel:implements->maps/decisions.md#decision/api-shape]]
+```
+
+The current core parser and CLI preserve relation targets as text, but classify
+them as:
+
+| Target kind | Example | Meaning |
+| --- | --- | --- |
+| `same_file_id` | `[[todo/focus]]` | Branch id in the current map only. |
+| `path_qualified_branch` | `[[maps/tasks.md#todo/focus]]` | Branch id in another Markdown map, resolved relative to the current map. |
+| `external_file` | `[[sources/brief.pdf]]` | File-level reference; use normal Markdown links for rich source citations unless the relation itself is meaningful. |
+| `url` | `[[https://example.com]]` | External URL relation; uncommon, but preserved when explicit. |
+
+`mdm validate <map>` now checks path-qualified branch refs when the target file
+is readable Markdown. It warns for missing files, missing branch ids, duplicate
+target ids, non-Markdown branch targets, and same-file ids that do not exist.
+This is still single-map validation with local cross-file checks, not full
+mindspace inventory. Full folder-wide incoming backlinks and workspace switcher
+behavior belong to `mdm mindspace scan`, `mdm mindspace lint`, and `mdmind .`.
+
 ## Command Vocabulary
 
 Mindspace commands are future commands unless already implemented. Existing

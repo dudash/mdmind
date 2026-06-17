@@ -210,7 +210,15 @@ pub fn render_relations(rows: &[RelationRow]) -> String {
     }
 
     render_table(
-        &["dir", "line", "path", "relation", "target", "resolved"],
+        &[
+            "dir",
+            "line",
+            "path",
+            "relation",
+            "target kind",
+            "target",
+            "resolved",
+        ],
         &rows
             .iter()
             .map(|entry| {
@@ -222,6 +230,7 @@ pub fn render_relations(rows: &[RelationRow]) -> String {
                     entry.line.to_string(),
                     entry.breadcrumb.clone(),
                     entry.relation.clone(),
+                    entry.target_kind.clone(),
                     entry.target.clone(),
                     entry
                         .resolved_path
@@ -243,6 +252,7 @@ pub fn render_relations_plain(rows: &[RelationRow]) -> String {
             entry.line.to_string(),
             entry.breadcrumb.clone(),
             entry.relation.clone(),
+            entry.target_kind.clone(),
             entry.target.clone(),
             entry.resolved_path.clone().unwrap_or_default(),
         ]
