@@ -38,6 +38,11 @@ use crate::interactive::{
     run_interactive_with_mode_and_features, run_key_diagnostics,
 };
 use crate::markdown_render::{ColorMode, RenderOptions, RenderTarget, render_markdown};
+use crate::mindspace::{
+    MINDSPACE_DIAGNOSTICS_FORMAT, MINDSPACE_SCAN_FORMAT, MindspaceDiagnosticsReport,
+    render_mindspace_diagnostics, render_mindspace_diagnostics_plain, render_mindspace_scan,
+    render_mindspace_scan_plain, scan_mindspace,
+};
 use crate::model::{Document, ExternalRefKind, Node, Severity, TaskState};
 use crate::query::{
     filter_document, find_matches, link_entries, metadata_rows, reference_entries,
@@ -239,6 +244,14 @@ enum Commands {
         command: SkillCommands,
     },
     #[command(
+        about = "Inspect and lint optional folder-level Mindspace workspaces.",
+        after_help = "Examples:\n  mdm mindspace scan .\n  mdm mindspace scan . --json\n  mdm mindspace lint .\n  mdm mindspace lint . --plain"
+    )]
+    Mindspace {
+        #[command(subcommand)]
+        command: MindspaceCommands,
+    },
+    #[command(
         name = "commands",
         about = "Print the mdm command catalog for agents and scripts."
     )]
@@ -341,6 +354,26 @@ enum SkillCommands {
             help = "Print the underlying npx command without running it."
         )]
         print: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum MindspaceCommands {
+    #[command(about = "Inspect a folder read-only, with or without a Mindspace manifest.")]
+    Scan {
+        root: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+    },
+    #[command(about = "Report deterministic Mindspace diagnostics without AI judgment.")]
+    Lint {
+        root: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
     },
 }
 
@@ -548,6 +581,18 @@ impl Cli {
             Commands::Open { target, json, .. } if *json => Some(JsonContext {
                 command: "open",
                 target: Some(target.clone()),
+            }),
+            Commands::Mindspace {
+                command: MindspaceCommands::Scan { root, json, .. },
+            } if *json => Some(JsonContext {
+                command: "mindspace scan",
+                target: Some(root.to_string_lossy().to_string()),
+            }),
+            Commands::Mindspace {
+                command: MindspaceCommands::Lint { root, json, .. },
+            } if *json => Some(JsonContext {
+                command: "mindspace lint",
+                target: Some(root.to_string_lossy().to_string()),
             }),
             _ => None,
         }
@@ -789,6 +834,7 @@ fn dispatch(cli: Cli) -> Result<(), CliError> {
         Commands::Examples { command } => dispatch_examples(command),
         Commands::Ai { command } => dispatch_ai(command),
         Commands::Skills { command } => dispatch_skills(command),
+        Commands::Mindspace { command } => dispatch_mindspace(command),
         Commands::Catalog { json } => dispatch_commands(json),
         Commands::Changelog {
             version,
@@ -871,6 +917,42 @@ fn dispatch_skills_install(print: bool) -> Result<(), CliError> {
         code: "skill_install_failed",
         category: "external_command",
     })
+}
+
+fn dispatch_mindspace(command: MindspaceCommands) -> Result<(), CliError> {
+    match command {
+        MindspaceCommands::Scan { root, json, plain } => {
+            let target = root.to_string_lossy().to_string();
+            let scan = scan_mindspace(&root).map_err(CliError::from_app)?;
+            print_output(
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "mindspace scan",
+                    target: Some(&target),
+                    format: MINDSPACE_SCAN_FORMAT,
+                    summary: Some(
+                        serde_json::to_value(&scan.summary)
+                            .expect("mindspace scan summary should serialize"),
+                    ),
+                },
+                &scan,
+                || render_mindspace_scan(&scan),
+                || render_mindspace_scan_plain(&scan),
+            )
+        }
+        MindspaceCommands::Lint { root, json, plain } => {
+            let target = root.to_string_lossy().to_string();
+            let scan = scan_mindspace(&root).map_err(CliError::from_app)?;
+            let has_errors = scan.has_error_diagnostics();
+            let report = scan.diagnostics_report();
+            print_mindspace_lint_output(json, plain, &target, &report, has_errors)?;
+            if has_errors {
+                return Err(CliError::silent(1));
+            }
+            Ok(())
+        }
+    }
 }
 
 fn import_source(
@@ -1981,6 +2063,45 @@ fn command_catalog() -> CommandCatalog {
                 &["mdm skills install", "mdm skills install --print"],
             ),
             command_info!(
+                "mindspace",
+                "Inspect and lint optional folder-level Mindspace workspaces.",
+                &["folder", "mindspace_manifest"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[],
+                &[],
+                &["mindspace_scan.v1", "mindspace_diagnostics.v1"],
+                &["mdm mindspace scan .", "mdm mindspace lint ."],
+            ),
+            command_info!(
+                "mindspace scan",
+                "Inspect a folder read-only, with or without a Mindspace manifest.",
+                &["folder", "mindspace_manifest", "maps", "markdown"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("root", true)],
+                &[flag("--json"), flag("--plain")],
+                &["mindspace_scan.v1"],
+                &["mdm mindspace scan .", "mdm mindspace scan . --json",],
+            ),
+            command_info!(
+                "mindspace lint",
+                "Report deterministic Mindspace diagnostics without AI judgment.",
+                &["folder", "mindspace_manifest", "maps", "markdown"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("root", true)],
+                &[flag("--json"), flag("--plain")],
+                &["mindspace_diagnostics.v1"],
+                &["mdm mindspace lint .", "mdm mindspace lint . --json",],
+            ),
+            command_info!(
                 "commands",
                 "Print the mdm command catalog for agents and scripts.",
                 &[],
@@ -2364,6 +2485,64 @@ fn print_validate_output(
     Ok(())
 }
 
+fn print_mindspace_lint_output(
+    json: bool,
+    plain: bool,
+    target: &str,
+    report: &MindspaceDiagnosticsReport,
+    has_errors: bool,
+) -> Result<(), CliError> {
+    if json && plain {
+        return Err(CliError::usage(
+            "invalid_output_mode",
+            "Choose either --json or --plain, not both.",
+        ));
+    }
+
+    if json {
+        let error = has_errors.then(|| JsonError {
+            code: "mindspace_lint_failed",
+            category: "validation",
+            message: "Mindspace lint reported one or more errors.".to_string(),
+            path: Some(target.to_string()),
+            line: None,
+            details: None,
+        });
+        let next_actions = if has_errors {
+            vec![JsonNextAction {
+                label: "Review the read-only mindspace scan".to_string(),
+                command: vec![
+                    "mdm".to_string(),
+                    "mindspace".to_string(),
+                    "scan".to_string(),
+                    target.to_string(),
+                    "--plain".to_string(),
+                ],
+                writes: false,
+            }]
+        } else {
+            Vec::new()
+        };
+        print_json_envelope(
+            "mindspace lint",
+            Some(target),
+            MINDSPACE_DIAGNOSTICS_FORMAT,
+            Some(
+                serde_json::to_value(report.summary)
+                    .expect("mindspace lint summary should serialize"),
+            ),
+            Some(report),
+            error,
+            next_actions,
+        );
+    } else if plain {
+        println!("{}", render_mindspace_diagnostics_plain(report));
+    } else {
+        println!("{}", render_mindspace_diagnostics(report));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Serialize)]
 struct JsonEnvelope<'a, T: Serialize + ?Sized> {
     ok: bool,
@@ -2541,6 +2720,16 @@ fn raw_args_json_context() -> Option<JsonContext> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     if !args.iter().any(|arg| arg == "--json") {
         return None;
+    }
+
+    if args.first().map(String::as_str) == Some("mindspace") {
+        let command = match args.get(1).map(String::as_str) {
+            Some("scan") => "mindspace scan",
+            Some("lint") => "mindspace lint",
+            _ => "mindspace",
+        };
+        let target = args.get(2).filter(|value| !value.starts_with('-')).cloned();
+        return Some(JsonContext { command, target });
     }
 
     let command = match args.first().map(String::as_str) {

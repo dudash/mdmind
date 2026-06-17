@@ -238,6 +238,9 @@ fn commands_json_lists_agent_command_catalog() {
         "ai quick-add",
         "skills",
         "skills install",
+        "mindspace",
+        "mindspace scan",
+        "mindspace lint",
         "commands",
         "changelog",
         "open",
@@ -274,6 +277,112 @@ fn commands_json_lists_agent_command_catalog() {
             .unwrap()
             .contains(&"session_sidecars".into())
     );
+}
+
+#[test]
+fn mindspace_scan_json_inventories_mixed_folder_without_writing() {
+    let root = temp_file("mindspace-scan");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::create_dir_all(root.join("docs")).expect("docs directory should be writable");
+    std::fs::create_dir_all(root.join("sources")).expect("sources directory should be writable");
+    std::fs::create_dir_all(root.join("inbox")).expect("inbox directory should be writable");
+
+    std::fs::write(
+        root.join("maps").join("tasks.md"),
+        "- Launch plan #launch [id:launch]\n  - Pricing work [[rel:depends_on->maps/decisions.md#decision/pricing]] [id:launch/pricing]\n",
+    )
+    .expect("map fixture should be writable");
+    std::fs::write(
+        root.join("maps").join("decisions.md"),
+        "- Decisions [id:decisions]\n  - Billing model [id:decision/billing]\n",
+    )
+    .expect("map fixture should be writable");
+    std::fs::write(
+        root.join("docs").join("brief.md"),
+        "# Brief\n\nOrdinary page.\n",
+    )
+    .expect("page fixture should be writable");
+    std::fs::write(
+        root.join("sources").join("interview.md"),
+        "# Interview\n\nRaw notes.\n",
+    )
+    .expect("source fixture should be writable");
+    std::fs::write(root.join("inbox").join("capture.md"), "- loose capture\n")
+        .expect("inbox fixture should be writable");
+    std::fs::write(root.join("AGENTS.md"), "# Agent guidance\n")
+        .expect("instruction fixture should be writable");
+    std::fs::write(root.join("index.md"), "# Index\n").expect("index fixture should be writable");
+    std::fs::write(root.join("log.md"), "# Log\n").expect("log fixture should be writable");
+
+    let output = run_mdm(&["mindspace", "scan", root.to_str().unwrap(), "--json"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "mindspace scan");
+    assert_eq!(value["format"], "mindspace_scan.v1");
+    assert_eq!(value["target"], root.to_string_lossy().as_ref());
+    assert_eq!(value["data"]["manifest"]["present"], false);
+    assert_eq!(value["summary"]["roles"]["maps"], 2);
+    assert_eq!(value["summary"]["roles"]["pages"], 1);
+    assert!(value["summary"]["roles"]["sources"].as_u64().unwrap() >= 1);
+    assert!(value["summary"]["roles"]["inbox"].as_u64().unwrap() >= 1);
+    assert_eq!(value["summary"]["roles"]["instructions"], 1);
+    assert_eq!(value["summary"]["roles"]["indexes"], 1);
+    assert_eq!(value["summary"]["roles"]["logs"], 1);
+    assert_eq!(value["summary"]["diagnostics"]["warnings"], 1);
+
+    let role_paths = value["data"]["roles"]
+        .as_array()
+        .expect("roles should be an array")
+        .iter()
+        .filter_map(|role| role["path"].as_str())
+        .collect::<Vec<_>>();
+    assert!(role_paths.contains(&"maps/tasks.md"));
+    assert!(role_paths.contains(&"docs/brief.md"));
+    assert!(role_paths.contains(&"sources/interview.md"));
+    assert!(role_paths.contains(&"inbox/capture.md"));
+    assert!(role_paths.contains(&"AGENTS.md"));
+
+    let diagnostic_codes = value["data"]["diagnostics"]
+        .as_array()
+        .expect("diagnostics should be an array")
+        .iter()
+        .filter_map(|diagnostic| diagnostic["code"].as_str())
+        .collect::<Vec<_>>();
+    assert!(diagnostic_codes.contains(&"map_validation_warning"));
+    assert!(
+        !root.join(".mdmind").exists(),
+        "scan should not create a mindspace manifest directory"
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_lint_returns_nonzero_for_parser_errors() {
+    let root = temp_file("mindspace-lint");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::write(
+        root.join("maps").join("broken.md"),
+        "- Valid root [id:root]\n   - Bad indentation\n",
+    )
+    .expect("broken map fixture should be writable");
+
+    let output = run_mdm(&["mindspace", "lint", root.to_str().unwrap(), "--json"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], false);
+    assert_eq!(value["command"], "mindspace lint");
+    assert_eq!(value["format"], "mindspace_diagnostics.v1");
+    assert_eq!(value["error"]["code"], "mindspace_lint_failed");
+    assert_eq!(value["summary"]["errors"], 1);
+    assert_eq!(value["data"]["diagnostics"][0]["code"], "map_parse_error");
+
+    std::fs::remove_dir_all(root).ok();
 }
 
 #[test]

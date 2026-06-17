@@ -57,11 +57,16 @@ Good substrate commands:
 
 ```bash
 mdm mindspace scan .
+mdm mindspace lint .
 mdm mindspace setup . --preview
 mdm mindspace context maps/tasks.md#todo/focus
 mdm mindspace session ...
 mdm mindspace review ...
 ```
+
+`scan` and `lint` are implemented first because they prove the optional layer
+without adopting the folder. Both are read-only; `setup`, `context`, `session`,
+and `review` remain future Mindspace commands.
 
 Avoid:
 

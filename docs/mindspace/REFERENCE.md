@@ -188,10 +188,10 @@ behavior instead of creating hidden alternatives.
 | Command | Stage | Contract |
 | --- | --- | --- |
 | `mdm mindspace new <path>` | v1 | Create a fresh native mdmind workspace. Existing `mdm init <path>` remains single-map creation. |
-| `mdm mindspace scan <root>` | MVP | Inspect a folder read-only, with or without a manifest. |
+| `mdm mindspace scan <root>` | Current | Inspect a folder read-only, with or without a manifest. |
 | `mdm mindspace setup <root> --preview` | MVP | Print the proposed `.mdmind/mindspace.json` without writing. |
 | `mdm mindspace setup <root> --write` | MVP | Create or update `.mdmind/mindspace.json` only; never move or rewrite existing notes. |
-| `mdm mindspace lint <root>` | MVP | Report deterministic structural problems without AI judgment. |
+| `mdm mindspace lint <root>` | Current | Report deterministic structural problems without AI judgment. |
 | `mdm mindspace context <target>` | MVP | Export bounded context with provenance and budget controls. |
 | `mdmind .` | MVP | Open the human workspace surface while preserving one-active-map editing. |
 | `mdm mindspace session ...` | v1 | Create and manage scoped agent collaboration sessions. |
@@ -207,6 +207,42 @@ Reserved JSON format names:
 | `mindspace_context.v1` | Context bundle with included items, provenance, budgets, and omission reasons. |
 | `mindspace_session.v1` | Session records, state transitions, plans, previews, and closeouts. |
 | `mindspace_review.v1` | Review items, decisions, rationale, and target/digest state. |
+
+### Current Scan And Lint Output
+
+`mdm mindspace scan <root> --json` is the first implemented Mindspace
+substrate. It is read-only and succeeds even when it finds deterministic
+diagnostics, so agents can inventory imperfect folders before deciding what to
+do next.
+
+The `mindspace_scan.v1` data payload includes:
+
+| Field | Meaning |
+| --- | --- |
+| `root` | Canonical scanned root path. |
+| `manifest` | Presence, path, schema version, name, role count, and validity for `.mdmind/mindspace.json`. |
+| `summary` | Files scanned, directories scanned, role counts, and diagnostic counts. |
+| `roles` | Detected role records with role, path, file/directory kind, safety flags, and detection reason. |
+| `maps` | Native map records with parse status, validation counts, ids, tags, metadata keys, refs, relations, and task counts. |
+| `diagnostics` | Stable coded diagnostics for manifest, scan, parser, and validation findings. |
+| `skipped` | Ignored dependency, generated, or hidden folders. |
+
+Current role inference is intentionally conservative:
+
+- `sources/`, `source/`, `raw/`, and `references/` are `source`; source records
+  are read-only by default.
+- `inbox/` and `_inbox/` are `inbox`.
+- `.mdmind/reports/` is `report` and generated.
+- `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` are trusted `instruction` files.
+- `index.md` is `index`; `log.md`, `activity.md`, and `journal.md` are `log`.
+- Other Markdown files are classified through the existing mdmind map parser as
+  native `map`, damaged native `map`, or ordinary `page`. Damaged-map
+  classification is conservative in folder scans so docs with mdmind examples
+  stay ordinary pages unless their path or name looks map-like.
+
+`mdm mindspace lint <root> --json` reuses the same scan and returns
+`mindspace_diagnostics.v1`. It exits `1` only when diagnostics include errors;
+warnings remain visible but do not fail the command.
 
 ## Safety Model
 

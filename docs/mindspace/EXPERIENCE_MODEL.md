@@ -82,7 +82,12 @@ Under the hood:
 
 ```bash
 mdm mindspace scan . --json
+mdm mindspace lint . --json
 ```
+
+Those two commands are implemented now. They do not write the folder; they give
+the agent a deterministic inventory and a fail/pass structural signal before it
+proposes setup or edits.
 
 ### 2. Shape
 

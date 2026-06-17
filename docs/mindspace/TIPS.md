@@ -1,6 +1,6 @@
 # Mindspace Tips
 
-These notes are for future implementation and docs work.
+These notes are for current and future implementation and docs work.
 
 ## Lead With The Agent Loop
 
@@ -40,6 +40,10 @@ mdm mindspace setup . --write
 
 Do not auto-adopt a folder just because a user opened `mdmind .` or an agent
 entered the directory.
+
+Today, `scan` and `lint` are the only implemented Mindspace commands. Treat
+their read-only output as the foundation for every later setup, context,
+session, review, or TUI workspace slice.
 
 ## Keep Files Ordinary
 

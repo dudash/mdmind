@@ -19,6 +19,18 @@ Mindspace starts only when someone wants a folder-level workspace around maps,
 ordinary Markdown, sources, indexes, logs, agent sessions, reviews, and
 checkpoints.
 
+Current implemented substrate:
+
+```bash
+mdm mindspace scan . --json
+mdm mindspace lint . --json
+```
+
+`scan` inventories a folder without writing. `lint` reports deterministic
+Mindspace diagnostics with stable issue codes and exits non-zero only on
+errors. Setup, context, session, review, and `mdmind .` workspace behavior are
+still planned slices.
+
 ## Start Here
 
 - [VALUE.md](VALUE.md): user value, real-world examples, and the product wedge.
