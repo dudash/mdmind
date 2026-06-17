@@ -146,7 +146,7 @@ them as:
 | Target kind | Example | Meaning |
 | --- | --- | --- |
 | `same_file_id` | `[[todo/focus]]` | Branch id in the current map only. |
-| `path_qualified_branch` | `[[maps/tasks.md#todo/focus]]` | Branch id in another Markdown map, resolved relative to the current map. |
+| `path_qualified_branch` | `[[maps/tasks.md#todo/focus]]` | Branch id in another Markdown map, resolved by current validation from the map directory or an ancestor workspace root. |
 | `external_file` | `[[sources/brief.pdf]]` | File-level reference; use normal Markdown links for rich source citations unless the relation itself is meaningful. |
 | `url` | `[[https://example.com]]` | External URL relation; uncommon, but preserved when explicit. |
 

@@ -336,6 +336,30 @@ fn validate_accepts_existing_path_qualified_branch_relation_targets() {
 }
 
 #[test]
+fn validate_accepts_mindspace_root_relative_branch_relation_targets() {
+    let root = temp_dir("root-relative-cross-file-relations");
+    let maps_dir = root.join("maps");
+    std::fs::create_dir_all(&maps_dir).expect("maps dir should be writable");
+    std::fs::write(
+        maps_dir.join("decisions.md"),
+        "- Decision Log [id:decision]\n  - Auth Model [id:decision/auth-token-model]\n",
+    )
+    .expect("target map should be writable");
+
+    let parsed =
+        parse_document("- Task [[rel:depends-on->maps/decisions.md#decision/auth-token-model]]\n");
+    let diagnostics = validate_document_with_base_path(&parsed.document, Some(&maps_dir));
+
+    assert!(
+        diagnostics.is_empty(),
+        "expected root-relative cross-file relation target, got: {:?}",
+        diagnostics
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
 fn validate_reports_missing_path_qualified_branch_ids() {
     let root = temp_dir("missing-cross-file-id");
     let maps_dir = root.join("maps");

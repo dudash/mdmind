@@ -651,7 +651,7 @@ fn relations_cli_reports_path_qualified_branch_targets() {
         "- Decision Log [id:decision]\n  - API Shape [id:decision/api-shape]\n",
     )
     .expect("target map should be writable");
-    let source = root.join("research.md");
+    let source = root.join("maps/tasks.md");
     std::fs::write(
         &source,
         "- Research [id:research] [[rel:implements->maps/decisions.md#decision/api-shape]]\n",

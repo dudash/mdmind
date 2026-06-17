@@ -41,7 +41,7 @@ Avoid:
 
 ```bash
 mdm scan .
-mdm agent ... for Mindspace sessions
+mdm session ... for Mindspace sessions
 mdm init --workspace ...
 ```
 

@@ -16,6 +16,7 @@ checkpoints.
 ## Start Here
 
 - [VALUE.md](VALUE.md): user value, real-world examples, and the product wedge.
+- [USER_STORIES.md](USER_STORIES.md): detailed persona journeys, aha moments, and delight tests for the target Mindspace experience.
 - [REFERENCE.md](REFERENCE.md): manifest schema, core objects, command vocabulary, JSON formats, phases, and safety model.
 - [BOUNDARIES.md](BOUNDARIES.md): how Mindspace stays optional and avoids bleeding into core map behavior.
 - [NAVIGATION.md](NAVIGATION.md): how the TUI should handle multiple files without becoming a vault browser.

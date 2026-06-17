@@ -210,10 +210,17 @@ fn validate_relation_file_target(
 fn resolve_relative_target(base_path: &Path, target: &str) -> PathBuf {
     let candidate = Path::new(target);
     if candidate.is_absolute() {
-        candidate.to_path_buf()
-    } else {
-        base_path.join(candidate)
+        return candidate.to_path_buf();
     }
+
+    for root in base_path.ancestors() {
+        let resolved = root.join(candidate);
+        if resolved.exists() {
+            return resolved;
+        }
+    }
+
+    base_path.join(candidate)
 }
 
 fn is_markdown_path(path: &Path) -> bool {

@@ -25,8 +25,11 @@ For a branch in another map, include the path plus `#` plus the branch id:
 - Launch Readiness [[maps/decisions.md#product/api-design]]
 ```
 
-That path is resolved relative to the current map. `mdm validate` checks the
-target file and branch id when it can read the referenced Markdown map.
+`mdm validate` checks the target file and branch id when it can read the
+referenced Markdown map. For single-map validation, local relation paths are
+resolved from the current map directory and then ancestor directories, so
+Mindspace-style root paths such as `maps/decisions.md#product/api-design` work
+from maps inside `maps/`.
 
 ## The Typed Form
 
