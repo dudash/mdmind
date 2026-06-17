@@ -260,6 +260,36 @@ listed as interactive in `mdm commands --json`.
 | `mdmind --as map <target>` | map | map sidecars only in interactive mode | no | no with `--preview`, yes otherwise | Forces strict native map parsing and reports parser errors for ordinary Markdown. |
 | `mdmind --check-keys` | terminal input | no | no | yes | Humans only; agents should not run it. |
 
+## Planned Mindspace Command Targets
+
+These rows reserve the future Mindspace command contract. They are not current
+CLI behavior until the corresponding implementation issues land. Mindspace is
+an optional workspace layer with its own docs in
+[../mindspace/](../mindspace/); future session/review commands use
+`mdm mindspace`, not a broad `mdm agent` namespace.
+
+| Command | Reads | Writes | Network | Interactive | Agent-safe usage |
+| --- | --- | --- | --- | --- | --- |
+| `mdm mindspace scan <root>` | folder, manifest when present | no | no | no | Read-only inventory for an existing folder; agents should use `--json` once available. |
+| `mdm mindspace setup <root> --preview` | folder, scan results | no | no | no | Preview the proposed `.mdmind/mindspace.json`; safe before setup writes. |
+| `mdm mindspace setup <root> --write` | folder, scan results | `.mdmind/mindspace.json` | no | no | Write only the manifest and required `.mdmind/` directory; never move or rewrite notes. |
+| `mdm mindspace lint <root>` | folder, manifest, maps, Markdown refs | no | no | no | Return deterministic diagnostics with stable issue codes. |
+| `mdm mindspace context <target>` | maps, selected pages, refs, sources | no | no | no | Export bounded context with provenance and budget controls. |
+| `mdm mindspace session ...` | session records, maps, context bundles | session/review/checkpoint sidecars; scoped map writes only on explicit apply | no | no | Manage scoped agent collaboration with target digests and previewable writeback. |
+| `mdm mindspace review ...` | review records, target files | review/checkpoint sidecars; scoped target writes only on approval | no | no | Inspect, approve, or reject proposed writeback and repair items. |
+| `mdmind .` | folder, manifest, inventory, maps | map/session/view sidecars in interactive mode | no | yes | Human workspace entry; agents should not launch the interactive TUI. |
+
+Reserved JSON formats:
+
+| Format | Planned payload |
+| --- | --- |
+| `mindspace_scan.v1` | Inventory, detected roles, validation summaries, warnings, and next actions. |
+| `mindspace_setup.v1` | Proposed or written manifest plus role explanations and write summary. |
+| `mindspace_diagnostics.v1` | Deterministic lint diagnostics with stable issue codes. |
+| `mindspace_context.v1` | Context bundle with included items, provenance, budgets, and omission reasons. |
+| `mindspace_session.v1` | Session records, state transitions, plans, previews, and closeouts. |
+| `mindspace_review.v1` | Review items, decisions, rationale, and target/digest state. |
+
 ## Command Discovery Target
 
 `mdm commands --json` exposes the command surface in one local,

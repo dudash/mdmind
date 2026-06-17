@@ -8,6 +8,7 @@ reader is trying to do, not by when a feature was built.
 - [manual/](manual/): task-focused user guides. These are the best source for a future public docs site.
 - [help/](help/): source content for embedded TUI help and guide-shaped map material.
 - [reference/](reference/): exact behavior for syntax, queries, ids, relations, and other durable contracts.
+- [mindspace/](mindspace/): optional folder-level workspace docs, contracts, design boundaries, and tips.
 - [agents/](agents/): guidance for agent use, skills, evals, and machine-readable CLI contracts.
 - [design/](design/): product and UX design notes. These are rationale, not the user manual.
 - [product/](product/): shipped product summaries and PRDs. Linear owns active task tracking and future backlog.
@@ -42,7 +43,7 @@ If you want product direction:
 - [product/README.md](product/README.md)
 - [product/shipped/README.md](product/shipped/README.md)
 - [product/prds/](product/prds/)
-- [design/LLM_WIKI_MINDSPACE_STRATEGY.md](design/LLM_WIKI_MINDSPACE_STRATEGY.md)
+- [mindspace/README.md](mindspace/README.md)
 
 ## Boundaries
 
@@ -50,6 +51,7 @@ If you want product direction:
 - Built-in help source belongs in [help/](help/).
 - Release notes belong in [../CHANGELOG.md](../CHANGELOG.md); active release tasks still belong in Linear.
 - Design notes belong in [design/](design/), even when they describe a shipped feature.
+- Mindspace docs belong in [mindspace/](mindspace/) unless a change is only about core map syntax, CLI behavior, or TUI behavior outside the optional workspace layer.
 - Active implementation tasks and future prioritization belong in Linear, not in repo docs.
 - Historical planning shelves live under [product/_archive/](product/_archive/) for context only.
 

@@ -1,9 +1,14 @@
 # PRD: Mindspace User Need And Ecosystem Fit
 
-Status: Draft for review
-Last reviewed: 2026-05-22
+Status: Product rationale; canonical Mindspace docs live in
+[../../mindspace/](../../mindspace/)
+Last reviewed: 2026-06-17
 
 ## Summary
+
+This PRD explains the product need and ecosystem fit for Mindspace. The
+implementation contract lives in
+[../../mindspace/REFERENCE.md](../../mindspace/REFERENCE.md).
 
 `mdmind` is a local-first structured knowledge workspace with three product
 surfaces:
@@ -525,18 +530,19 @@ The PRD includes them because they shape the safety model and future sidecars.
 Candidate commands:
 
 ```bash
-mdm agent session start maps/tasks.md#todo/focus --role implementer
-mdm agent session plan <session-id> --json
-mdm agent session apply <session-id> --preview
-mdm agent session submit <session-id>
-mdm agent review list --json
-mdm agent review approve <review-id>
-mdm agent review reject <review-id> --reason "wrong target branch"
-mdm agent session close <session-id>
+mdm mindspace session start maps/tasks.md#todo/focus --role implementer
+mdm mindspace session plan <session-id> --json
+mdm mindspace session apply <session-id> --preview
+mdm mindspace session submit <session-id>
+mdm mindspace review list --json
+mdm mindspace review approve <review-id>
+mdm mindspace review reject <review-id> --reason "wrong target branch"
+mdm mindspace session close <session-id>
 ```
 
 These commands should create and operate on durable workspace records. They
-should not require any particular agent vendor.
+should not require any particular agent vendor. The reference spec owns the
+canonical command namespace.
 
 ## State And Safety Model
 
@@ -739,8 +745,6 @@ incremental inventory, content digests, and cache invalidation under `.mdmind/`.
 - Does the first TUI workspace slice need map switching only, or also pinned
   working sets?
 - Should source staleness be in MVP or the first follow-up?
-- Should session/review commands live under `mdm agent ...`, `mdm mindspace
-  session ...`, or both?
 
 ## Linear Recommendation
 
