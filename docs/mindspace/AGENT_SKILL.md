@@ -4,17 +4,19 @@ Mindspace needs a dedicated agent skill because many users do not know how to
 guide Claude Code, Codex, Hermes, or another local agent toward the outcome they
 want.
 
-The existing mdmind plugin already has two skills:
+The mdmind plugin now has three skills:
 
 - `mdmind-map-authoring` for creating and revising native maps
 - `mdm-cli-inspection` for validating, querying, and exporting individual maps
+- `mdmind-mindspace-workflow` for folder-level jobs, templates, safe writes,
+  and `mdmind .` review paths
 
-The Mindspace skill should be a third skill that composes those capabilities
-around folder-level jobs, templates, safe writes, and `mdmind .` review.
+The Mindspace skill composes the other two capabilities rather than duplicating
+their map-authoring or CLI-inspection guidance.
 
 ## Skill Job
 
-The skill should help an agent turn a vague user request into a safe, useful
+The skill helps an agent turn a vague user request into a safe, useful
 Mindspace workflow.
 
 Example user request:
@@ -23,7 +25,7 @@ Example user request:
 Can you organize this folder for the launch review?
 ```
 
-The skill should guide the agent to:
+The skill guides the agent to:
 
 1. Choose or propose a job template.
 2. Run read-only scan and lint.
@@ -37,15 +39,15 @@ The skill should guide the agent to:
 The skill is not a chat UI, not a replacement for `mdmind`, and not a hidden
 database. It is workflow memory for agents.
 
-## Proposed Skill Shape
+## Skill Shape
 
-Candidate skill name:
+Skill name:
 
 ```text
 mdmind-mindspace-workflow
 ```
 
-Suggested plugin layout:
+Plugin layout:
 
 ```text
 plugins/mdmind/skills/mdmind-mindspace-workflow/
@@ -182,15 +184,15 @@ Current helpers:
 ```bash
 mdm mindspace scan <root> --json
 mdm mindspace lint <root> --json
+mdm mindspace template list --json
+mdm mindspace template show <template-id> --json
+mdm mindspace template show <template-id> --prompt
 mdm commands --json
 ```
 
 Planned helpers:
 
 ```bash
-mdm mindspace template list --json
-mdm mindspace template show <template-id> --json
-mdm mindspace template show <template-id> --prompt
 mdm mindspace setup <root> --template <template-id> --preview
 mdm mindspace context <target> --template <template-id> --json
 mdm mindspace session ...

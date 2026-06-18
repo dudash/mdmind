@@ -241,6 +241,9 @@ fn commands_json_lists_agent_command_catalog() {
         "mindspace",
         "mindspace scan",
         "mindspace lint",
+        "mindspace template",
+        "mindspace template list",
+        "mindspace template show",
         "commands",
         "changelog",
         "open",
@@ -358,6 +361,116 @@ fn mindspace_scan_json_inventories_mixed_folder_without_writing() {
     );
 
     std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_template_list_json_returns_built_in_persona_templates() {
+    let output = run_mdm(&["mindspace", "template", "list", "--json"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "mindspace template list");
+    assert_eq!(value["format"], "mindspace_template_catalog.v1");
+    assert_eq!(value["summary"]["count"], 4);
+
+    let ids = value["data"]["templates"]
+        .as_array()
+        .expect("templates should be an array")
+        .iter()
+        .filter_map(|template| template["id"].as_str())
+        .collect::<Vec<_>>();
+    for expected in [
+        "launch-planning",
+        "project-memory",
+        "story-continuity",
+        "claims-evidence",
+    ] {
+        assert!(
+            ids.contains(&expected),
+            "template list should include {expected}"
+        );
+    }
+}
+
+#[test]
+fn mindspace_template_show_json_returns_full_template_contract() {
+    let output = run_mdm(&["mindspace", "template", "show", "launch-planning", "--json"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "mindspace template show");
+    assert_eq!(value["format"], "mindspace_template.v1");
+    assert_eq!(value["target"], "launch-planning");
+    assert_eq!(value["data"]["persona_fit"], "Priya Planner");
+    assert!(
+        value["data"]["starting_prompt"]
+            .as_str()
+            .expect("starting prompt should be a string")
+            .contains("Keep source material read-only")
+    );
+    assert!(
+        value["data"]["map_shapes"]
+            .as_array()
+            .expect("map shapes should be an array")
+            .iter()
+            .any(|shape| shape["path"] == "maps/roadmap.md")
+    );
+    assert!(
+        value["data"]["customization_knobs"]
+            .as_array()
+            .expect("knobs should be an array")
+            .iter()
+            .any(|knob| knob["name"] == "write_mode")
+    );
+}
+
+#[test]
+fn mindspace_template_show_prompt_prints_copyable_agent_guidance() {
+    let output = run_mdm(&[
+        "mindspace",
+        "template",
+        "show",
+        "claims-evidence",
+        "--prompt",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let stdout = stdout(&output);
+
+    assert!(stdout.contains("Use the claims and evidence template."));
+    assert!(stdout.contains("Keep sources read-only"));
+    assert!(stdout.contains("Agent workflow:"));
+    assert!(stdout.contains("Review in mdmind:"));
+}
+
+#[test]
+fn mindspace_template_show_unknown_json_returns_error_envelope() {
+    let output = run_mdm(&[
+        "mindspace",
+        "template",
+        "show",
+        "unknown-template",
+        "--json",
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], false);
+    assert_eq!(value["command"], "mindspace template show");
+    assert_eq!(value["format"], "error.v1");
+    assert_eq!(value["target"], "unknown-template");
+    assert_eq!(value["error"]["code"], "runtime_error");
+    assert!(
+        value["error"]["message"]
+            .as_str()
+            .expect("message should be a string")
+            .contains("Unknown Mindspace template")
+    );
 }
 
 #[test]

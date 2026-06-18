@@ -201,8 +201,8 @@ behavior instead of creating hidden alternatives.
 | `mdm mindspace setup <root> --write` | MVP | Create or update `.mdmind/mindspace.json` only; never move or rewrite existing notes. |
 | `mdm mindspace lint <root>` | Current | Report deterministic structural problems without AI judgment. |
 | `mdm mindspace context <target>` | MVP | Export bounded context with provenance and budget controls. |
-| `mdm mindspace template list` | MVP | List built-in and trusted local job templates. |
-| `mdm mindspace template show <id>` | MVP | Print one template as JSON, human text, or an agent prompt. |
+| `mdm mindspace template list` | Current | List built-in job templates. Trusted local templates are future. |
+| `mdm mindspace template show <id>` | Current | Print one built-in template as JSON, human text, or an agent prompt. |
 | `mdmind .` | MVP | Open the human workspace surface while preserving one-active-map editing. |
 | `mdm mindspace session ...` | v1 | Create and manage scoped agent collaboration sessions. |
 | `mdm mindspace review ...` | v1 | List, approve, reject, or inspect proposed writeback and repair items. |
@@ -255,6 +255,31 @@ Current role inference is intentionally conservative:
 `mdm mindspace lint <root> --json` reuses the same scan and returns
 `mindspace_diagnostics.v1`. It exits `1` only when diagnostics include errors;
 warnings remain visible but do not fail the command.
+
+### Current Template Output
+
+`mdm mindspace template list --json` exposes the built-in persona/job template
+catalog as `mindspace_template_catalog.v1`.
+
+The catalog includes:
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Stable CLI id such as `launch-planning`. |
+| `name` | Human-readable template name. |
+| `persona_fit` | Primary persona this template was designed around. |
+| `job_fit` | Work the template is meant to guide. |
+| `primary_outputs` | Map or page paths the template tends to produce or update. |
+| `safety_defaults` | Compact write-policy defaults for discovery. |
+| `provenance` | `built_in` for packaged templates. |
+
+`mdm mindspace template show <id> --json` exposes one built-in template as
+`mindspace_template.v1`, including starting prompt, folder roles, map shapes,
+agent workflow, deterministic checks, write policy, `mdmind .` review surface,
+success criteria, customization knobs, and provenance.
+
+`--prompt` prints a copyable agent prompt plus safety and review guidance for
+users who do not yet know how to ask for the Mindspace job.
 
 ## Safety Model
 

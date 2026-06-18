@@ -29,11 +29,14 @@ Current implemented substrate:
 ```bash
 mdm mindspace scan . --json
 mdm mindspace lint . --json
+mdm mindspace template list --json
+mdm mindspace template show launch-planning --json
 ```
 
 `scan` inventories a folder without writing. `lint` reports deterministic
 Mindspace diagnostics with stable issue codes and exits non-zero only on
-errors. Setup, context, session, review, and `mdmind .` workspace behavior are
+errors. Template helpers expose built-in persona/job templates for agents and
+scripts. Setup, context, session, review, and `mdmind .` workspace behavior are
 still planned slices.
 
 ## Start Here
@@ -41,7 +44,7 @@ still planned slices.
 - [VALUE.md](VALUE.md): user value, real-world examples, and the product wedge.
 - [EXPERIENCE_MODEL.md](EXPERIENCE_MODEL.md): the agent-first, `mdmind`-reviewed, CLI-backed UX model.
 - [JOB_TEMPLATES.md](JOB_TEMPLATES.md): persona-shaped job templates, customization knobs, and helper command targets.
-- [AGENT_SKILL.md](AGENT_SKILL.md): proposed Mindspace workflow skill package and reference-file structure.
+- [AGENT_SKILL.md](AGENT_SKILL.md): packaged Mindspace workflow skill and reference-file structure.
 - [USER_STORIES.md](USER_STORIES.md): detailed persona journeys, aha moments, and delight tests for the target Mindspace experience.
 - [REFERENCE.md](REFERENCE.md): manifest schema, core objects, command vocabulary, JSON formats, phases, and safety model.
 - [BOUNDARIES.md](BOUNDARIES.md): how Mindspace stays optional and avoids bleeding into core map behavior.

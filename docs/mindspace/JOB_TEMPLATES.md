@@ -40,7 +40,7 @@ Every template should be understandable by a human and actionable by an agent.
 
 | Field | Meaning |
 | --- | --- |
-| `id` | Stable snake-case template id, such as `launch_planning`. |
+| `id` | Stable CLI template id, such as `launch-planning`. |
 | `name` | Human-readable name. |
 | `best_for` | Persona and job fit. |
 | `starting_prompt` | Natural-language request a user can copy or adapt. |
@@ -339,12 +339,17 @@ Mindspace templates should appear in three places:
 3. **`mdmind .` workspace views** so users can see which job template shaped a
    session, what changed, and what still needs review.
 
-Candidate helper commands:
+Current helper commands:
 
 ```bash
 mdm mindspace template list --json
 mdm mindspace template show launch-planning --json
 mdm mindspace template show launch-planning --prompt
+```
+
+Future template-aware helpers:
+
+```bash
 mdm mindspace setup . --template launch-planning --preview
 mdm mindspace context maps/roadmap.md#roadmap/current --template launch-planning --json
 ```

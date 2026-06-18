@@ -132,9 +132,9 @@ OpenClaw's docs distinguish tools, skills, and plugins: skills teach workflows,
 tools perform typed actions, and plugins package runtime capabilities. That
 maps cleanly to mdmind:
 
-- mdmind skills teach map authoring and CLI inspection
+- mdmind skills teach map authoring, CLI inspection, and Mindspace workflow templates
 - `mdm` commands can become typed tools later
-- plugin packaging can distribute both skills and tools
+- plugin packaging can distribute skills and tools together
 
 Product implication: first ship the local workflow and CLI contract. Package for
 agent ecosystems after the user need is clear, not before.
@@ -519,7 +519,7 @@ mdm mindspace template show launch-planning --prompt
 
 Behavior:
 
-- lists built-in and trusted local job templates
+- lists built-in job templates first; trusted local templates can follow later
 - helps an agent choose between launch planning, project memory, story
   continuity, claims/evidence, or a customized common template
 - exposes expected roles, map shapes, write policy, deterministic checks, and
@@ -868,7 +868,7 @@ this PRD:
 - Promote TUI map switching from future polish to MVP scope.
 - Add a v1 issue for agent sessions, review queue, digest checks, and scoped
   writeback.
-- Add or update an issue for the `mdmind-mindspace-workflow` skill and template
+- Track `MDM-22` for the `mdmind-mindspace-workflow` skill and template
   reference files.
 - Defer paid product, community, and broad ecosystem packaging until one
   workflow proves clear user value.

@@ -119,6 +119,10 @@ payload lives in `data`:
 | `refs --json` | `reference_rows.v1` | `ReferenceRow[]` |
 | `relations --json` | `relation_rows.v1` | `RelationRow[]` |
 | `validate --json` | `diagnostics.v1` | `Diagnostic[]` |
+| `mindspace scan --json` | `mindspace_scan.v1` | `MindspaceScan` object |
+| `mindspace lint --json` | `mindspace_diagnostics.v1` | `MindspaceDiagnosticsReport` object |
+| `mindspace template list --json` | `mindspace_template_catalog.v1` | `MindspaceTemplateCatalog` object |
+| `mindspace template show --json` | `mindspace_template.v1` | `MindspaceTemplate` object |
 | `commands --json` | `command_catalog.v1` | `CommandCatalog` object |
 | `changelog --json` | `changelog_entry.v1` or `changelog.v1` | `ChangelogEntry` object or `ChangelogEntry[]` |
 | `export --format json` | raw export | `ExportDocument` object |
@@ -257,6 +261,8 @@ listed as interactive in `mdm commands --json`.
 | `mdm skills install` | bundled skill reference | agent skills | yes | no | Convenience wrapper for `npx skills add dudash/mdmind`; use `--print` to show the command without running it. |
 | `mdm mindspace scan <root>` | folder, optional manifest, maps, Markdown | no | no | no | Read-only inventory for a folder-level Mindspace; use `--json` for `mindspace_scan.v1`. |
 | `mdm mindspace lint <root>` | folder, optional manifest, maps, Markdown | no | no | no | Deterministic diagnostics with stable issue codes; exits `1` when diagnostics include errors. |
+| `mdm mindspace template list` | built-in Mindspace templates | no | no | no | List persona/job templates; use `--json` for `mindspace_template_catalog.v1`. |
+| `mdm mindspace template show <id>` | built-in Mindspace templates | no | no | no | Show one template as human text, `--plain`, `--json`, or `--prompt`. |
 | `mdm changelog` | bundled changelog | no | no | no | Reads pretty release notes for the bundled version; use `--version` or `--all` for other sections, `--plain` for raw Markdown, and `--json` for scripts. |
 | `mdm open <target>` | map | session/location sidecars in interactive mode | no | yes by default | Agents should use `--preview` or `--json`; avoid bare `open`. |
 | `mdm check-keys` | terminal input | no | no | yes | Humans only; agents should not run it. |
@@ -286,8 +292,8 @@ adoption profiles.
 | `mdm mindspace setup <root> --write` | folder, scan results | `.mdmind/mindspace.json` | no | no | Write only the manifest and required `.mdmind/` directory; never move or rewrite notes. |
 | `mdm mindspace lint <root>` | folder, manifest, maps, Markdown refs | no | no | no | Current: return deterministic diagnostics with stable issue codes and exit `1` on errors. |
 | `mdm mindspace context <target>` | maps, selected pages, refs, sources | no | no | no | Export bounded context with provenance and budget controls. |
-| `mdm mindspace template list` | built-in and trusted local template refs | no | no | no | List persona/job templates available to guide agent workflows. |
-| `mdm mindspace template show <id>` | one template ref | no | no | no | Print a job template as JSON, human text, or an agent prompt. |
+| `mdm mindspace template list` | built-in template refs | no | no | no | Current: list persona/job templates available to guide agent workflows. Trusted local templates are future. |
+| `mdm mindspace template show <id>` | one built-in template ref | no | no | no | Current: print a job template as JSON, human text, plain text, or an agent prompt. |
 | `mdm mindspace session ...` | session records, maps, context bundles | session/review/checkpoint sidecars; scoped map writes only on explicit apply | no | no | Manage scoped agent collaboration with target digests and previewable writeback. |
 | `mdm mindspace review ...` | review records, target files | review/checkpoint sidecars; scoped target writes only on approval | no | no | Inspect, approve, or reject proposed writeback and repair items. |
 | `mdmind .` | folder, manifest, inventory, maps | map/session/view sidecars in interactive mode | no | yes | Human workspace entry; agents should not launch the interactive TUI. |

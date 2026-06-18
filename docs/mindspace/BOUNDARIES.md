@@ -61,19 +61,20 @@ Good substrate commands:
 ```bash
 mdm mindspace scan .
 mdm mindspace lint .
+mdm mindspace template list
+mdm mindspace template show launch-planning
 mdm mindspace setup . --preview
 mdm mindspace context maps/tasks.md#todo/focus
 mdm mindspace session ...
 mdm mindspace review ...
 ```
 
-`scan` and `lint` are implemented first because they prove the optional layer
-without adopting the folder. Both are read-only; `setup`, `context`, `session`,
-and `review` remain future Mindspace commands.
+`scan`, `lint`, and template helpers are implemented first because they prove
+the optional layer without adopting the folder. They are read-only; `setup`,
+`context`, `session`, and `review` remain future Mindspace commands.
 
-Template helper commands also belong under `mdm mindspace`, for example
-`mdm mindspace template list` and `mdm mindspace template show <id>`. These are
-agent/user guidance helpers, not new top-level commands.
+Template helper commands are agent/user guidance helpers, not new top-level
+commands.
 
 Avoid:
 

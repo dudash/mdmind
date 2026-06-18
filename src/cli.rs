@@ -39,9 +39,12 @@ use crate::interactive::{
 };
 use crate::markdown_render::{ColorMode, RenderOptions, RenderTarget, render_markdown};
 use crate::mindspace::{
-    MINDSPACE_DIAGNOSTICS_FORMAT, MINDSPACE_SCAN_FORMAT, MindspaceDiagnosticsReport,
-    render_mindspace_diagnostics, render_mindspace_diagnostics_plain, render_mindspace_scan,
-    render_mindspace_scan_plain, scan_mindspace,
+    MINDSPACE_DIAGNOSTICS_FORMAT, MINDSPACE_SCAN_FORMAT, MINDSPACE_TEMPLATE_CATALOG_FORMAT,
+    MINDSPACE_TEMPLATE_FORMAT, MindspaceDiagnosticsReport, mindspace_template,
+    mindspace_template_catalog, render_mindspace_diagnostics, render_mindspace_diagnostics_plain,
+    render_mindspace_scan, render_mindspace_scan_plain, render_mindspace_template,
+    render_mindspace_template_catalog, render_mindspace_template_catalog_plain,
+    render_mindspace_template_plain, render_mindspace_template_prompt, scan_mindspace,
 };
 use crate::model::{Document, ExternalRefKind, Node, Severity, TaskState};
 use crate::query::{
@@ -245,7 +248,7 @@ enum Commands {
     },
     #[command(
         about = "Inspect and lint optional folder-level Mindspace workspaces.",
-        after_help = "Examples:\n  mdm mindspace scan .\n  mdm mindspace scan . --json\n  mdm mindspace lint .\n  mdm mindspace lint . --plain"
+        after_help = "Examples:\n  mdm mindspace scan .\n  mdm mindspace scan . --json\n  mdm mindspace lint .\n  mdm mindspace template list\n  mdm mindspace template show launch-planning --prompt"
     )]
     Mindspace {
         #[command(subcommand)]
@@ -374,6 +377,37 @@ enum MindspaceCommands {
         json: bool,
         #[arg(long)]
         plain: bool,
+    },
+    #[command(about = "List and inspect built-in Mindspace job templates.")]
+    Template {
+        #[command(subcommand)]
+        command: MindspaceTemplateCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum MindspaceTemplateCommands {
+    #[command(about = "List built-in Mindspace job templates.")]
+    List {
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+    },
+    #[command(about = "Show one built-in Mindspace job template.")]
+    Show {
+        #[arg(help = "Template id, such as launch-planning or claims-evidence.")]
+        id: String,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+        #[arg(
+            long,
+            action = ArgAction::SetTrue,
+            help = "Print a copyable agent starting prompt plus safety and review guidance."
+        )]
+        prompt: bool,
     },
 }
 
@@ -593,6 +627,24 @@ impl Cli {
             } if *json => Some(JsonContext {
                 command: "mindspace lint",
                 target: Some(root.to_string_lossy().to_string()),
+            }),
+            Commands::Mindspace {
+                command:
+                    MindspaceCommands::Template {
+                        command: MindspaceTemplateCommands::List { json, .. },
+                    },
+            } if *json => Some(JsonContext {
+                command: "mindspace template list",
+                target: None,
+            }),
+            Commands::Mindspace {
+                command:
+                    MindspaceCommands::Template {
+                        command: MindspaceTemplateCommands::Show { id, json, .. },
+                    },
+            } if *json => Some(JsonContext {
+                command: "mindspace template show",
+                target: Some(id.clone()),
             }),
             _ => None,
         }
@@ -951,6 +1003,68 @@ fn dispatch_mindspace(command: MindspaceCommands) -> Result<(), CliError> {
                 return Err(CliError::silent(1));
             }
             Ok(())
+        }
+        MindspaceCommands::Template { command } => dispatch_mindspace_template(command),
+    }
+}
+
+fn dispatch_mindspace_template(command: MindspaceTemplateCommands) -> Result<(), CliError> {
+    match command {
+        MindspaceTemplateCommands::List { json, plain } => {
+            let catalog = mindspace_template_catalog();
+            print_output(
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "mindspace template list",
+                    target: None,
+                    format: MINDSPACE_TEMPLATE_CATALOG_FORMAT,
+                    summary: Some(count_summary(catalog.templates.len())),
+                },
+                &catalog,
+                || render_mindspace_template_catalog(&catalog),
+                || render_mindspace_template_catalog_plain(&catalog),
+            )
+        }
+        MindspaceTemplateCommands::Show {
+            id,
+            json,
+            plain,
+            prompt,
+        } => {
+            if prompt && (json || plain) {
+                return Err(CliError::usage(
+                    "invalid_output_mode",
+                    "Choose --prompt, --json, or --plain, not more than one.",
+                ));
+            }
+            let template = mindspace_template(&id).ok_or_else(|| {
+                CliError::runtime(format!(
+                    "Unknown Mindspace template '{}'. Run `mdm mindspace template list`.",
+                    id
+                ))
+            })?;
+            if prompt {
+                println!("{}", render_mindspace_template_prompt(&template));
+                return Ok(());
+            }
+            print_output(
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "mindspace template show",
+                    target: Some(&id),
+                    format: MINDSPACE_TEMPLATE_FORMAT,
+                    summary: Some(json!({
+                        "id": template.id,
+                        "name": template.name,
+                        "persona_fit": template.persona_fit,
+                    })),
+                },
+                &template,
+                || render_mindspace_template(&template),
+                || render_mindspace_template_plain(&template),
+            )
         }
     }
 }
@@ -2065,15 +2179,28 @@ fn command_catalog() -> CommandCatalog {
             command_info!(
                 "mindspace",
                 "Inspect and lint optional folder-level Mindspace workspaces.",
-                &["folder", "mindspace_manifest"],
+                &[
+                    "folder",
+                    "mindspace_manifest",
+                    "built_in_mindspace_templates"
+                ],
                 &[],
                 false,
                 false,
                 &["pretty", "plain", "json"],
                 &[],
                 &[],
-                &["mindspace_scan.v1", "mindspace_diagnostics.v1"],
-                &["mdm mindspace scan .", "mdm mindspace lint ."],
+                &[
+                    "mindspace_scan.v1",
+                    "mindspace_diagnostics.v1",
+                    "mindspace_template_catalog.v1",
+                    "mindspace_template.v1",
+                ],
+                &[
+                    "mdm mindspace scan .",
+                    "mdm mindspace lint .",
+                    "mdm mindspace template list",
+                ],
             ),
             command_info!(
                 "mindspace scan",
@@ -2100,6 +2227,55 @@ fn command_catalog() -> CommandCatalog {
                 &[flag("--json"), flag("--plain")],
                 &["mindspace_diagnostics.v1"],
                 &["mdm mindspace lint .", "mdm mindspace lint . --json",],
+            ),
+            command_info!(
+                "mindspace template",
+                "List and inspect built-in Mindspace job templates.",
+                &["built_in_mindspace_templates"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[],
+                &[],
+                &["mindspace_template_catalog.v1", "mindspace_template.v1"],
+                &[
+                    "mdm mindspace template list",
+                    "mdm mindspace template show launch-planning",
+                ],
+            ),
+            command_info!(
+                "mindspace template list",
+                "List built-in Mindspace job templates.",
+                &["built_in_mindspace_templates"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[],
+                &[flag("--json"), flag("--plain")],
+                &["mindspace_template_catalog.v1"],
+                &[
+                    "mdm mindspace template list",
+                    "mdm mindspace template list --json",
+                ],
+            ),
+            command_info!(
+                "mindspace template show",
+                "Show one built-in Mindspace job template.",
+                &["built_in_mindspace_templates"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json", "prompt"],
+                &[arg("id", true)],
+                &[flag("--json"), flag("--plain"), flag("--prompt")],
+                &["mindspace_template.v1"],
+                &[
+                    "mdm mindspace template show launch-planning",
+                    "mdm mindspace template show claims-evidence --prompt",
+                    "mdm mindspace template show project-memory --json",
+                ],
             ),
             command_info!(
                 "commands",
@@ -2726,9 +2902,21 @@ fn raw_args_json_context() -> Option<JsonContext> {
         let command = match args.get(1).map(String::as_str) {
             Some("scan") => "mindspace scan",
             Some("lint") => "mindspace lint",
+            Some("template") if args.get(2).is_some_and(|arg| arg == "list") => {
+                "mindspace template list"
+            }
+            Some("template") if args.get(2).is_some_and(|arg| arg == "show") => {
+                "mindspace template show"
+            }
             _ => "mindspace",
         };
-        let target = args.get(2).filter(|value| !value.starts_with('-')).cloned();
+        let target = match command {
+            "mindspace scan" | "mindspace lint" => args.get(2),
+            "mindspace template show" => args.get(3),
+            _ => None,
+        }
+        .filter(|value| !value.starts_with('-'))
+        .cloned();
         return Some(JsonContext { command, target });
     }
 
