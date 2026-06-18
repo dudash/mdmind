@@ -187,6 +187,11 @@ mdm mindspace lint <root> --json
 mdm mindspace setup <root> --preview --json
 mdm mindspace setup <root> --write --json
 mdm mindspace context <target> --template <template-id> --json
+mdm mindspace session start <target> --role <role> --json
+mdm mindspace session submit <session-id> --rationale <text> --json
+mdm mindspace review list --json
+mdm mindspace review approve <review-id> --json
+mdm mindspace review reject <review-id> --reason <text> --json
 mdm mindspace template list --json
 mdm mindspace template show <template-id> --json
 mdm mindspace template show <template-id> --prompt
@@ -196,8 +201,7 @@ mdm commands --json
 Planned helpers:
 
 ```bash
-mdm mindspace session ...
-mdm mindspace review ...
+mdmind .
 ```
 
 The skill should work before every helper exists. Missing helpers should degrade

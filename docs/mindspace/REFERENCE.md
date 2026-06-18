@@ -186,8 +186,8 @@ behavior belong to `mdm mindspace scan`, `mdm mindspace lint`, and `mdmind .`.
 ## Command Vocabulary
 
 Mindspace commands are future commands unless already implemented. Existing
-single-file commands remain unchanged. Future session and review commands live
-under `mdm mindspace`, not a broad `mdm agent` namespace.
+single-file commands remain unchanged. Session and review commands live under
+`mdm mindspace`, not a broad `mdm agent` namespace.
 
 These commands are the public contract, not the required primary UI. Agent
 skills, project instructions, MCP adapters, and the TUI should all use this same
@@ -204,8 +204,8 @@ behavior instead of creating hidden alternatives.
 | `mdm mindspace template list` | Current | List built-in job templates. Trusted local templates are future. |
 | `mdm mindspace template show <id>` | Current | Print one built-in template as JSON, human text, or an agent prompt. |
 | `mdmind .` | MVP | Open the human workspace surface while preserving one-active-map editing. |
-| `mdm mindspace session ...` | v1 | Create and manage scoped agent collaboration sessions. |
-| `mdm mindspace review ...` | v1 | List, approve, reject, or inspect proposed writeback and repair items. |
+| `mdm mindspace session ...` | Current | Create and manage durable session records; current apply is preview-only. |
+| `mdm mindspace review ...` | Current | List, approve, reject, or stale-mark durable review records without mutating maps. |
 
 Reserved JSON format names:
 
@@ -330,6 +330,59 @@ The `mindspace_context.v1` data payload includes:
 Context bundles are deterministic and non-AI. They rank by discovered order,
 relation expansion, and explicit budgets; they do not summarize sources with an
 LLM or fetch URLs.
+
+### Current Session And Review Output
+
+`mdm mindspace session ...` emits `mindspace_session.v1` for durable agent
+session records under `.mdmind/sessions/`. `mdm mindspace review ...` emits
+`mindspace_review.v1` for durable review items under `.mdmind/reviews/`.
+
+Current session commands:
+
+```bash
+mdm mindspace session start maps/tasks.md#todo/focus --role implementer --json
+mdm mindspace session plan <session-id> --json
+mdm mindspace session apply <session-id> --preview --json
+mdm mindspace session submit <session-id> --rationale "ready for review" --json
+mdm mindspace session close <session-id> --json
+```
+
+Current review commands:
+
+```bash
+mdm mindspace review list --json
+mdm mindspace review approve <review-id> --json
+mdm mindspace review reject <review-id> --reason "wrong target branch" --json
+```
+
+The current substrate is record-first. It writes session/review JSON sidecars
+and target digests; it does not mutate map files. `session apply --preview` is
+read-only and reports review state. `review approve` records approval only after
+checking the current target digest. If the target changed, the review becomes
+`stale` instead of applying silently.
+
+The `mindspace_session.v1` payload includes:
+
+| Field | Meaning |
+| --- | --- |
+| `session` | Session record with id, status, root, target, role, goal, scope, target snapshot, review ids, timestamps, and notes. |
+| `current_snapshot` | Current target digest and provenance at read time. |
+| `stale` | Whether the current target digest differs from the session target snapshot. |
+| `notes` | Safety and next-action notes. |
+
+The `mindspace_review.v1` payload includes:
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Review id and filename stem under `.mdmind/reviews/`. |
+| `session_id` | Source session id. |
+| `status` | `pending`, `approved`, `rejected`, or `stale`. |
+| `target_snapshot` | Digest/provenance captured when the session started. |
+| `current_snapshot` | Digest/provenance checked when the review was submitted or decided. |
+| `stale` | Whether current target content differs from the captured digest. |
+| `rationale` | Agent or user rationale for the review item. |
+| `proposal` | Optional proposal text; current commands store it but do not apply it. |
+| `decision_reason` | Approval, rejection, or stale-digest decision note. |
 
 ### Current Template Output
 

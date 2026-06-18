@@ -80,14 +80,18 @@ mdm mindspace lint <root> --json
 mdm mindspace setup <root> --preview --json
 mdm mindspace setup <root> --write --json
 mdm mindspace context <target> --template <template-id> --json
+mdm mindspace session start <target> --role <role> --json
+mdm mindspace session submit <session-id> --rationale <text> --json
+mdm mindspace review list --json
+mdm mindspace review approve <review-id> --json
+mdm mindspace review reject <review-id> --reason <text> --json
 mdm mindspace template list --json
 mdm mindspace template show <template-id> --json
 mdm commands --json
 ```
 
-Planned helpers include `session`, `review`, and `mdmind .` workspace landing
-behavior. When they are unavailable, describe the intended review path and keep
-proposed writes explicit.
+Planned helpers include `mdmind .` workspace landing behavior. Current
+session/review helpers write durable sidecars only; they do not mutate maps.
 
 ## Closeout Standard
 

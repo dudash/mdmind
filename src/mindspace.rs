@@ -1,8 +1,9 @@
 use std::collections::{BTreeSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::app::{AppError, ClassifiedTarget, OpenTargetMode, classify_open_target};
@@ -17,10 +18,14 @@ pub const MINDSPACE_SCAN_FORMAT: &str = "mindspace_scan.v1";
 pub const MINDSPACE_DIAGNOSTICS_FORMAT: &str = "mindspace_diagnostics.v1";
 pub const MINDSPACE_SETUP_FORMAT: &str = "mindspace_setup.v1";
 pub const MINDSPACE_CONTEXT_FORMAT: &str = "mindspace_context.v1";
+pub const MINDSPACE_SESSION_FORMAT: &str = "mindspace_session.v1";
+pub const MINDSPACE_REVIEW_FORMAT: &str = "mindspace_review.v1";
 pub const MINDSPACE_TEMPLATE_CATALOG_FORMAT: &str = "mindspace_template_catalog.v1";
 pub const MINDSPACE_TEMPLATE_FORMAT: &str = "mindspace_template.v1";
 const MANIFEST_SCHEMA_VERSION: &str = "mdmind.mindspace.v1";
 const MANIFEST_RELATIVE_PATH: &str = ".mdmind/mindspace.json";
+const SESSIONS_RELATIVE_DIR: &str = ".mdmind/sessions";
+const REVIEWS_RELATIVE_DIR: &str = ".mdmind/reviews";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MindspaceScan {
@@ -310,6 +315,111 @@ pub struct MindspaceContextOmission {
     pub file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MindspaceSessionRecord {
+    pub schema_version: String,
+    pub id: String,
+    pub status: MindspaceSessionStatus,
+    pub root: String,
+    pub target: String,
+    pub role: String,
+    pub goal: String,
+    pub scope: String,
+    pub target_snapshot: MindspaceTargetSnapshot,
+    pub created_at_ms: u128,
+    pub updated_at_ms: u128,
+    pub review_ids: Vec<String>,
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MindspaceSessionStatus {
+    Open,
+    Submitted,
+    Closed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MindspaceTargetSnapshot {
+    pub target: String,
+    pub file: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub breadcrumb: Option<String>,
+    pub digest: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MindspaceReviewRecord {
+    pub schema_version: String,
+    pub id: String,
+    pub session_id: String,
+    pub status: MindspaceReviewStatus,
+    pub root: String,
+    pub target: String,
+    pub target_snapshot: MindspaceTargetSnapshot,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_snapshot: Option<MindspaceTargetSnapshot>,
+    pub stale: bool,
+    pub rationale: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proposal: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decision_reason: Option<String>,
+    pub created_at_ms: u128,
+    pub updated_at_ms: u128,
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MindspaceReviewStatus {
+    Pending,
+    Approved,
+    Rejected,
+    Stale,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MindspaceSessionReport {
+    pub root: String,
+    pub session: MindspaceSessionRecord,
+    pub current_snapshot: MindspaceTargetSnapshot,
+    pub stale: bool,
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MindspaceSessionApplyReport {
+    pub root: String,
+    pub session: MindspaceSessionRecord,
+    pub reviews: Vec<MindspaceReviewRecord>,
+    pub preview: bool,
+    pub stale: bool,
+    pub writes: Vec<String>,
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MindspaceReviewList {
+    pub root: String,
+    pub reviews: Vec<MindspaceReviewRecord>,
+    pub summary: MindspaceReviewSummary,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct MindspaceReviewSummary {
+    pub pending: usize,
+    pub approved: usize,
+    pub rejected: usize,
+    pub stale: usize,
+    pub count: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -654,6 +764,182 @@ pub fn context_mindspace(
         omitted,
         diagnostics,
     })
+}
+
+pub fn start_mindspace_session(
+    root: &Path,
+    target: &str,
+    role: &str,
+    goal: Option<&str>,
+) -> Result<MindspaceSessionReport, AppError> {
+    let (canonical_root, target_snapshot) = resolve_target_snapshot(root, target)?;
+    let now_ms = now_millis();
+    let session = MindspaceSessionRecord {
+        schema_version: MINDSPACE_SESSION_FORMAT.to_string(),
+        id: new_record_id("session"),
+        status: MindspaceSessionStatus::Open,
+        root: canonical_root.to_string_lossy().to_string(),
+        target: target.to_string(),
+        role: role.to_string(),
+        goal: goal.unwrap_or("Scoped Mindspace work").to_string(),
+        scope: if target_snapshot.id.is_some() {
+            "target_branch".to_string()
+        } else {
+            "target_file".to_string()
+        },
+        target_snapshot: target_snapshot.clone(),
+        created_at_ms: now_ms,
+        updated_at_ms: now_ms,
+        review_ids: Vec::new(),
+        notes: vec![
+            "Session start records the target digest before agent work.".to_string(),
+            "Map writes are not performed by session start.".to_string(),
+        ],
+    };
+    write_session_record(&canonical_root, &session)?;
+    Ok(MindspaceSessionReport {
+        root: session.root.clone(),
+        session,
+        current_snapshot: target_snapshot,
+        stale: false,
+        notes: vec!["Session record written under .mdmind/sessions/.".to_string()],
+    })
+}
+
+pub fn plan_mindspace_session(
+    root: &Path,
+    session_id: &str,
+) -> Result<MindspaceSessionReport, AppError> {
+    let canonical_root = canonicalize_mindspace_root(root)?;
+    let session = read_session_record(&canonical_root, session_id)?;
+    let current_snapshot = resolve_target_snapshot(&canonical_root, &session.target)?.1;
+    let stale = current_snapshot.digest != session.target_snapshot.digest;
+    Ok(MindspaceSessionReport {
+        root: canonical_root.to_string_lossy().to_string(),
+        session,
+        current_snapshot,
+        stale,
+        notes: vec![
+            "Use mdm mindspace context on the session target before proposing edits.".to_string(),
+            "Stale sessions should produce review items instead of silent writes.".to_string(),
+        ],
+    })
+}
+
+pub fn preview_mindspace_session_apply(
+    root: &Path,
+    session_id: &str,
+) -> Result<MindspaceSessionApplyReport, AppError> {
+    let canonical_root = canonicalize_mindspace_root(root)?;
+    let session = read_session_record(&canonical_root, session_id)?;
+    let reviews = read_reviews_for_session(&canonical_root, &session.review_ids)?;
+    let current_snapshot = resolve_target_snapshot(&canonical_root, &session.target)?.1;
+    let stale = current_snapshot.digest != session.target_snapshot.digest
+        || reviews.iter().any(|review| review.stale);
+    Ok(MindspaceSessionApplyReport {
+        root: canonical_root.to_string_lossy().to_string(),
+        session,
+        reviews,
+        preview: true,
+        stale,
+        writes: Vec::new(),
+        notes: vec![
+            "Apply preview is read-only in this substrate slice.".to_string(),
+            "Approve or reject review items before any future scoped writeback.".to_string(),
+        ],
+    })
+}
+
+pub fn submit_mindspace_session(
+    root: &Path,
+    session_id: &str,
+    rationale: &str,
+    proposal: Option<&str>,
+) -> Result<MindspaceReviewRecord, AppError> {
+    let canonical_root = canonicalize_mindspace_root(root)?;
+    let mut session = read_session_record(&canonical_root, session_id)?;
+    let current_snapshot = resolve_target_snapshot(&canonical_root, &session.target)?.1;
+    let now_ms = now_millis();
+    let review = MindspaceReviewRecord {
+        schema_version: MINDSPACE_REVIEW_FORMAT.to_string(),
+        id: new_record_id("review"),
+        session_id: session.id.clone(),
+        status: MindspaceReviewStatus::Pending,
+        root: canonical_root.to_string_lossy().to_string(),
+        target: session.target.clone(),
+        target_snapshot: session.target_snapshot.clone(),
+        current_snapshot: Some(current_snapshot.clone()),
+        stale: current_snapshot.digest != session.target_snapshot.digest,
+        rationale: rationale.to_string(),
+        proposal: proposal.map(str::to_string),
+        decision_reason: None,
+        created_at_ms: now_ms,
+        updated_at_ms: now_ms,
+        notes: vec![
+            "Review item is durable and discoverable under .mdmind/reviews/.".to_string(),
+            "Approval records a decision after digest checks; it does not rewrite maps yet."
+                .to_string(),
+        ],
+    };
+    write_review_record(&canonical_root, &review)?;
+    if !session.review_ids.contains(&review.id) {
+        session.review_ids.push(review.id.clone());
+    }
+    session.status = MindspaceSessionStatus::Submitted;
+    session.updated_at_ms = now_ms;
+    write_session_record(&canonical_root, &session)?;
+    Ok(review)
+}
+
+pub fn close_mindspace_session(
+    root: &Path,
+    session_id: &str,
+) -> Result<MindspaceSessionRecord, AppError> {
+    let canonical_root = canonicalize_mindspace_root(root)?;
+    let mut session = read_session_record(&canonical_root, session_id)?;
+    session.status = MindspaceSessionStatus::Closed;
+    session.updated_at_ms = now_millis();
+    session
+        .notes
+        .push("Session closed; review records remain discoverable.".to_string());
+    write_session_record(&canonical_root, &session)?;
+    Ok(session)
+}
+
+pub fn list_mindspace_reviews(root: &Path) -> Result<MindspaceReviewList, AppError> {
+    let canonical_root = canonicalize_mindspace_root(root)?;
+    let mut reviews = read_all_review_records(&canonical_root)?;
+    reviews.sort_by(|left, right| {
+        left.created_at_ms
+            .cmp(&right.created_at_ms)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    let summary = summarize_reviews(&reviews);
+    Ok(MindspaceReviewList {
+        root: canonical_root.to_string_lossy().to_string(),
+        reviews,
+        summary,
+    })
+}
+
+pub fn approve_mindspace_review(
+    root: &Path,
+    review_id: &str,
+) -> Result<MindspaceReviewRecord, AppError> {
+    decide_mindspace_review(root, review_id, MindspaceReviewDecision::Approve, None)
+}
+
+pub fn reject_mindspace_review(
+    root: &Path,
+    review_id: &str,
+    reason: &str,
+) -> Result<MindspaceReviewRecord, AppError> {
+    decide_mindspace_review(
+        root,
+        review_id,
+        MindspaceReviewDecision::Reject,
+        Some(reason),
+    )
 }
 
 pub fn render_mindspace_scan(scan: &MindspaceScan) -> String {
@@ -1050,6 +1336,158 @@ fn context_node_display_line(node: &MindspaceContextNode) -> String {
     } else {
         parts.join(" ")
     }
+}
+
+pub fn render_mindspace_session_report(report: &MindspaceSessionReport) -> String {
+    let mut lines = vec![
+        format!("Mindspace session: {}", report.session.id),
+        format!("Status: {}", session_status_name(report.session.status)),
+        format!("Target: {}", report.session.target),
+        format!("Role: {}", report.session.role),
+        format!("Goal: {}", report.session.goal),
+        format!("Digest: {}", report.session.target_snapshot.digest),
+        format!("Current digest: {}", report.current_snapshot.digest),
+        format!("Stale: {}", report.stale),
+    ];
+    for note in &report.notes {
+        lines.push(format!("- {note}"));
+    }
+    lines.join("\n")
+}
+
+pub fn render_mindspace_session_report_plain(report: &MindspaceSessionReport) -> String {
+    [
+        format!("session\t{}", report.session.id),
+        format!("status\t{}", session_status_name(report.session.status)),
+        format!("target\t{}", report.session.target),
+        format!("role\t{}", report.session.role),
+        format!("goal\t{}", report.session.goal),
+        format!("digest\t{}", report.session.target_snapshot.digest),
+        format!("current_digest\t{}", report.current_snapshot.digest),
+        format!("stale\t{}", report.stale),
+    ]
+    .join("\n")
+}
+
+pub fn render_mindspace_session_apply(report: &MindspaceSessionApplyReport) -> String {
+    let mut lines = vec![
+        format!("Mindspace session apply preview: {}", report.session.id),
+        format!("Preview: {}", report.preview),
+        format!("Stale: {}", report.stale),
+        format!("Reviews: {}", report.reviews.len()),
+        format!("Writes: {}", report.writes.len()),
+    ];
+    for review in &report.reviews {
+        lines.push(format!(
+            "- {} {} {}",
+            review.id,
+            review_status_name(review.status),
+            review.rationale
+        ));
+    }
+    for note in &report.notes {
+        lines.push(format!("- {note}"));
+    }
+    lines.join("\n")
+}
+
+pub fn render_mindspace_session_apply_plain(report: &MindspaceSessionApplyReport) -> String {
+    let mut lines = vec![
+        format!("session\t{}", report.session.id),
+        format!("preview\t{}", report.preview),
+        format!("stale\t{}", report.stale),
+        format!("reviews\t{}", report.reviews.len()),
+        format!("writes\t{}", report.writes.len()),
+    ];
+    for review in &report.reviews {
+        lines.push(format!(
+            "review\t{}\t{}\t{}",
+            review.id,
+            review_status_name(review.status),
+            review.rationale
+        ));
+    }
+    lines.join("\n")
+}
+
+pub fn render_mindspace_review(review: &MindspaceReviewRecord) -> String {
+    let mut lines = vec![
+        format!("Mindspace review: {}", review.id),
+        format!("Status: {}", review_status_name(review.status)),
+        format!("Session: {}", review.session_id),
+        format!("Target: {}", review.target),
+        format!("Stale: {}", review.stale),
+        format!("Rationale: {}", review.rationale),
+    ];
+    if let Some(reason) = &review.decision_reason {
+        lines.push(format!("Decision: {reason}"));
+    }
+    if let Some(proposal) = &review.proposal {
+        lines.push("Proposal:".to_string());
+        lines.push(proposal.clone());
+    }
+    for note in &review.notes {
+        lines.push(format!("- {note}"));
+    }
+    lines.join("\n")
+}
+
+pub fn render_mindspace_review_plain(review: &MindspaceReviewRecord) -> String {
+    let mut lines = vec![
+        format!("review\t{}", review.id),
+        format!("status\t{}", review_status_name(review.status)),
+        format!("session\t{}", review.session_id),
+        format!("target\t{}", review.target),
+        format!("stale\t{}", review.stale),
+        format!("rationale\t{}", review.rationale),
+    ];
+    if let Some(reason) = &review.decision_reason {
+        lines.push(format!("decision_reason\t{reason}"));
+    }
+    lines.join("\n")
+}
+
+pub fn render_mindspace_review_list(list: &MindspaceReviewList) -> String {
+    let mut lines = vec![format!("Mindspace reviews: {}", list.root)];
+    lines.push(format!(
+        "Pending: {}, approved: {}, rejected: {}, stale: {}, total: {}",
+        list.summary.pending,
+        list.summary.approved,
+        list.summary.rejected,
+        list.summary.stale,
+        list.summary.count
+    ));
+    for review in &list.reviews {
+        lines.push(format!(
+            "- {} {} {} ({})",
+            review.id,
+            review_status_name(review.status),
+            review.target,
+            review.rationale
+        ));
+    }
+    lines.join("\n")
+}
+
+pub fn render_mindspace_review_list_plain(list: &MindspaceReviewList) -> String {
+    let mut lines = vec![
+        format!("root\t{}", list.root),
+        format!("pending\t{}", list.summary.pending),
+        format!("approved\t{}", list.summary.approved),
+        format!("rejected\t{}", list.summary.rejected),
+        format!("stale\t{}", list.summary.stale),
+        format!("count\t{}", list.summary.count),
+    ];
+    for review in &list.reviews {
+        lines.push(format!(
+            "review\t{}\t{}\t{}\t{}",
+            review.id,
+            review_status_name(review.status),
+            review.target,
+            review.rationale
+        ));
+    }
+    lines.join("\n")
 }
 
 pub fn mindspace_template_catalog() -> MindspaceTemplateCatalog {
@@ -2359,6 +2797,359 @@ fn truncate_to_bytes(value: &str, max_bytes: usize) -> String {
 
 fn is_zero(value: &usize) -> bool {
     *value == 0
+}
+
+enum MindspaceReviewDecision {
+    Approve,
+    Reject,
+}
+
+fn decide_mindspace_review(
+    root: &Path,
+    review_id: &str,
+    decision: MindspaceReviewDecision,
+    reason: Option<&str>,
+) -> Result<MindspaceReviewRecord, AppError> {
+    let canonical_root = canonicalize_mindspace_root(root)?;
+    let mut review = read_review_record(&canonical_root, review_id)?;
+    let current_snapshot = resolve_target_snapshot(&canonical_root, &review.target)?.1;
+    review.current_snapshot = Some(current_snapshot.clone());
+    review.updated_at_ms = now_millis();
+
+    match decision {
+        MindspaceReviewDecision::Approve => {
+            if current_snapshot.digest != review.target_snapshot.digest {
+                review.status = MindspaceReviewStatus::Stale;
+                review.stale = true;
+                review.decision_reason = Some(
+                    "Target digest changed; approval was converted to stale review.".to_string(),
+                );
+                review
+                    .notes
+                    .push("Stale digest prevented silent writeback.".to_string());
+            } else {
+                review.status = MindspaceReviewStatus::Approved;
+                review.stale = false;
+                review.decision_reason = Some("Approved after digest check.".to_string());
+                review
+                    .notes
+                    .push("Approval recorded; no map write was performed.".to_string());
+            }
+        }
+        MindspaceReviewDecision::Reject => {
+            review.status = MindspaceReviewStatus::Rejected;
+            review.stale = current_snapshot.digest != review.target_snapshot.digest;
+            review.decision_reason = Some(reason.unwrap_or("Rejected.").to_string());
+            review
+                .notes
+                .push("Rejection recorded; no map write was performed.".to_string());
+        }
+    }
+
+    write_review_record(&canonical_root, &review)?;
+    Ok(review)
+}
+
+fn resolve_target_snapshot(
+    root: &Path,
+    target: &str,
+) -> Result<(PathBuf, MindspaceTargetSnapshot), AppError> {
+    let scan = scan_mindspace(root)?;
+    let canonical_root = PathBuf::from(&scan.root);
+    let maps = load_context_maps(&canonical_root, &scan.maps)?;
+    let target_ref = parse_context_target(target.trim());
+
+    match (&target_ref.path, &target_ref.anchor) {
+        (Some(path), anchor) if path != "." => {
+            let map_path = normalize_context_path(&canonical_root, path);
+            let Some(map) = maps.iter().find(|map| map.path == map_path) else {
+                return Err(AppError::new(format!(
+                    "Mindspace target map '{map_path}' was not found in the scan."
+                )));
+            };
+            if let Some(anchor) = anchor {
+                let path = find_path_by_id(&map.document.nodes, anchor).ok_or_else(|| {
+                    AppError::new(format!(
+                        "Mindspace target id '{anchor}' was not found in '{map_path}'."
+                    ))
+                })?;
+                let node = get_node(&map.document.nodes, &path).ok_or_else(|| {
+                    AppError::new(format!(
+                        "Mindspace target id '{anchor}' could not be resolved in '{map_path}'."
+                    ))
+                })?;
+                return Ok((
+                    canonical_root,
+                    MindspaceTargetSnapshot {
+                        target: target.to_string(),
+                        file: map.path.clone(),
+                        id: node.id.clone(),
+                        line: Some(node.line),
+                        breadcrumb: Some(breadcrumb_for_path(&map.document, &path)),
+                        digest: digest_text(&canonical_node_text(node)),
+                    },
+                ));
+            }
+
+            let source = fs::read_to_string(&map.absolute_path).map_err(|error| {
+                AppError::new(format!(
+                    "Could not read '{}': {error}",
+                    map.absolute_path.display()
+                ))
+            })?;
+            Ok((
+                canonical_root,
+                MindspaceTargetSnapshot {
+                    target: target.to_string(),
+                    file: map.path.clone(),
+                    id: None,
+                    line: None,
+                    breadcrumb: None,
+                    digest: digest_text(&source),
+                },
+            ))
+        }
+        (None | Some(_), Some(anchor)) => {
+            for map in &maps {
+                if let Some(path) = find_path_by_id(&map.document.nodes, anchor) {
+                    let Some(node) = get_node(&map.document.nodes, &path) else {
+                        continue;
+                    };
+                    return Ok((
+                        canonical_root,
+                        MindspaceTargetSnapshot {
+                            target: target.to_string(),
+                            file: map.path.clone(),
+                            id: node.id.clone(),
+                            line: Some(node.line),
+                            breadcrumb: Some(breadcrumb_for_path(&map.document, &path)),
+                            digest: digest_text(&canonical_node_text(node)),
+                        },
+                    ));
+                }
+            }
+            Err(AppError::new(format!(
+                "Mindspace target id '{anchor}' was not found in scanned maps."
+            )))
+        }
+        _ => Err(AppError::new(
+            "Mindspace session target must be a map path or branch id.",
+        )),
+    }
+}
+
+fn canonical_node_text(node: &Node) -> String {
+    let mut lines = Vec::new();
+    canonical_node_lines(node, 0, &mut lines);
+    lines.join("\n")
+}
+
+fn canonical_node_lines(node: &Node, depth: usize, lines: &mut Vec<String>) {
+    lines.push(format!("{}{}", "  ".repeat(depth), node.display_line()));
+    for detail in &node.detail {
+        lines.push(format!("{}| {}", "  ".repeat(depth + 1), detail));
+    }
+    for child in &node.children {
+        canonical_node_lines(child, depth + 1, lines);
+    }
+}
+
+fn digest_text(text: &str) -> String {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in text.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("fnv1a64:{hash:016x}")
+}
+
+fn canonicalize_mindspace_root(root: &Path) -> Result<PathBuf, AppError> {
+    root.canonicalize().map_err(|error| {
+        AppError::new(format!(
+            "Could not access Mindspace root '{}': {error}",
+            root.display()
+        ))
+    })
+}
+
+fn session_record_path(root: &Path, session_id: &str) -> Result<PathBuf, AppError> {
+    validate_record_id("session", session_id)?;
+    Ok(root
+        .join(SESSIONS_RELATIVE_DIR)
+        .join(format!("{session_id}.json")))
+}
+
+fn review_record_path(root: &Path, review_id: &str) -> Result<PathBuf, AppError> {
+    validate_record_id("review", review_id)?;
+    Ok(root
+        .join(REVIEWS_RELATIVE_DIR)
+        .join(format!("{review_id}.json")))
+}
+
+fn write_session_record(root: &Path, session: &MindspaceSessionRecord) -> Result<(), AppError> {
+    let directory = root.join(SESSIONS_RELATIVE_DIR);
+    fs::create_dir_all(&directory).map_err(|error| {
+        AppError::new(format!(
+            "Could not create '{}': {error}",
+            directory.display()
+        ))
+    })?;
+    let path = session_record_path(root, &session.id)?;
+    write_json_file(&path, session)
+}
+
+fn write_review_record(root: &Path, review: &MindspaceReviewRecord) -> Result<(), AppError> {
+    let directory = root.join(REVIEWS_RELATIVE_DIR);
+    fs::create_dir_all(&directory).map_err(|error| {
+        AppError::new(format!(
+            "Could not create '{}': {error}",
+            directory.display()
+        ))
+    })?;
+    let path = review_record_path(root, &review.id)?;
+    write_json_file(&path, review)
+}
+
+fn write_json_file<T: Serialize>(path: &Path, value: &T) -> Result<(), AppError> {
+    let source =
+        serde_json::to_string_pretty(value).expect("mindspace record should serialize") + "\n";
+    fs::write(path, source.as_bytes())
+        .map_err(|error| AppError::new(format!("Could not write '{}': {error}", path.display())))
+}
+
+fn read_session_record(root: &Path, session_id: &str) -> Result<MindspaceSessionRecord, AppError> {
+    let path = session_record_path(root, session_id)?;
+    read_json_file(&path, "session")
+}
+
+fn read_review_record(root: &Path, review_id: &str) -> Result<MindspaceReviewRecord, AppError> {
+    let path = review_record_path(root, review_id)?;
+    read_json_file(&path, "review")
+}
+
+fn validate_record_id(kind: &str, id: &str) -> Result<(), AppError> {
+    let valid = !id.is_empty()
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_');
+    if valid {
+        Ok(())
+    } else {
+        Err(AppError::new(format!(
+            "Mindspace {kind} id '{id}' is invalid. Record ids use letters, numbers, hyphen, and underscore."
+        )))
+    }
+}
+
+fn read_json_file<T: for<'de> Deserialize<'de>>(path: &Path, kind: &str) -> Result<T, AppError> {
+    let source = fs::read_to_string(path).map_err(|error| {
+        AppError::new(format!(
+            "Could not read {kind} '{}': {error}",
+            path.display()
+        ))
+    })?;
+    serde_json::from_str(&source).map_err(|error| {
+        AppError::new(format!(
+            "Could not parse {kind} record '{}': {error}",
+            path.display()
+        ))
+    })
+}
+
+fn read_reviews_for_session(
+    root: &Path,
+    review_ids: &[String],
+) -> Result<Vec<MindspaceReviewRecord>, AppError> {
+    let mut reviews = Vec::new();
+    for review_id in review_ids {
+        reviews.push(read_review_record(root, review_id)?);
+    }
+    Ok(reviews)
+}
+
+fn read_all_review_records(root: &Path) -> Result<Vec<MindspaceReviewRecord>, AppError> {
+    let directory = root.join(REVIEWS_RELATIVE_DIR);
+    let entries = match fs::read_dir(&directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => {
+            return Err(AppError::new(format!(
+                "Could not read reviews directory '{}': {error}",
+                directory.display()
+            )));
+        }
+    };
+
+    let mut reviews = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            AppError::new(format!(
+                "Could not inspect reviews directory '{}': {error}",
+                directory.display()
+            ))
+        })?;
+        if entry
+            .path()
+            .extension()
+            .and_then(|extension| extension.to_str())
+            != Some("json")
+        {
+            continue;
+        }
+        reviews.push(read_json_file(&entry.path(), "review")?);
+    }
+    Ok(reviews)
+}
+
+fn summarize_reviews(reviews: &[MindspaceReviewRecord]) -> MindspaceReviewSummary {
+    let mut summary = MindspaceReviewSummary {
+        pending: 0,
+        approved: 0,
+        rejected: 0,
+        stale: 0,
+        count: reviews.len(),
+    };
+    for review in reviews {
+        match review.status {
+            MindspaceReviewStatus::Pending => summary.pending += 1,
+            MindspaceReviewStatus::Approved => summary.approved += 1,
+            MindspaceReviewStatus::Rejected => summary.rejected += 1,
+            MindspaceReviewStatus::Stale => summary.stale += 1,
+        }
+    }
+    summary
+}
+
+fn now_millis() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be after unix epoch")
+        .as_millis()
+}
+
+fn new_record_id(prefix: &str) -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be after unix epoch")
+        .as_nanos();
+    format!("{prefix}-{nanos}")
+}
+
+fn session_status_name(status: MindspaceSessionStatus) -> &'static str {
+    match status {
+        MindspaceSessionStatus::Open => "open",
+        MindspaceSessionStatus::Submitted => "submitted",
+        MindspaceSessionStatus::Closed => "closed",
+    }
+}
+
+fn review_status_name(status: MindspaceReviewStatus) -> &'static str {
+    match status {
+        MindspaceReviewStatus::Pending => "pending",
+        MindspaceReviewStatus::Approved => "approved",
+        MindspaceReviewStatus::Rejected => "rejected",
+        MindspaceReviewStatus::Stale => "stale",
+    }
 }
 
 struct MindspaceManifestProposal {

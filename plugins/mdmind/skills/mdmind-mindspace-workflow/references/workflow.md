@@ -50,6 +50,11 @@ mdm mindspace lint . --json
 mdm mindspace setup . --preview --json
 mdm mindspace setup . --write --json
 mdm mindspace context <target> --json
+mdm mindspace session start <target> --role <role> --json
+mdm mindspace session submit <session-id> --rationale <text> --json
+mdm mindspace review list --json
+mdm mindspace review approve <review-id> --json
+mdm mindspace review reject <review-id> --reason <text> --json
 ```
 
 Use `mdm commands --json` when you need to confirm current command availability,
@@ -61,8 +66,6 @@ The following commands may be referenced in product docs but might not exist in
 the current installed version:
 
 ```bash
-mdm mindspace session ...
-mdm mindspace review ...
 mdmind .
 ```
 

@@ -120,9 +120,13 @@ payload lives in `data`:
 | `relations --json` | `relation_rows.v1` | `RelationRow[]` |
 | `validate --json` | `diagnostics.v1` | `Diagnostic[]` |
 | `mindspace scan --json` | `mindspace_scan.v1` | `MindspaceScan` object |
+| `mindspace setup --json` | `mindspace_setup.v1` | `MindspaceSetupReport` object |
 | `mindspace lint --json` | `mindspace_diagnostics.v1` | `MindspaceDiagnosticsReport` object |
+| `mindspace context --json` | `mindspace_context.v1` | `MindspaceContextBundle` object |
 | `mindspace template list --json` | `mindspace_template_catalog.v1` | `MindspaceTemplateCatalog` object |
 | `mindspace template show --json` | `mindspace_template.v1` | `MindspaceTemplate` object |
+| `mindspace session --json` | `mindspace_session.v1` | `MindspaceSessionReport` or `MindspaceSessionApplyReport` object |
+| `mindspace review --json` | `mindspace_review.v1` | `MindspaceReviewRecord` or `MindspaceReviewList` object |
 | `commands --json` | `command_catalog.v1` | `CommandCatalog` object |
 | `changelog --json` | `changelog_entry.v1` or `changelog.v1` | `ChangelogEntry` object or `ChangelogEntry[]` |
 | `export --format json` | raw export | `ExportDocument` object |
@@ -264,6 +268,8 @@ listed as interactive in `mdm commands --json`.
 | `mdm mindspace setup <root> --preview` | folder, optional manifest, maps, Markdown | no | no | no | Preview the proposed manifest; use `--json` for `mindspace_setup.v1`. |
 | `mdm mindspace setup <root> --write` | folder, optional manifest, maps, Markdown | `.mdmind/mindspace.json` | no | no | Write only the manifest and required `.mdmind/` directory; never move or rewrite notes. |
 | `mdm mindspace context <target>` | maps, selected pages, refs, sources | no | no | no | Export bounded context with provenance; use `--json` for `mindspace_context.v1`. |
+| `mdm mindspace session ...` | maps, session records | `.mdmind/sessions/`, `.mdmind/reviews/` | no | no | Record agent sessions and submit review items; current apply is preview-only. |
+| `mdm mindspace review ...` | review records, target maps | `.mdmind/reviews/` | no | no | List, approve, reject, or stale-mark review items after digest checks; current approval does not mutate maps. |
 | `mdm mindspace template list` | built-in Mindspace templates | no | no | no | List persona/job templates; use `--json` for `mindspace_template_catalog.v1`. |
 | `mdm mindspace template show <id>` | built-in Mindspace templates | no | no | no | Show one template as human text, `--plain`, `--json`, or `--prompt`. |
 | `mdm changelog` | bundled changelog | no | no | no | Reads pretty release notes for the bundled version; use `--version` or `--all` for other sections, `--plain` for raw Markdown, and `--json` for scripts. |
@@ -297,8 +303,8 @@ adoption profiles.
 | `mdm mindspace context <target>` | maps, selected pages, refs, sources | no | no | no | Current: export bounded context with provenance, budgets, and omission reasons. |
 | `mdm mindspace template list` | built-in template refs | no | no | no | Current: list persona/job templates available to guide agent workflows. Trusted local templates are future. |
 | `mdm mindspace template show <id>` | one built-in template ref | no | no | no | Current: print a job template as JSON, human text, plain text, or an agent prompt. |
-| `mdm mindspace session ...` | session records, maps, context bundles | session/review/checkpoint sidecars; scoped map writes only on explicit apply | no | no | Manage scoped agent collaboration with target digests and previewable writeback. |
-| `mdm mindspace review ...` | review records, target files | review/checkpoint sidecars; scoped target writes only on approval | no | no | Inspect, approve, or reject proposed writeback and repair items. |
+| `mdm mindspace session ...` | session records, maps, context bundles | `.mdmind/sessions/`, `.mdmind/reviews/` | no | no | Current: manage scoped agent collaboration records with target digests; apply is preview-only. |
+| `mdm mindspace review ...` | review records, target files | `.mdmind/reviews/` | no | no | Current: inspect, approve, reject, or stale-mark review items; approval does not mutate maps yet. |
 | `mdmind .` | folder, manifest, inventory, maps | map/session/view sidecars in interactive mode | no | yes | Human workspace entry; agents should not launch the interactive TUI. |
 
 Reserved JSON formats:

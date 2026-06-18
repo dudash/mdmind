@@ -39,16 +39,22 @@ use crate::interactive::{
 };
 use crate::markdown_render::{ColorMode, RenderOptions, RenderTarget, render_markdown};
 use crate::mindspace::{
-    MINDSPACE_CONTEXT_FORMAT, MINDSPACE_DIAGNOSTICS_FORMAT, MINDSPACE_SCAN_FORMAT,
-    MINDSPACE_SETUP_FORMAT, MINDSPACE_TEMPLATE_CATALOG_FORMAT, MINDSPACE_TEMPLATE_FORMAT,
-    MindspaceContextOptions, MindspaceDiagnosticsReport, MindspaceSetupMode, context_mindspace,
-    mindspace_template, mindspace_template_catalog, render_mindspace_context,
-    render_mindspace_context_plain, render_mindspace_diagnostics,
-    render_mindspace_diagnostics_plain, render_mindspace_scan, render_mindspace_scan_plain,
-    render_mindspace_setup, render_mindspace_setup_plain, render_mindspace_template,
-    render_mindspace_template_catalog, render_mindspace_template_catalog_plain,
-    render_mindspace_template_plain, render_mindspace_template_prompt, scan_mindspace,
-    setup_mindspace,
+    MINDSPACE_CONTEXT_FORMAT, MINDSPACE_DIAGNOSTICS_FORMAT, MINDSPACE_REVIEW_FORMAT,
+    MINDSPACE_SCAN_FORMAT, MINDSPACE_SESSION_FORMAT, MINDSPACE_SETUP_FORMAT,
+    MINDSPACE_TEMPLATE_CATALOG_FORMAT, MINDSPACE_TEMPLATE_FORMAT, MindspaceContextOptions,
+    MindspaceDiagnosticsReport, MindspaceSetupMode, approve_mindspace_review,
+    close_mindspace_session, context_mindspace, list_mindspace_reviews, mindspace_template,
+    mindspace_template_catalog, plan_mindspace_session, preview_mindspace_session_apply,
+    reject_mindspace_review, render_mindspace_context, render_mindspace_context_plain,
+    render_mindspace_diagnostics, render_mindspace_diagnostics_plain, render_mindspace_review,
+    render_mindspace_review_list, render_mindspace_review_list_plain,
+    render_mindspace_review_plain, render_mindspace_scan, render_mindspace_scan_plain,
+    render_mindspace_session_apply, render_mindspace_session_apply_plain,
+    render_mindspace_session_report, render_mindspace_session_report_plain, render_mindspace_setup,
+    render_mindspace_setup_plain, render_mindspace_template, render_mindspace_template_catalog,
+    render_mindspace_template_catalog_plain, render_mindspace_template_plain,
+    render_mindspace_template_prompt, scan_mindspace, setup_mindspace, start_mindspace_session,
+    submit_mindspace_session,
 };
 use crate::model::{Document, ExternalRefKind, Node, Severity, TaskState};
 use crate::query::{
@@ -252,7 +258,7 @@ enum Commands {
     },
     #[command(
         about = "Inspect and lint optional folder-level Mindspace workspaces.",
-        after_help = "Examples:\n  mdm mindspace scan .\n  mdm mindspace setup . --preview\n  mdm mindspace setup . --write\n  mdm mindspace context maps/roadmap.md#roadmap/current\n  mdm mindspace lint .\n  mdm mindspace template list\n  mdm mindspace template show launch-planning --prompt"
+        after_help = "Examples:\n  mdm mindspace scan .\n  mdm mindspace setup . --preview\n  mdm mindspace setup . --write\n  mdm mindspace context maps/roadmap.md#roadmap/current\n  mdm mindspace lint .\n  mdm mindspace template list\n  mdm mindspace template show launch-planning --prompt\n  mdm mindspace session start maps/roadmap.md#roadmap/current --role implementer --json\n  mdm mindspace review list --json"
     )]
     Mindspace {
         #[command(subcommand)]
@@ -447,10 +453,119 @@ enum MindspaceCommands {
         #[arg(long)]
         plain: bool,
     },
+    #[command(about = "Manage durable Mindspace agent session records.")]
+    Session {
+        #[command(subcommand)]
+        command: MindspaceSessionCommands,
+    },
+    #[command(about = "List and decide durable Mindspace review records.")]
+    Review {
+        #[command(subcommand)]
+        command: MindspaceReviewCommands,
+    },
     #[command(about = "List and inspect built-in Mindspace job templates.")]
     Template {
         #[command(subcommand)]
         command: MindspaceTemplateCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum MindspaceSessionCommands {
+    #[command(about = "Start a durable agent session record for a target.")]
+    Start {
+        target: String,
+        #[arg(long)]
+        role: String,
+        #[arg(long)]
+        goal: Option<String>,
+        #[arg(long, help = "Mindspace root; defaults to the current directory.")]
+        root: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+    },
+    #[command(about = "Show a session plan and current target digest.")]
+    Plan {
+        session_id: String,
+        #[arg(long, help = "Mindspace root; defaults to the current directory.")]
+        root: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+    },
+    #[command(about = "Preview session review state before future writeback.")]
+    Apply {
+        session_id: String,
+        #[arg(long, action = ArgAction::SetTrue)]
+        preview: bool,
+        #[arg(long, help = "Mindspace root; defaults to the current directory.")]
+        root: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+    },
+    #[command(about = "Submit a session result as a durable review item.")]
+    Submit {
+        session_id: String,
+        #[arg(long)]
+        rationale: String,
+        #[arg(long)]
+        proposal: Option<String>,
+        #[arg(long, help = "Mindspace root; defaults to the current directory.")]
+        root: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+    },
+    #[command(about = "Close a durable agent session record.")]
+    Close {
+        session_id: String,
+        #[arg(long, help = "Mindspace root; defaults to the current directory.")]
+        root: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum MindspaceReviewCommands {
+    #[command(about = "List durable review items.")]
+    List {
+        #[arg(long, help = "Mindspace root; defaults to the current directory.")]
+        root: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+    },
+    #[command(about = "Approve a review item after digest checks.")]
+    Approve {
+        review_id: String,
+        #[arg(long, help = "Mindspace root; defaults to the current directory.")]
+        root: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+    },
+    #[command(about = "Reject a review item with a reason.")]
+    Reject {
+        review_id: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long, help = "Mindspace root; defaults to the current directory.")]
+        root: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
     },
 }
 
@@ -708,6 +823,48 @@ impl Cli {
             } if *json => Some(JsonContext {
                 command: "mindspace context",
                 target: Some(target.clone()),
+            }),
+            Commands::Mindspace {
+                command:
+                    MindspaceCommands::Session {
+                        command:
+                            MindspaceSessionCommands::Start { target, json, .. }
+                            | MindspaceSessionCommands::Plan {
+                                session_id: target,
+                                json,
+                                ..
+                            }
+                            | MindspaceSessionCommands::Apply {
+                                session_id: target,
+                                json,
+                                ..
+                            }
+                            | MindspaceSessionCommands::Submit {
+                                session_id: target,
+                                json,
+                                ..
+                            }
+                            | MindspaceSessionCommands::Close {
+                                session_id: target,
+                                json,
+                                ..
+                            },
+                    },
+            } if *json => Some(JsonContext {
+                command: "mindspace session",
+                target: Some(target.clone()),
+            }),
+            Commands::Mindspace {
+                command:
+                    MindspaceCommands::Review {
+                        command:
+                            MindspaceReviewCommands::List { json, .. }
+                            | MindspaceReviewCommands::Approve { json, .. }
+                            | MindspaceReviewCommands::Reject { json, .. },
+                    },
+            } if *json => Some(JsonContext {
+                command: "mindspace review",
+                target: None,
             }),
             Commands::Mindspace {
                 command:
@@ -1174,7 +1331,250 @@ fn dispatch_mindspace(command: MindspaceCommands) -> Result<(), CliError> {
                 || render_mindspace_context_plain(&bundle),
             )
         }
+        MindspaceCommands::Session { command } => dispatch_mindspace_session(command),
+        MindspaceCommands::Review { command } => dispatch_mindspace_review(command),
         MindspaceCommands::Template { command } => dispatch_mindspace_template(command),
+    }
+}
+
+fn dispatch_mindspace_session(command: MindspaceSessionCommands) -> Result<(), CliError> {
+    match command {
+        MindspaceSessionCommands::Start {
+            target,
+            role,
+            goal,
+            root,
+            json,
+            plain,
+        } => {
+            let root = root.unwrap_or_else(|| PathBuf::from("."));
+            let report = start_mindspace_session(&root, &target, &role, goal.as_deref())
+                .map_err(CliError::from_app)?;
+            print_output(
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "mindspace session start",
+                    target: Some(&target),
+                    format: MINDSPACE_SESSION_FORMAT,
+                    summary: Some(json!({
+                        "session_id": report.session.id,
+                        "status": report.session.status,
+                        "stale": report.stale
+                    })),
+                },
+                &report,
+                || render_mindspace_session_report(&report),
+                || render_mindspace_session_report_plain(&report),
+            )
+        }
+        MindspaceSessionCommands::Plan {
+            session_id,
+            root,
+            json,
+            plain,
+        } => {
+            let root = root.unwrap_or_else(|| PathBuf::from("."));
+            let report = plan_mindspace_session(&root, &session_id).map_err(CliError::from_app)?;
+            print_output(
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "mindspace session plan",
+                    target: Some(&session_id),
+                    format: MINDSPACE_SESSION_FORMAT,
+                    summary: Some(json!({
+                        "session_id": report.session.id,
+                        "status": report.session.status,
+                        "stale": report.stale
+                    })),
+                },
+                &report,
+                || render_mindspace_session_report(&report),
+                || render_mindspace_session_report_plain(&report),
+            )
+        }
+        MindspaceSessionCommands::Apply {
+            session_id,
+            preview,
+            root,
+            json,
+            plain,
+        } => {
+            if !preview {
+                return Err(CliError::usage(
+                    "invalid_session_apply_mode",
+                    "Only `mdm mindspace session apply <session-id> --preview` is supported in this substrate slice.",
+                ));
+            }
+            let root = root.unwrap_or_else(|| PathBuf::from("."));
+            let report =
+                preview_mindspace_session_apply(&root, &session_id).map_err(CliError::from_app)?;
+            print_output(
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "mindspace session apply",
+                    target: Some(&session_id),
+                    format: MINDSPACE_SESSION_FORMAT,
+                    summary: Some(json!({
+                        "session_id": report.session.id,
+                        "preview": report.preview,
+                        "stale": report.stale,
+                        "reviews": report.reviews.len()
+                    })),
+                },
+                &report,
+                || render_mindspace_session_apply(&report),
+                || render_mindspace_session_apply_plain(&report),
+            )
+        }
+        MindspaceSessionCommands::Submit {
+            session_id,
+            rationale,
+            proposal,
+            root,
+            json,
+            plain,
+        } => {
+            let root = root.unwrap_or_else(|| PathBuf::from("."));
+            let review =
+                submit_mindspace_session(&root, &session_id, &rationale, proposal.as_deref())
+                    .map_err(CliError::from_app)?;
+            print_output(
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "mindspace session submit",
+                    target: Some(&session_id),
+                    format: MINDSPACE_REVIEW_FORMAT,
+                    summary: Some(json!({
+                        "review_id": review.id,
+                        "session_id": review.session_id,
+                        "status": review.status,
+                        "stale": review.stale
+                    })),
+                },
+                &review,
+                || render_mindspace_review(&review),
+                || render_mindspace_review_plain(&review),
+            )
+        }
+        MindspaceSessionCommands::Close {
+            session_id,
+            root,
+            json,
+            plain,
+        } => {
+            let root = root.unwrap_or_else(|| PathBuf::from("."));
+            let session =
+                close_mindspace_session(&root, &session_id).map_err(CliError::from_app)?;
+            print_output(
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "mindspace session close",
+                    target: Some(&session_id),
+                    format: MINDSPACE_SESSION_FORMAT,
+                    summary: Some(json!({
+                        "session_id": session.id,
+                        "status": session.status
+                    })),
+                },
+                &session,
+                || serde_json::to_string_pretty(&session).expect("session should serialize"),
+                || {
+                    format!(
+                        "session\t{}\nstatus\t{}\ntarget\t{}",
+                        session.id,
+                        serde_json::to_value(session.status)
+                            .expect("session status should serialize")
+                            .as_str()
+                            .unwrap_or("closed"),
+                        session.target
+                    )
+                },
+            )
+        }
+    }
+}
+
+fn dispatch_mindspace_review(command: MindspaceReviewCommands) -> Result<(), CliError> {
+    match command {
+        MindspaceReviewCommands::List { root, json, plain } => {
+            let root = root.unwrap_or_else(|| PathBuf::from("."));
+            let list = list_mindspace_reviews(&root).map_err(CliError::from_app)?;
+            print_output(
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "mindspace review list",
+                    target: None,
+                    format: MINDSPACE_REVIEW_FORMAT,
+                    summary: Some(
+                        serde_json::to_value(list.summary)
+                            .expect("review summary should serialize"),
+                    ),
+                },
+                &list,
+                || render_mindspace_review_list(&list),
+                || render_mindspace_review_list_plain(&list),
+            )
+        }
+        MindspaceReviewCommands::Approve {
+            review_id,
+            root,
+            json,
+            plain,
+        } => {
+            let root = root.unwrap_or_else(|| PathBuf::from("."));
+            let review = approve_mindspace_review(&root, &review_id).map_err(CliError::from_app)?;
+            print_output(
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "mindspace review approve",
+                    target: Some(&review_id),
+                    format: MINDSPACE_REVIEW_FORMAT,
+                    summary: Some(json!({
+                        "review_id": review.id,
+                        "status": review.status,
+                        "stale": review.stale
+                    })),
+                },
+                &review,
+                || render_mindspace_review(&review),
+                || render_mindspace_review_plain(&review),
+            )
+        }
+        MindspaceReviewCommands::Reject {
+            review_id,
+            reason,
+            root,
+            json,
+            plain,
+        } => {
+            let root = root.unwrap_or_else(|| PathBuf::from("."));
+            let review =
+                reject_mindspace_review(&root, &review_id, &reason).map_err(CliError::from_app)?;
+            print_output(
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "mindspace review reject",
+                    target: Some(&review_id),
+                    format: MINDSPACE_REVIEW_FORMAT,
+                    summary: Some(json!({
+                        "review_id": review.id,
+                        "status": review.status,
+                        "stale": review.stale
+                    })),
+                },
+                &review,
+                || render_mindspace_review(&review),
+                || render_mindspace_review_plain(&review),
+            )
+        }
     }
 }
 
@@ -2367,6 +2767,8 @@ fn command_catalog() -> CommandCatalog {
                     "mindspace_diagnostics.v1",
                     "mindspace_setup.v1",
                     "mindspace_context.v1",
+                    "mindspace_session.v1",
+                    "mindspace_review.v1",
                     "mindspace_template_catalog.v1",
                     "mindspace_template.v1",
                 ],
@@ -2374,6 +2776,8 @@ fn command_catalog() -> CommandCatalog {
                     "mdm mindspace scan .",
                     "mdm mindspace setup . --preview",
                     "mdm mindspace context maps/roadmap.md#roadmap/current",
+                    "mdm mindspace session start maps/tasks.md#todo/focus --role implementer",
+                    "mdm mindspace review list",
                     "mdm mindspace lint .",
                     "mdm mindspace template list",
                 ],
@@ -2461,6 +2865,181 @@ fn command_catalog() -> CommandCatalog {
                     "mdm mindspace context maps/roadmap.md#roadmap/current --json",
                     "mdm mindspace context . --query '@owner:jason' --max-branches 8 --json",
                     "mdm mindspace context maps/roadmap.md#roadmap/current --include-source-refs",
+                ],
+            ),
+            command_info!(
+                "mindspace session",
+                "Manage durable Mindspace agent session records.",
+                &["folder", "maps", "mindspace_sessions", "mindspace_reviews"],
+                &["mindspace_sessions", "mindspace_reviews"],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[],
+                &[],
+                &["mindspace_session.v1", "mindspace_review.v1"],
+                &[
+                    "mdm mindspace session start maps/tasks.md#todo/focus --role implementer",
+                    "mdm mindspace session apply <session-id> --preview",
+                ],
+            ),
+            command_info!(
+                "mindspace session start",
+                "Start a durable agent session record for a target.",
+                &["folder", "maps"],
+                &["mindspace_sessions"],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("target", true)],
+                &[
+                    flag_value("--role", &["role"]),
+                    flag_value("--goal", &["goal"]),
+                    flag_value("--root", &["path"]),
+                    flag("--json"),
+                    flag("--plain"),
+                ],
+                &["mindspace_session.v1"],
+                &["mdm mindspace session start maps/tasks.md#todo/focus --role implementer --json",],
+            ),
+            command_info!(
+                "mindspace session plan",
+                "Show a session plan and current target digest.",
+                &["mindspace_sessions", "maps"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("session-id", true)],
+                &[
+                    flag_value("--root", &["path"]),
+                    flag("--json"),
+                    flag("--plain")
+                ],
+                &["mindspace_session.v1"],
+                &["mdm mindspace session plan <session-id> --json"],
+            ),
+            command_info!(
+                "mindspace session apply",
+                "Preview session review state before future writeback.",
+                &["mindspace_sessions", "mindspace_reviews", "maps"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("session-id", true)],
+                &[
+                    flag("--preview"),
+                    flag_value("--root", &["path"]),
+                    flag("--json"),
+                    flag("--plain"),
+                ],
+                &["mindspace_session.v1"],
+                &["mdm mindspace session apply <session-id> --preview --json"],
+            ),
+            command_info!(
+                "mindspace session submit",
+                "Submit a session result as a durable review item.",
+                &["mindspace_sessions", "maps"],
+                &["mindspace_sessions", "mindspace_reviews"],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("session-id", true)],
+                &[
+                    flag_value("--rationale", &["text"]),
+                    flag_value("--proposal", &["text"]),
+                    flag_value("--root", &["path"]),
+                    flag("--json"),
+                    flag("--plain"),
+                ],
+                &["mindspace_review.v1"],
+                &[
+                    "mdm mindspace session submit <session-id> --rationale \"ready for review\" --json"
+                ],
+            ),
+            command_info!(
+                "mindspace session close",
+                "Close a durable agent session record.",
+                &["mindspace_sessions"],
+                &["mindspace_sessions"],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("session-id", true)],
+                &[
+                    flag_value("--root", &["path"]),
+                    flag("--json"),
+                    flag("--plain")
+                ],
+                &["mindspace_session.v1"],
+                &["mdm mindspace session close <session-id> --json"],
+            ),
+            command_info!(
+                "mindspace review",
+                "List and decide durable Mindspace review records.",
+                &["mindspace_reviews", "maps"],
+                &["mindspace_reviews"],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[],
+                &[],
+                &["mindspace_review.v1"],
+                &["mdm mindspace review list --json"],
+            ),
+            command_info!(
+                "mindspace review list",
+                "List durable review items.",
+                &["mindspace_reviews"],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[],
+                &[
+                    flag_value("--root", &["path"]),
+                    flag("--json"),
+                    flag("--plain")
+                ],
+                &["mindspace_review.v1"],
+                &["mdm mindspace review list --json"],
+            ),
+            command_info!(
+                "mindspace review approve",
+                "Approve a review item after digest checks.",
+                &["mindspace_reviews", "maps"],
+                &["mindspace_reviews"],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("review-id", true)],
+                &[
+                    flag_value("--root", &["path"]),
+                    flag("--json"),
+                    flag("--plain")
+                ],
+                &["mindspace_review.v1"],
+                &["mdm mindspace review approve <review-id> --json"],
+            ),
+            command_info!(
+                "mindspace review reject",
+                "Reject a review item with a reason.",
+                &["mindspace_reviews", "maps"],
+                &["mindspace_reviews"],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("review-id", true)],
+                &[
+                    flag_value("--reason", &["text"]),
+                    flag_value("--root", &["path"]),
+                    flag("--json"),
+                    flag("--plain"),
+                ],
+                &["mindspace_review.v1"],
+                &[
+                    "mdm mindspace review reject <review-id> --reason \"wrong target branch\" --json"
                 ],
             ),
             command_info!(
@@ -3139,6 +3718,8 @@ fn raw_args_json_context() -> Option<JsonContext> {
             Some("lint") => "mindspace lint",
             Some("setup") => "mindspace setup",
             Some("context") => "mindspace context",
+            Some("session") => "mindspace session",
+            Some("review") => "mindspace review",
             Some("template") if args.get(2).is_some_and(|arg| arg == "list") => {
                 "mindspace template list"
             }
@@ -3151,6 +3732,7 @@ fn raw_args_json_context() -> Option<JsonContext> {
             "mindspace scan" | "mindspace lint" | "mindspace setup" | "mindspace context" => {
                 args.get(2)
             }
+            "mindspace session" | "mindspace review" => args.get(3),
             "mindspace template show" => args.get(3),
             _ => None,
         }

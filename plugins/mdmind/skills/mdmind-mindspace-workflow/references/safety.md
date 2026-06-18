@@ -42,6 +42,14 @@ whole-folder reads when a user asks you to work inside a mindspace. Use
 `--include-source-refs` only when source snippets are useful, and treat included
 sources as read-only evidence.
 
+## Session And Review Boundary
+
+`mdm mindspace session ...` and `mdm mindspace review ...` write only durable
+sidecar records under `.mdmind/sessions/` and `.mdmind/reviews/`. Current
+approval commands check target digests and record decisions; they do not rewrite
+maps. If approval reports `stale`, re-read context and ask the user how to
+proceed.
+
 ## Risky Writes
 
 Treat these as review-first unless the user explicitly authorizes them:

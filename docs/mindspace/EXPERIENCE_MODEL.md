@@ -168,7 +168,8 @@ Under the hood:
 
 ```bash
 mdm mindspace context maps/roadmap.md#launch/pricing --relation-depth 2 --include-backlinks
-mdm mindspace session ...
+mdm mindspace session start maps/roadmap.md#launch/pricing --role implementer
+mdm mindspace session submit <session-id> --rationale "pricing decision map is ready"
 ```
 
 ### 5. Inspect
@@ -199,7 +200,8 @@ The human approves, rejects, edits, or asks the agent for a narrower attempt.
 Under the hood:
 
 ```bash
-mdm mindspace review ...
+mdm mindspace review list --json
+mdm mindspace review approve <review-id> --json
 ```
 
 ## What Makes Mindspace Different

@@ -32,6 +32,8 @@ mdm mindspace lint . --json
 mdm mindspace setup . --preview --json
 mdm mindspace setup . --write --json
 mdm mindspace context maps/roadmap.md#roadmap/current --json
+mdm mindspace session start maps/tasks.md#todo/focus --role implementer --json
+mdm mindspace review list --json
 mdm mindspace template list --json
 mdm mindspace template show launch-planning --json
 ```
@@ -40,9 +42,10 @@ mdm mindspace template show launch-planning --json
 Mindspace diagnostics with stable issue codes and exits non-zero only on
 errors. `setup --preview` prints the proposed manifest without writing, while
 `setup --write` writes only `.mdmind/mindspace.json`. `context` exports bounded,
-provenance-rich branch bundles for agents without writing. Template helpers
-expose built-in persona/job templates for agents and scripts. Session, review,
-and `mdmind .` workspace behavior are still planned slices.
+provenance-rich branch bundles for agents without writing. `session` and
+`review` create durable sidecar records for agent work and human decisions, but
+do not yet mutate maps. Template helpers expose built-in persona/job templates
+for agents and scripts. `mdmind .` workspace behavior is still a planned slice.
 
 ## Start Here
 

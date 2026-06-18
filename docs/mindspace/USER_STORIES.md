@@ -420,12 +420,12 @@ The agent proposes:
 
 Mindspace turns the proposed map edits into a session record and review items.
 
-Future substrate commands:
+Current substrate commands:
 
 ```bash
-mdm mindspace session submit <session-id>
+mdm mindspace session submit <session-id> --rationale "auth retry plan is ready"
 mdm mindspace review list --json
-mdm mindspace review approve <review-id>
+mdm mindspace review approve <review-id> --json
 ```
 
 Mateo sees:

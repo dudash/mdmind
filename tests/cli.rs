@@ -243,6 +243,16 @@ fn commands_json_lists_agent_command_catalog() {
         "mindspace lint",
         "mindspace setup",
         "mindspace context",
+        "mindspace session",
+        "mindspace session start",
+        "mindspace session plan",
+        "mindspace session apply",
+        "mindspace session submit",
+        "mindspace session close",
+        "mindspace review",
+        "mindspace review list",
+        "mindspace review approve",
+        "mindspace review reject",
         "mindspace template",
         "mindspace template list",
         "mindspace template show",
@@ -794,6 +804,216 @@ fn mindspace_context_query_bundle_spans_maps_and_bounds_details() {
             .as_u64()
             .is_some_and(|count| count > 0)
     }));
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_session_review_lifecycle_records_approve_and_reject_state() {
+    let root = temp_file("mindspace-session-lifecycle");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::write(
+        root.join("maps").join("tasks.md"),
+        "- Tasks [id:todo]\n  - Focus task [id:todo/focus]\n",
+    )
+    .expect("tasks map should be writable");
+
+    let start = run_mdm(&[
+        "mindspace",
+        "session",
+        "start",
+        "maps/tasks.md#todo/focus",
+        "--role",
+        "implementer",
+        "--goal",
+        "Add the missing implementation notes.",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(start.status.success(), "stderr: {}", stderr(&start));
+    let start_value = json_stdout(&start);
+    let session_id = start_value["data"]["session"]["id"]
+        .as_str()
+        .expect("session id should be present")
+        .to_string();
+    assert_eq!(start_value["data"]["session"]["status"], "open");
+    assert!(root.join(".mdmind").join("sessions").exists());
+
+    let submit = run_mdm(&[
+        "mindspace",
+        "session",
+        "submit",
+        &session_id,
+        "--rationale",
+        "Implementation notes are ready for review.",
+        "--proposal",
+        "Append a child task for tests.",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(submit.status.success(), "stderr: {}", stderr(&submit));
+    let submit_value = json_stdout(&submit);
+    let review_id = submit_value["data"]["id"]
+        .as_str()
+        .expect("review id should be present")
+        .to_string();
+    assert_eq!(submit_value["data"]["status"], "pending");
+    assert_eq!(submit_value["data"]["stale"], false);
+    assert!(root.join(".mdmind").join("reviews").exists());
+
+    let list = run_mdm(&[
+        "mindspace",
+        "review",
+        "list",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(list.status.success(), "stderr: {}", stderr(&list));
+    let list_value = json_stdout(&list);
+    assert_eq!(list_value["data"]["summary"]["pending"], 1);
+    assert_eq!(list_value["data"]["reviews"][0]["id"], review_id);
+
+    let reject = run_mdm(&[
+        "mindspace",
+        "review",
+        "reject",
+        &review_id,
+        "--reason",
+        "Wrong target branch.",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(reject.status.success(), "stderr: {}", stderr(&reject));
+    let reject_value = json_stdout(&reject);
+    assert_eq!(reject_value["data"]["status"], "rejected");
+    assert_eq!(
+        reject_value["data"]["decision_reason"],
+        "Wrong target branch."
+    );
+
+    let close = run_mdm(&[
+        "mindspace",
+        "session",
+        "close",
+        &session_id,
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(close.status.success(), "stderr: {}", stderr(&close));
+    let close_value = json_stdout(&close);
+    assert_eq!(close_value["data"]["status"], "closed");
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_review_approve_turns_stale_when_target_digest_changed() {
+    let root = temp_file("mindspace-review-stale");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    let map_path = root.join("maps").join("tasks.md");
+    std::fs::write(
+        &map_path,
+        "- Tasks [id:todo]\n  - Focus task [id:todo/focus]\n",
+    )
+    .expect("tasks map should be writable");
+
+    let start = run_mdm(&[
+        "mindspace",
+        "session",
+        "start",
+        "maps/tasks.md#todo/focus",
+        "--role",
+        "implementer",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(start.status.success(), "stderr: {}", stderr(&start));
+    let session_id = json_stdout(&start)["data"]["session"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let submit = run_mdm(&[
+        "mindspace",
+        "session",
+        "submit",
+        &session_id,
+        "--rationale",
+        "Ready to approve.",
+        "--proposal",
+        "Append stale-sensitive note.",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(submit.status.success(), "stderr: {}", stderr(&submit));
+    let review_id = json_stdout(&submit)["data"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    std::fs::write(
+        &map_path,
+        "- Tasks [id:todo]\n  - Focus task changed [id:todo/focus]\n",
+    )
+    .expect("target map should be mutable in test");
+
+    let approve = run_mdm(&[
+        "mindspace",
+        "review",
+        "approve",
+        &review_id,
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(approve.status.success(), "stderr: {}", stderr(&approve));
+    let approve_value = json_stdout(&approve);
+    assert_eq!(approve_value["data"]["status"], "stale");
+    assert_eq!(approve_value["data"]["stale"], true);
+    assert!(
+        approve_value["data"]["decision_reason"]
+            .as_str()
+            .unwrap()
+            .contains("Target digest changed")
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_session_ids_cannot_traverse_record_paths() {
+    let root = temp_file("mindspace-session-id-guard");
+    std::fs::create_dir_all(&root).expect("mindspace root should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "session",
+        "plan",
+        "../escape",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+    assert_eq!(value["ok"], false);
+    assert_eq!(value["command"], "mindspace session");
+    assert_eq!(value["format"], "error.v1");
+    assert_eq!(value["error"]["code"], "runtime_error");
+    assert!(
+        value["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Record ids use letters, numbers, hyphen, and underscore")
+    );
 
     std::fs::remove_dir_all(root).ok();
 }
