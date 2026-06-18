@@ -3,16 +3,18 @@ use std::fs;
 use std::path::Path;
 
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Map, Value, json};
 
 use crate::app::{AppError, ClassifiedTarget, OpenTargetMode, classify_open_target};
 use crate::model::{Diagnostic, Document, Node, Severity, TaskState};
 
 pub const MINDSPACE_SCAN_FORMAT: &str = "mindspace_scan.v1";
 pub const MINDSPACE_DIAGNOSTICS_FORMAT: &str = "mindspace_diagnostics.v1";
+pub const MINDSPACE_SETUP_FORMAT: &str = "mindspace_setup.v1";
 pub const MINDSPACE_TEMPLATE_CATALOG_FORMAT: &str = "mindspace_template_catalog.v1";
 pub const MINDSPACE_TEMPLATE_FORMAT: &str = "mindspace_template.v1";
 const MANIFEST_SCHEMA_VERSION: &str = "mdmind.mindspace.v1";
+const MANIFEST_RELATIVE_PATH: &str = ".mdmind/mindspace.json";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MindspaceScan {
@@ -146,6 +148,46 @@ pub struct MindspaceDiagnosticsReport {
     pub root: String,
     pub summary: MindspaceDiagnosticCounts,
     pub diagnostics: Vec<MindspaceDiagnostic>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MindspaceSetupReport {
+    pub root: String,
+    pub manifest_path: String,
+    pub mode: MindspaceSetupMode,
+    pub written: bool,
+    pub existing_manifest: bool,
+    pub created_directory: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bytes_written: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template: Option<MindspaceSetupTemplateRef>,
+    pub summary: MindspaceSetupSummary,
+    pub manifest: Value,
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MindspaceSetupMode {
+    Preview,
+    Write,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MindspaceSetupTemplateRef {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub persona_fit: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct MindspaceSetupSummary {
+    pub roles: usize,
+    pub preserved_roles: usize,
+    pub inferred_roles: usize,
+    pub added_roles: usize,
+    pub diagnostics: MindspaceDiagnosticCounts,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -284,6 +326,70 @@ pub fn scan_mindspace(root: &Path) -> Result<MindspaceScan, AppError> {
     })
 }
 
+pub fn setup_mindspace(
+    root: &Path,
+    mode: MindspaceSetupMode,
+    template_id: Option<&str>,
+) -> Result<MindspaceSetupReport, AppError> {
+    let scan = scan_mindspace(root)?;
+    let canonical_root = Path::new(&scan.root);
+    let existing_manifest = read_existing_manifest(canonical_root)?;
+    let template = match template_id {
+        Some(id) => {
+            let template = mindspace_template(id)
+                .ok_or_else(|| AppError::new(format!("Unknown Mindspace template '{id}'.")))?;
+            Some(MindspaceSetupTemplateRef {
+                id: template.id,
+                name: template.name,
+                persona_fit: template.persona_fit,
+            })
+        }
+        None => None,
+    };
+    let proposal = propose_mindspace_manifest(&scan, existing_manifest.as_ref());
+    let manifest_text = serde_json::to_string_pretty(&proposal.manifest)
+        .expect("mindspace setup manifest should serialize")
+        + "\n";
+
+    let mut created_directory = false;
+    let mut bytes_written = None;
+    if mode == MindspaceSetupMode::Write {
+        let manifest_dir = canonical_root.join(".mdmind");
+        let existed_before = manifest_dir.exists();
+        fs::create_dir_all(&manifest_dir).map_err(|error| {
+            AppError::new(format!(
+                "Could not create '{}': {error}",
+                manifest_dir.display()
+            ))
+        })?;
+        created_directory = !existed_before;
+
+        let manifest_path = canonical_root.join(MANIFEST_RELATIVE_PATH);
+        fs::write(&manifest_path, manifest_text.as_bytes()).map_err(|error| {
+            AppError::new(format!(
+                "Could not write '{}': {error}",
+                manifest_path.display()
+            ))
+        })?;
+        bytes_written = Some(manifest_text.len());
+    }
+
+    let notes = setup_notes(mode, template.as_ref());
+    Ok(MindspaceSetupReport {
+        root: scan.root,
+        manifest_path: MANIFEST_RELATIVE_PATH.to_string(),
+        mode,
+        written: mode == MindspaceSetupMode::Write,
+        existing_manifest: existing_manifest.is_some(),
+        created_directory,
+        bytes_written,
+        template,
+        summary: proposal.summary,
+        manifest: proposal.manifest,
+        notes,
+    })
+}
+
 pub fn render_mindspace_scan(scan: &MindspaceScan) -> String {
     let mut lines = Vec::new();
     lines.push(format!("Mindspace scan: {}", scan.root));
@@ -418,6 +524,97 @@ pub fn render_mindspace_diagnostics_plain(report: &MindspaceDiagnosticsReport) -
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+pub fn render_mindspace_setup(report: &MindspaceSetupReport) -> String {
+    let mut lines = vec![
+        format!(
+            "Mindspace setup {}: {}",
+            setup_mode_name(report.mode),
+            report.root
+        ),
+        format!("Manifest: {}", report.manifest_path),
+        format!(
+            "Existing manifest: {}",
+            if report.existing_manifest {
+                "present"
+            } else {
+                "missing"
+            }
+        ),
+        format!(
+            "Write result: {}",
+            if report.written {
+                "wrote manifest"
+            } else {
+                "preview only"
+            }
+        ),
+        format!(
+            "Roles: {} total, {} preserved, {} inferred, {} added",
+            report.summary.roles,
+            report.summary.preserved_roles,
+            report.summary.inferred_roles,
+            report.summary.added_roles
+        ),
+    ];
+    if let Some(template) = &report.template {
+        lines.push(format!(
+            "Template guidance: {} ({})",
+            template.id, template.persona_fit
+        ));
+    }
+    lines.push("Write boundary: only .mdmind/mindspace.json is written in --write mode; existing notes are not moved or rewritten.".to_string());
+
+    if !report.notes.is_empty() {
+        lines.push(String::new());
+        lines.push("Notes:".to_string());
+        for note in &report.notes {
+            lines.push(format!("  - {note}"));
+        }
+    }
+
+    lines.push(String::new());
+    lines.push("Proposed manifest:".to_string());
+    lines.push(
+        serde_json::to_string_pretty(&report.manifest)
+            .expect("mindspace setup manifest should serialize"),
+    );
+    lines.join("\n")
+}
+
+pub fn render_mindspace_setup_plain(report: &MindspaceSetupReport) -> String {
+    let mut lines = vec![
+        format!("mode\t{}", setup_mode_name(report.mode)),
+        format!("root\t{}", report.root),
+        format!("manifest_path\t{}", report.manifest_path),
+        format!("written\t{}", report.written),
+        format!("existing_manifest\t{}", report.existing_manifest),
+        format!("created_directory\t{}", report.created_directory),
+        format!("roles\t{}", report.summary.roles),
+        format!("preserved_roles\t{}", report.summary.preserved_roles),
+        format!("inferred_roles\t{}", report.summary.inferred_roles),
+        format!("added_roles\t{}", report.summary.added_roles),
+    ];
+    if let Some(bytes_written) = report.bytes_written {
+        lines.push(format!("bytes_written\t{bytes_written}"));
+    }
+    if let Some(template) = &report.template {
+        lines.push(format!(
+            "template\t{}\t{}\t{}",
+            template.id, template.name, template.persona_fit
+        ));
+    }
+    for role in manifest_roles(&report.manifest) {
+        let role_name = role.get("role").and_then(Value::as_str).unwrap_or("-");
+        let path = role
+            .get("path")
+            .or_else(|| role.get("glob"))
+            .and_then(Value::as_str)
+            .unwrap_or("-");
+        lines.push(format!("role\t{role_name}\t{path}"));
+    }
+    lines.join("\n")
 }
 
 pub fn mindspace_template_catalog() -> MindspaceTemplateCatalog {
@@ -1079,6 +1276,291 @@ fn built_in_mindspace_templates() -> Vec<MindspaceTemplate> {
             provenance: "built_in",
         },
     ]
+}
+
+struct MindspaceManifestProposal {
+    manifest: Value,
+    summary: MindspaceSetupSummary,
+}
+
+fn read_existing_manifest(root: &Path) -> Result<Option<Value>, AppError> {
+    let manifest_path = root.join(MANIFEST_RELATIVE_PATH);
+    let source = match fs::read_to_string(&manifest_path) {
+        Ok(source) => source,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(AppError::new(format!(
+                "Could not read existing manifest '{}': {error}",
+                manifest_path.display()
+            )));
+        }
+    };
+
+    let value = serde_json::from_str::<Value>(&source).map_err(|error| {
+        AppError::new(format!(
+            "Existing manifest '{}' is not valid JSON: {error}",
+            manifest_path.display()
+        ))
+    })?;
+    if !value.is_object() {
+        return Err(AppError::new(format!(
+            "Existing manifest '{}' must be a JSON object.",
+            manifest_path.display()
+        )));
+    }
+    validate_existing_manifest_for_setup(&manifest_path, &value)?;
+    Ok(Some(value))
+}
+
+fn validate_existing_manifest_for_setup(
+    manifest_path: &Path,
+    value: &Value,
+) -> Result<(), AppError> {
+    if let Some(roles) = value.get("roles") {
+        let Some(role_entries) = roles.as_array() else {
+            return Err(AppError::new(format!(
+                "Existing manifest '{}' has a roles field, but it is not an array.",
+                manifest_path.display()
+            )));
+        };
+        if let Some((index, _)) = role_entries
+            .iter()
+            .enumerate()
+            .find(|(_, role)| !role.is_object())
+        {
+            return Err(AppError::new(format!(
+                "Existing manifest '{}' has a non-object role entry at index {}.",
+                manifest_path.display(),
+                index
+            )));
+        }
+    }
+
+    if value
+        .get("settings")
+        .is_some_and(|settings| !settings.is_object())
+    {
+        return Err(AppError::new(format!(
+            "Existing manifest '{}' has a settings field, but it is not an object.",
+            manifest_path.display()
+        )));
+    }
+
+    Ok(())
+}
+
+fn propose_mindspace_manifest(
+    scan: &MindspaceScan,
+    existing_manifest: Option<&Value>,
+) -> MindspaceManifestProposal {
+    let preserved_roles = existing_manifest
+        .and_then(|manifest| manifest.get("roles"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let inferred_roles = inferred_manifest_roles(&scan.roles);
+
+    let mut role_keys = BTreeSet::new();
+    let mut roles = Vec::new();
+    for role in preserved_roles.iter() {
+        if let Some(key) = manifest_role_location_key(role) {
+            role_keys.insert(key);
+        }
+        roles.push(role.clone());
+    }
+
+    let mut added_roles = 0;
+    for role in inferred_roles.iter() {
+        let Some(key) = manifest_role_location_key(role) else {
+            continue;
+        };
+        if role_keys.insert(key) {
+            added_roles += 1;
+            roles.push(role.clone());
+        }
+    }
+
+    let name = existing_manifest
+        .and_then(|manifest| manifest.get("name"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| default_mindspace_name(&scan.root));
+    let root = existing_manifest
+        .and_then(|manifest| manifest.get("root"))
+        .and_then(Value::as_str)
+        .unwrap_or("..")
+        .to_string();
+    let settings = merged_manifest_settings(existing_manifest);
+
+    let manifest = json!({
+        "schema_version": MANIFEST_SCHEMA_VERSION,
+        "name": name,
+        "root": root,
+        "roles": roles,
+        "settings": settings,
+    });
+    MindspaceManifestProposal {
+        summary: MindspaceSetupSummary {
+            roles: manifest_roles(&manifest).len(),
+            preserved_roles: preserved_roles.len(),
+            inferred_roles: inferred_roles.len(),
+            added_roles,
+            diagnostics: scan.summary.diagnostics,
+        },
+        manifest,
+    }
+}
+
+fn inferred_manifest_roles(scan_roles: &[MindspaceRoleRecord]) -> Vec<Value> {
+    let directory_roles = scan_roles
+        .iter()
+        .filter(|record| record.kind == MindspaceEntryKind::Directory)
+        .collect::<Vec<_>>();
+    let mut roles = scan_roles
+        .iter()
+        .filter(|record| !role_is_covered_by_directory(record, &directory_roles))
+        .map(manifest_role_from_scan_record)
+        .collect::<Vec<_>>();
+
+    let report_role = manifest_role_value("report", ".mdmind/reports", false, true, false, false);
+    if !roles
+        .iter()
+        .filter_map(manifest_role_location_key)
+        .any(|key| key == "path:.mdmind/reports")
+    {
+        roles.push(report_role);
+    }
+    roles
+}
+
+fn role_is_covered_by_directory(
+    record: &MindspaceRoleRecord,
+    directory_roles: &[&MindspaceRoleRecord],
+) -> bool {
+    if record.kind == MindspaceEntryKind::Directory {
+        return false;
+    }
+    directory_roles.iter().any(|directory| {
+        directory.role == record.role
+            && record.path != directory.path
+            && record.path.starts_with(&format!("{}/", directory.path))
+    })
+}
+
+fn manifest_role_from_scan_record(record: &MindspaceRoleRecord) -> Value {
+    manifest_role_value(
+        role_name(record.role),
+        &record.path,
+        record.read_only,
+        record.generated,
+        record.append_only,
+        record.trusted,
+    )
+}
+
+fn manifest_role_value(
+    role: &str,
+    path: &str,
+    read_only: bool,
+    generated: bool,
+    append_only: bool,
+    trusted: bool,
+) -> Value {
+    let mut object = Map::new();
+    object.insert("role".to_string(), Value::String(role.to_string()));
+    object.insert("path".to_string(), Value::String(path.to_string()));
+    if read_only {
+        object.insert("read_only".to_string(), Value::Bool(true));
+    }
+    if generated {
+        object.insert("generated".to_string(), Value::Bool(true));
+    }
+    if append_only {
+        object.insert("append_only".to_string(), Value::Bool(true));
+    }
+    if trusted {
+        object.insert("trusted".to_string(), Value::Bool(true));
+    }
+    Value::Object(object)
+}
+
+fn manifest_role_location_key(role: &Value) -> Option<String> {
+    role.get("path")
+        .and_then(Value::as_str)
+        .map(|path| format!("path:{path}"))
+        .or_else(|| {
+            role.get("glob")
+                .and_then(Value::as_str)
+                .map(|glob| format!("glob:{glob}"))
+        })
+}
+
+fn manifest_roles(manifest: &Value) -> Vec<&Value> {
+    manifest
+        .get("roles")
+        .and_then(Value::as_array)
+        .map(|roles| roles.iter().collect())
+        .unwrap_or_default()
+}
+
+fn merged_manifest_settings(existing_manifest: Option<&Value>) -> Value {
+    let mut settings = Map::new();
+    settings.insert(
+        "checkpoint_before_risky_write".to_string(),
+        Value::Bool(true),
+    );
+    settings.insert("source_read_only_default".to_string(), Value::Bool(true));
+    settings.insert("review_on_stale_digest".to_string(), Value::Bool(true));
+    settings.insert("inbox_stale_days".to_string(), Value::from(14));
+
+    if let Some(existing_settings) = existing_manifest
+        .and_then(|manifest| manifest.get("settings"))
+        .and_then(Value::as_object)
+    {
+        for (key, value) in existing_settings {
+            settings.insert(key.clone(), value.clone());
+        }
+    }
+
+    Value::Object(settings)
+}
+
+fn default_mindspace_name(root: &str) -> String {
+    Path::new(root)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("Mindspace")
+        .to_string()
+}
+
+fn setup_notes(
+    mode: MindspaceSetupMode,
+    template: Option<&MindspaceSetupTemplateRef>,
+) -> Vec<String> {
+    let mut notes = vec![
+        "Setup is deterministic and based on the current read-only scan.".to_string(),
+        "Existing notes are not moved, renamed, imported, or rewritten.".to_string(),
+    ];
+    if mode == MindspaceSetupMode::Preview {
+        notes.push("Preview mode did not write files.".to_string());
+    } else {
+        notes.push("Write mode wrote only .mdmind/mindspace.json.".to_string());
+    }
+    if let Some(template) = template {
+        notes.push(format!(
+            "Template '{}' guided the setup explanation; templates are jobs, not adoption profiles.",
+            template.id
+        ));
+    }
+    notes
+}
+
+fn setup_mode_name(mode: MindspaceSetupMode) -> &'static str {
+    match mode {
+        MindspaceSetupMode::Preview => "preview",
+        MindspaceSetupMode::Write => "write",
+    }
 }
 
 fn inspect_manifest(

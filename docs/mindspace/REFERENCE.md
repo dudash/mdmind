@@ -197,8 +197,8 @@ behavior instead of creating hidden alternatives.
 | --- | --- | --- |
 | `mdm mindspace new <path>` | v1 | Create a fresh native mdmind workspace. Existing `mdm init <path>` remains single-map creation. |
 | `mdm mindspace scan <root>` | Current | Inspect a folder read-only, with or without a manifest. |
-| `mdm mindspace setup <root> --preview` | MVP | Print the proposed `.mdmind/mindspace.json` without writing. |
-| `mdm mindspace setup <root> --write` | MVP | Create or update `.mdmind/mindspace.json` only; never move or rewrite existing notes. |
+| `mdm mindspace setup <root> --preview` | Current | Print the proposed `.mdmind/mindspace.json` without writing. |
+| `mdm mindspace setup <root> --write` | Current | Create or update `.mdmind/mindspace.json` only; never move or rewrite existing notes. |
 | `mdm mindspace lint <root>` | Current | Report deterministic structural problems without AI judgment. |
 | `mdm mindspace context <target>` | MVP | Export bounded context with provenance and budget controls. |
 | `mdm mindspace template list` | Current | List built-in job templates. Trusted local templates are future. |
@@ -255,6 +255,33 @@ Current role inference is intentionally conservative:
 `mdm mindspace lint <root> --json` reuses the same scan and returns
 `mindspace_diagnostics.v1`. It exits `1` only when diagnostics include errors;
 warnings remain visible but do not fail the command.
+
+### Current Setup Output
+
+`mdm mindspace setup <root> --preview --json` emits `mindspace_setup.v1` without
+writing files. `mdm mindspace setup <root> --write --json` writes only
+`.mdmind/mindspace.json`; it does not create reports, move notes, rewrite maps,
+or import Markdown.
+
+Setup consumes the current read-only scan inventory, preserves existing manifest
+role overrides and settings when a manifest already exists, then adds inferred
+roles for detected maps, pages, sources, inbox, indexes, logs, instructions, and
+the generated report sidecar path `.mdmind/reports`.
+
+The `mindspace_setup.v1` data payload includes:
+
+| Field | Meaning |
+| --- | --- |
+| `root` | Canonical setup root path. |
+| `manifest_path` | Always `.mdmind/mindspace.json`. |
+| `mode` | `preview` or `write`. |
+| `written` | Whether the manifest was written. |
+| `existing_manifest` | Whether setup updated an existing manifest proposal. |
+| `created_directory` | Whether `--write` created `.mdmind/`. |
+| `template` | Optional template guidance used for setup explanation. |
+| `summary` | Role totals, preserved/inferred/added counts, and scan diagnostics. |
+| `manifest` | The full proposed or written manifest object. |
+| `notes` | Human-readable safety notes agents can summarize. |
 
 ### Current Template Output
 

@@ -241,6 +241,7 @@ fn commands_json_lists_agent_command_catalog() {
         "mindspace",
         "mindspace scan",
         "mindspace lint",
+        "mindspace setup",
         "mindspace template",
         "mindspace template list",
         "mindspace template show",
@@ -359,6 +360,307 @@ fn mindspace_scan_json_inventories_mixed_folder_without_writing() {
         !root.join(".mdmind").exists(),
         "scan should not create a mindspace manifest directory"
     );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_setup_preview_empty_folder_does_not_write() {
+    let root = temp_file("mindspace-setup-empty");
+    std::fs::create_dir_all(&root).expect("empty mindspace root should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "setup",
+        root.to_str().unwrap(),
+        "--preview",
+        "--json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "mindspace setup");
+    assert_eq!(value["format"], "mindspace_setup.v1");
+    assert_eq!(value["target"], root.to_string_lossy().as_ref());
+    assert_eq!(value["data"]["mode"], "preview");
+    assert_eq!(value["data"]["written"], false);
+    assert_eq!(
+        value["data"]["manifest"]["schema_version"],
+        "mdmind.mindspace.v1"
+    );
+    assert_eq!(value["data"]["manifest"]["root"], "..");
+    assert_eq!(value["data"]["summary"]["roles"], 1);
+    assert!(
+        value["data"]["notes"]
+            .as_array()
+            .expect("notes should be an array")
+            .iter()
+            .any(|note| note.as_str() == Some("Preview mode did not write files."))
+    );
+
+    let role_paths = value["data"]["manifest"]["roles"]
+        .as_array()
+        .expect("roles should be an array")
+        .iter()
+        .filter_map(|role| role["path"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(role_paths, vec![".mdmind/reports"]);
+    assert!(
+        !root.join(".mdmind").exists(),
+        "setup preview should not create the manifest directory"
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_setup_write_native_folder_creates_manifest_only() {
+    let root = temp_file("mindspace-setup-native");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    let map_path = root.join("maps").join("tasks.md");
+    let map_source = "- Tasks [id:tasks]\n  - Ship setup [id:tasks/setup]\n";
+    std::fs::write(&map_path, map_source).expect("map fixture should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "setup",
+        root.to_str().unwrap(),
+        "--write",
+        "--json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "mindspace setup");
+    assert_eq!(value["format"], "mindspace_setup.v1");
+    assert_eq!(value["data"]["mode"], "write");
+    assert_eq!(value["data"]["written"], true);
+    assert_eq!(value["data"]["created_directory"], true);
+    assert_eq!(std::fs::read_to_string(&map_path).unwrap(), map_source);
+    assert!(root.join(".mdmind").join("mindspace.json").exists());
+    assert!(
+        !root.join(".mdmind").join("reports").exists(),
+        "setup should not create generated report directories"
+    );
+
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(root.join(".mdmind").join("mindspace.json")).unwrap(),
+    )
+    .expect("written manifest should be valid json");
+    assert_eq!(manifest["schema_version"], "mdmind.mindspace.v1");
+    assert_eq!(manifest["root"], "..");
+    assert!(
+        manifest["roles"]
+            .as_array()
+            .expect("roles should be an array")
+            .iter()
+            .any(|role| role["role"] == "map" && role["path"] == "maps/tasks.md")
+    );
+    assert!(
+        manifest["roles"]
+            .as_array()
+            .expect("roles should be an array")
+            .iter()
+            .any(|role| role["role"] == "report" && role["generated"] == true)
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_setup_preview_mixed_folder_infers_roles_without_adopting() {
+    let root = temp_file("mindspace-setup-mixed");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::create_dir_all(root.join("docs")).expect("docs directory should be writable");
+    std::fs::create_dir_all(root.join("sources")).expect("sources directory should be writable");
+    std::fs::create_dir_all(root.join("inbox")).expect("inbox directory should be writable");
+    std::fs::write(
+        root.join("maps").join("roadmap.md"),
+        "- Roadmap [id:roadmap]\n",
+    )
+    .expect("map fixture should be writable");
+    std::fs::write(
+        root.join("docs").join("brief.md"),
+        "# Brief\n\nOrdinary Markdown.\n",
+    )
+    .expect("page fixture should be writable");
+    std::fs::write(
+        root.join("sources").join("interview.md"),
+        "# Interview\n\nRaw notes.\n",
+    )
+    .expect("source fixture should be writable");
+    std::fs::write(root.join("inbox").join("capture.md"), "- loose capture\n")
+        .expect("inbox fixture should be writable");
+    std::fs::write(root.join("AGENTS.md"), "# Agent guidance\n")
+        .expect("instruction fixture should be writable");
+    std::fs::write(root.join("index.md"), "# Index\n").expect("index fixture should be writable");
+    std::fs::write(root.join("log.md"), "# Log\n").expect("log fixture should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "setup",
+        root.to_str().unwrap(),
+        "--template",
+        "launch-planning",
+        "--preview",
+        "--json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["data"]["mode"], "preview");
+    assert_eq!(value["data"]["template"]["id"], "launch-planning");
+    assert_eq!(value["data"]["template"]["persona_fit"], "Priya Planner");
+    let roles = value["data"]["manifest"]["roles"]
+        .as_array()
+        .expect("roles should be an array");
+    let role_pairs = roles
+        .iter()
+        .filter_map(|role| Some((role["role"].as_str()?, role["path"].as_str()?)))
+        .collect::<Vec<_>>();
+    for expected in [
+        ("instruction", "AGENTS.md"),
+        ("index", "index.md"),
+        ("log", "log.md"),
+        ("map", "maps/roadmap.md"),
+        ("page", "docs/brief.md"),
+        ("source", "sources"),
+        ("inbox", "inbox"),
+        ("report", ".mdmind/reports"),
+    ] {
+        assert!(
+            role_pairs.contains(&expected),
+            "setup preview should include role {expected:?}; got {role_pairs:?}"
+        );
+    }
+    assert!(
+        !role_pairs.contains(&("source", "sources/interview.md")),
+        "directory roles should cover source files without duplicate manifest entries"
+    );
+    assert!(
+        !root.join(".mdmind").exists(),
+        "setup preview should not create a manifest directory"
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_setup_write_existing_manifest_preserves_overrides() {
+    let root = temp_file("mindspace-setup-existing");
+    std::fs::create_dir_all(root.join(".mdmind")).expect("manifest directory should be writable");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::create_dir_all(root.join("docs")).expect("docs directory should be writable");
+    std::fs::write(root.join("maps").join("tasks.md"), "- Tasks [id:tasks]\n")
+        .expect("map fixture should be writable");
+    std::fs::write(root.join("docs").join("brief.md"), "# Brief\n")
+        .expect("page fixture should be writable");
+    std::fs::write(
+        root.join(".mdmind").join("mindspace.json"),
+        r#"{
+  "schema_version": "mdmind.mindspace.v1",
+  "name": "Existing Brain",
+  "root": "..",
+  "roles": [
+    {"role": "source", "path": "docs/brief.md", "read_only": true}
+  ],
+  "settings": {
+    "source_read_only_default": false,
+    "custom_setting": "keep"
+  }
+}
+"#,
+    )
+    .expect("existing manifest should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "setup",
+        root.to_str().unwrap(),
+        "--write",
+        "--json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["data"]["existing_manifest"], true);
+    assert_eq!(value["data"]["created_directory"], false);
+    assert_eq!(value["data"]["summary"]["preserved_roles"], 1);
+    let manifest = &value["data"]["manifest"];
+    assert_eq!(manifest["name"], "Existing Brain");
+    assert_eq!(manifest["settings"]["source_read_only_default"], false);
+    assert_eq!(manifest["settings"]["custom_setting"], "keep");
+
+    let roles = manifest["roles"]
+        .as_array()
+        .expect("roles should be an array");
+    assert!(
+        roles
+            .iter()
+            .any(|role| role["role"] == "source" && role["path"] == "docs/brief.md")
+    );
+    assert!(
+        !roles
+            .iter()
+            .any(|role| role["role"] == "page" && role["path"] == "docs/brief.md"),
+        "existing role override should prevent an inferred page duplicate"
+    );
+    assert!(
+        roles
+            .iter()
+            .any(|role| role["role"] == "map" && role["path"] == "maps/tasks.md")
+    );
+
+    let written_manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(root.join(".mdmind").join("mindspace.json")).unwrap(),
+    )
+    .expect("written manifest should be valid json");
+    assert_eq!(&written_manifest, manifest);
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_setup_write_rejects_malformed_existing_manifest_roles() {
+    let root = temp_file("mindspace-setup-invalid-existing");
+    std::fs::create_dir_all(root.join(".mdmind")).expect("manifest directory should be writable");
+    let manifest_path = root.join(".mdmind").join("mindspace.json");
+    let source = r#"{
+  "schema_version": "mdmind.mindspace.v1",
+  "name": "Needs Review",
+  "root": "..",
+  "roles": "source/*.md",
+  "settings": {}
+}
+"#;
+    std::fs::write(&manifest_path, source).expect("existing manifest should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "setup",
+        root.to_str().unwrap(),
+        "--write",
+        "--json",
+    ]);
+
+    assert!(!output.status.success());
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+    assert_eq!(value["ok"], false);
+    assert_eq!(value["error"]["code"], "runtime_error");
+    assert!(
+        value["error"]["message"]
+            .as_str()
+            .expect("json error should include a message")
+            .contains("roles field, but it is not an array")
+    );
+    assert_eq!(std::fs::read_to_string(&manifest_path).unwrap(), source);
 
     std::fs::remove_dir_all(root).ok();
 }

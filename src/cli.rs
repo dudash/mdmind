@@ -39,12 +39,14 @@ use crate::interactive::{
 };
 use crate::markdown_render::{ColorMode, RenderOptions, RenderTarget, render_markdown};
 use crate::mindspace::{
-    MINDSPACE_DIAGNOSTICS_FORMAT, MINDSPACE_SCAN_FORMAT, MINDSPACE_TEMPLATE_CATALOG_FORMAT,
-    MINDSPACE_TEMPLATE_FORMAT, MindspaceDiagnosticsReport, mindspace_template,
-    mindspace_template_catalog, render_mindspace_diagnostics, render_mindspace_diagnostics_plain,
-    render_mindspace_scan, render_mindspace_scan_plain, render_mindspace_template,
-    render_mindspace_template_catalog, render_mindspace_template_catalog_plain,
-    render_mindspace_template_plain, render_mindspace_template_prompt, scan_mindspace,
+    MINDSPACE_DIAGNOSTICS_FORMAT, MINDSPACE_SCAN_FORMAT, MINDSPACE_SETUP_FORMAT,
+    MINDSPACE_TEMPLATE_CATALOG_FORMAT, MINDSPACE_TEMPLATE_FORMAT, MindspaceDiagnosticsReport,
+    MindspaceSetupMode, mindspace_template, mindspace_template_catalog,
+    render_mindspace_diagnostics, render_mindspace_diagnostics_plain, render_mindspace_scan,
+    render_mindspace_scan_plain, render_mindspace_setup, render_mindspace_setup_plain,
+    render_mindspace_template, render_mindspace_template_catalog,
+    render_mindspace_template_catalog_plain, render_mindspace_template_plain,
+    render_mindspace_template_prompt, scan_mindspace, setup_mindspace,
 };
 use crate::model::{Document, ExternalRefKind, Node, Severity, TaskState};
 use crate::query::{
@@ -248,7 +250,7 @@ enum Commands {
     },
     #[command(
         about = "Inspect and lint optional folder-level Mindspace workspaces.",
-        after_help = "Examples:\n  mdm mindspace scan .\n  mdm mindspace scan . --json\n  mdm mindspace lint .\n  mdm mindspace template list\n  mdm mindspace template show launch-planning --prompt"
+        after_help = "Examples:\n  mdm mindspace scan .\n  mdm mindspace setup . --preview\n  mdm mindspace setup . --write\n  mdm mindspace lint .\n  mdm mindspace template list\n  mdm mindspace template show launch-planning --prompt"
     )]
     Mindspace {
         #[command(subcommand)]
@@ -373,6 +375,20 @@ enum MindspaceCommands {
     #[command(about = "Report deterministic Mindspace diagnostics without AI judgment.")]
     Lint {
         root: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+    },
+    #[command(about = "Preview or write a minimal Mindspace manifest.")]
+    Setup {
+        root: PathBuf,
+        #[arg(long, action = ArgAction::SetTrue, help = "Print the proposed manifest without writing.")]
+        preview: bool,
+        #[arg(long, action = ArgAction::SetTrue, help = "Write only .mdmind/mindspace.json.")]
+        write: bool,
+        #[arg(long, help = "Optional job template id used for setup guidance.")]
+        template: Option<String>,
         #[arg(long)]
         json: bool,
         #[arg(long)]
@@ -626,6 +642,12 @@ impl Cli {
                 command: MindspaceCommands::Lint { root, json, .. },
             } if *json => Some(JsonContext {
                 command: "mindspace lint",
+                target: Some(root.to_string_lossy().to_string()),
+            }),
+            Commands::Mindspace {
+                command: MindspaceCommands::Setup { root, json, .. },
+            } if *json => Some(JsonContext {
+                command: "mindspace setup",
                 target: Some(root.to_string_lossy().to_string()),
             }),
             Commands::Mindspace {
@@ -1003,6 +1025,45 @@ fn dispatch_mindspace(command: MindspaceCommands) -> Result<(), CliError> {
                 return Err(CliError::silent(1));
             }
             Ok(())
+        }
+        MindspaceCommands::Setup {
+            root,
+            preview,
+            write,
+            template,
+            json,
+            plain,
+        } => {
+            if preview == write {
+                return Err(CliError::usage(
+                    "invalid_setup_mode",
+                    "Choose exactly one of --preview or --write.",
+                ));
+            }
+            let target = root.to_string_lossy().to_string();
+            let mode = if write {
+                MindspaceSetupMode::Write
+            } else {
+                MindspaceSetupMode::Preview
+            };
+            let report =
+                setup_mindspace(&root, mode, template.as_deref()).map_err(CliError::from_app)?;
+            print_output(
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "mindspace setup",
+                    target: Some(&target),
+                    format: MINDSPACE_SETUP_FORMAT,
+                    summary: Some(
+                        serde_json::to_value(report.summary)
+                            .expect("mindspace setup summary should serialize"),
+                    ),
+                },
+                &report,
+                || render_mindspace_setup(&report),
+                || render_mindspace_setup_plain(&report),
+            )
         }
         MindspaceCommands::Template { command } => dispatch_mindspace_template(command),
     }
@@ -2184,7 +2245,7 @@ fn command_catalog() -> CommandCatalog {
                     "mindspace_manifest",
                     "built_in_mindspace_templates"
                 ],
-                &[],
+                &["mindspace_manifest"],
                 false,
                 false,
                 &["pretty", "plain", "json"],
@@ -2193,11 +2254,13 @@ fn command_catalog() -> CommandCatalog {
                 &[
                     "mindspace_scan.v1",
                     "mindspace_diagnostics.v1",
+                    "mindspace_setup.v1",
                     "mindspace_template_catalog.v1",
                     "mindspace_template.v1",
                 ],
                 &[
                     "mdm mindspace scan .",
+                    "mdm mindspace setup . --preview",
                     "mdm mindspace lint .",
                     "mdm mindspace template list",
                 ],
@@ -2227,6 +2290,29 @@ fn command_catalog() -> CommandCatalog {
                 &[flag("--json"), flag("--plain")],
                 &["mindspace_diagnostics.v1"],
                 &["mdm mindspace lint .", "mdm mindspace lint . --json",],
+            ),
+            command_info!(
+                "mindspace setup",
+                "Preview or write a minimal Mindspace manifest.",
+                &["folder", "mindspace_manifest", "maps", "markdown"],
+                &["mindspace_manifest"],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("root", true)],
+                &[
+                    flag("--preview"),
+                    flag("--write"),
+                    flag_value("--template", &["template-id"]),
+                    flag("--json"),
+                    flag("--plain"),
+                ],
+                &["mindspace_setup.v1"],
+                &[
+                    "mdm mindspace setup . --preview",
+                    "mdm mindspace setup . --write",
+                    "mdm mindspace setup . --template launch-planning --preview --json",
+                ],
             ),
             command_info!(
                 "mindspace template",
@@ -2902,6 +2988,7 @@ fn raw_args_json_context() -> Option<JsonContext> {
         let command = match args.get(1).map(String::as_str) {
             Some("scan") => "mindspace scan",
             Some("lint") => "mindspace lint",
+            Some("setup") => "mindspace setup",
             Some("template") if args.get(2).is_some_and(|arg| arg == "list") => {
                 "mindspace template list"
             }
@@ -2911,7 +2998,7 @@ fn raw_args_json_context() -> Option<JsonContext> {
             _ => "mindspace",
         };
         let target = match command {
-            "mindspace scan" | "mindspace lint" => args.get(2),
+            "mindspace scan" | "mindspace lint" | "mindspace setup" => args.get(2),
             "mindspace template show" => args.get(3),
             _ => None,
         }

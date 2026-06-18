@@ -29,15 +29,18 @@ Current implemented substrate:
 ```bash
 mdm mindspace scan . --json
 mdm mindspace lint . --json
+mdm mindspace setup . --preview --json
+mdm mindspace setup . --write --json
 mdm mindspace template list --json
 mdm mindspace template show launch-planning --json
 ```
 
 `scan` inventories a folder without writing. `lint` reports deterministic
 Mindspace diagnostics with stable issue codes and exits non-zero only on
-errors. Template helpers expose built-in persona/job templates for agents and
-scripts. Setup, context, session, review, and `mdmind .` workspace behavior are
-still planned slices.
+errors. `setup --preview` prints the proposed manifest without writing, while
+`setup --write` writes only `.mdmind/mindspace.json`. Template helpers expose
+built-in persona/job templates for agents and scripts. Context, session,
+review, and `mdmind .` workspace behavior are still planned slices.
 
 ## Start Here
 

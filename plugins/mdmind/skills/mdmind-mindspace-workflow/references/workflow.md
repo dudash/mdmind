@@ -47,6 +47,8 @@ mdm mindspace template list --json
 mdm mindspace template show launch-planning --json
 mdm mindspace scan . --json
 mdm mindspace lint . --json
+mdm mindspace setup . --preview --json
+mdm mindspace setup . --write --json
 ```
 
 Use `mdm commands --json` when you need to confirm current command availability,
@@ -58,8 +60,6 @@ The following commands may be referenced in product docs but might not exist in
 the current installed version:
 
 ```bash
-mdm mindspace setup <root> --preview
-mdm mindspace setup <root> --write
 mdm mindspace context <target> --json
 mdm mindspace session ...
 mdm mindspace review ...

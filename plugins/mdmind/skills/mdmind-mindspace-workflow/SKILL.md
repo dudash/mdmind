@@ -32,7 +32,7 @@ mindspace ...` for deterministic facts, and the human reviews or edits in
 ## Read References As Needed
 
 - Read `references/workflow.md` for the full operating loop, vague prompt
-  sharpening, setup/context/session placeholders, and handoff language.
+  sharpening, setup, future context/session placeholders, and handoff language.
 - Read `references/safety.md` before any setup, file move, generated artifact,
   broad rewrite, or source-backed synthesis.
 - Read `references/templates.md` to choose a template, customize common knobs,
@@ -77,12 +77,14 @@ Current helpers:
 ```bash
 mdm mindspace scan <root> --json
 mdm mindspace lint <root> --json
+mdm mindspace setup <root> --preview --json
+mdm mindspace setup <root> --write --json
 mdm mindspace template list --json
 mdm mindspace template show <template-id> --json
 mdm commands --json
 ```
 
-Planned helpers include `setup`, `context`, `session`, `review`, and `mdmind .`
+Planned helpers include `context`, `session`, `review`, and `mdmind .`
 workspace landing behavior. When they are unavailable, describe the intended
 review path and keep proposed writes explicit.
 

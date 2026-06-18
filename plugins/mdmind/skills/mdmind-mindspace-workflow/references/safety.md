@@ -30,7 +30,9 @@ flagged as missing evidence.
 `.mdmind/mindspace.json` and required parent directories. It must not move,
 rename, rewrite, import, or normalize existing notes.
 
-When setup helpers are unavailable, propose the manifest content or folder role
+Use `mdm mindspace setup <root> --preview --json` for the manifest preview and
+`mdm mindspace setup <root> --write --json` only after approval. On older
+installs where setup is unavailable, propose the manifest content or folder role
 changes in prose and ask for approval before editing files manually.
 
 ## Risky Writes
