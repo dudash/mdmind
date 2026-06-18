@@ -1,0 +1,7 @@
+interface:
+  display_name: "mdmind Mindspace Workflow"
+  short_description: "Guide agent-run Mindspace workspace jobs"
+  default_prompt: "Use $mdmind-mindspace-workflow to organize this folder with the right job template, scan/lint first, keep sources safe, and hand off review in mdmind."
+
+policy:
+  allow_implicit_invocation: true

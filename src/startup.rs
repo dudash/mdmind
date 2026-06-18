@@ -16,6 +16,11 @@ use ratatui::{Frame, Terminal};
 
 use crate::app::{AppError, create_from_template};
 use crate::examples::{ExampleAsset, all as bundled_examples};
+use crate::mindspace::{
+    MindspaceEntryKind, MindspaceMapParseStatus, MindspaceReviewRecord, MindspaceReviewStatus,
+    MindspaceRole, MindspaceSessionRecord, MindspaceSessionStatus, MindspaceWorkspaceLanding,
+    render_mindspace_workspace_landing, workspace_mindspace,
+};
 use crate::templates::TemplateKind;
 
 const BLANK_MAP_CONTENTS: &str = "- Untitled Map [id:root]\n";
@@ -424,6 +429,130 @@ impl StartupState {
     }
 }
 
+#[derive(Debug, Clone)]
+struct MindspaceSwitcherEntry {
+    group: &'static str,
+    title: String,
+    subtitle: String,
+    target: String,
+    preview: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct MindspaceSwitcherState {
+    root: PathBuf,
+    landing: MindspaceWorkspaceLanding,
+    entries: Vec<MindspaceSwitcherEntry>,
+    selected: usize,
+    query: String,
+    status: StartupStatus,
+}
+
+impl MindspaceSwitcherState {
+    fn new(root: PathBuf, landing: MindspaceWorkspaceLanding) -> Self {
+        let entries = mindspace_switcher_entries(&root, &landing);
+        let status = if entries.is_empty() {
+            StartupStatus {
+                tone: StatusTone::Warning,
+                text: "No maps, pages, sessions, or reviews were found in this Mindspace."
+                    .to_string(),
+            }
+        } else {
+            StartupStatus {
+                tone: StatusTone::Info,
+                text: "Type to filter. Enter opens the selected map or page. Esc closes."
+                    .to_string(),
+            }
+        };
+        Self {
+            root,
+            landing,
+            entries,
+            selected: 0,
+            query: String::new(),
+            status,
+        }
+    }
+
+    fn visible_indices(&self) -> Vec<usize> {
+        let query = self.query.trim().to_ascii_lowercase();
+        if query.is_empty() {
+            return (0..self.entries.len()).collect();
+        }
+        self.entries
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| {
+                let haystack = format!(
+                    "{} {} {} {}",
+                    entry.group,
+                    entry.title,
+                    entry.subtitle,
+                    entry.preview.join(" ")
+                )
+                .to_ascii_lowercase();
+                haystack.contains(&query).then_some(index)
+            })
+            .collect()
+    }
+
+    fn selected_entry(&self) -> Option<&MindspaceSwitcherEntry> {
+        let visible = self.visible_indices();
+        visible
+            .get(self.selected.min(visible.len().saturating_sub(1)))
+            .and_then(|index| self.entries.get(*index))
+    }
+
+    fn move_selection(&mut self, delta: isize) {
+        let visible_len = self.visible_indices().len();
+        if visible_len == 0 {
+            self.selected = 0;
+            self.status = StartupStatus {
+                tone: StatusTone::Warning,
+                text: "No workspace entries match the current filter.".to_string(),
+            };
+            return;
+        }
+        self.selected = offset_selection(self.selected, visible_len, delta);
+    }
+
+    fn insert_query_char(&mut self, character: char) {
+        self.query.push(character);
+        self.sync_selected_after_query();
+    }
+
+    fn backspace_query(&mut self) {
+        self.query.pop();
+        self.sync_selected_after_query();
+    }
+
+    fn clear_query(&mut self) {
+        self.query.clear();
+        self.sync_selected_after_query();
+    }
+
+    fn sync_selected_after_query(&mut self) {
+        let visible_len = self.visible_indices().len();
+        if visible_len == 0 {
+            self.selected = 0;
+            self.status = StartupStatus {
+                tone: StatusTone::Warning,
+                text: "No workspace entries match the current filter.".to_string(),
+            };
+        } else {
+            self.selected = self.selected.min(visible_len - 1);
+            self.status = StartupStatus {
+                tone: StatusTone::Info,
+                text: format!("{visible_len} workspace entries match."),
+            };
+        }
+    }
+
+    fn activate(&self) -> Result<Option<String>, AppError> {
+        Ok(self.selected_entry().map(|entry| entry.target.clone()))
+    }
+}
+
 pub fn choose_startup_target() -> Result<Option<String>, AppError> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(AppError::new(
@@ -439,6 +568,24 @@ pub fn choose_startup_target() -> Result<Option<String>, AppError> {
     let result = run_startup_loop(&mut terminal, &mut state);
     restore_terminal(&mut terminal)?;
     result.map(|path| path.map(|path| path.to_string_lossy().into_owned()))
+}
+
+pub fn choose_mindspace_target(root: &Path) -> Result<Option<String>, AppError> {
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Err(AppError::new(format!(
+            "mdmind {} needs an interactive terminal. Use `mdmind --preview {}` for a static workspace landing.",
+            root.display(),
+            root.display()
+        )));
+    }
+
+    let landing = workspace_mindspace(root)?;
+    let root = PathBuf::from(&landing.root);
+    let mut state = MindspaceSwitcherState::new(root, landing);
+    let mut terminal = setup_terminal()?;
+    let result = run_mindspace_switcher_loop(&mut terminal, &mut state);
+    restore_terminal(&mut terminal)?;
+    result
 }
 
 fn run_startup_loop(
@@ -526,6 +673,248 @@ fn handle_startup_key(
     }
 
     Ok(None)
+}
+
+fn run_mindspace_switcher_loop(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    state: &mut MindspaceSwitcherState,
+) -> Result<Option<String>, AppError> {
+    loop {
+        terminal
+            .draw(|frame| render_mindspace_switcher(frame, state))
+            .map_err(|error| {
+                AppError::new(format!(
+                    "Could not draw the Mindspace workspace switcher: {error}"
+                ))
+            })?;
+
+        if let Event::Key(key) = event::read()
+            .map_err(|error| AppError::new(format!("Could not read terminal input: {error}")))?
+        {
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
+
+            match handle_mindspace_switcher_key(state, key)? {
+                Some(result) => return Ok(result),
+                None => continue,
+            }
+        }
+    }
+}
+
+fn handle_mindspace_switcher_key(
+    state: &mut MindspaceSwitcherState,
+    key: KeyEvent,
+) -> Result<Option<Option<String>>, AppError> {
+    match key.code {
+        KeyCode::Esc => return Ok(Some(None)),
+        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            return Ok(Some(None));
+        }
+        KeyCode::Char('q') if key.modifiers == KeyModifiers::NONE && state.query.is_empty() => {
+            return Ok(Some(None));
+        }
+        KeyCode::Up => state.move_selection(-1),
+        KeyCode::Down => state.move_selection(1),
+        KeyCode::Home => state.selected = 0,
+        KeyCode::End => {
+            let visible_len = state.visible_indices().len();
+            state.selected = visible_len.saturating_sub(1);
+        }
+        KeyCode::Backspace => state.backspace_query(),
+        KeyCode::Delete => state.clear_query(),
+        KeyCode::Enter => return Ok(Some(state.activate()?)),
+        KeyCode::Char(character) if key.modifiers == KeyModifiers::NONE => {
+            state.insert_query_char(character);
+        }
+        _ => {}
+    }
+
+    Ok(None)
+}
+
+fn mindspace_switcher_entries(
+    root: &Path,
+    landing: &MindspaceWorkspaceLanding,
+) -> Vec<MindspaceSwitcherEntry> {
+    let mut entries = Vec::new();
+
+    for review in &landing.reviews {
+        entries.push(review_switcher_entry(root, review));
+    }
+
+    for session in landing.sessions.iter().take(12) {
+        entries.push(session_switcher_entry(root, session));
+    }
+
+    for map in &landing.maps {
+        entries.push(MindspaceSwitcherEntry {
+            group: "Map",
+            title: map.path.clone(),
+            subtitle: format!(
+                "{} nodes, {} ids, {} warning(s), {} error(s)",
+                map.stats.nodes,
+                map.stats.ids.len(),
+                map.validation.warnings,
+                map.validation.errors
+            ),
+            target: absolute_workspace_target(root, &map.path),
+            preview: vec![
+                format!("Parse status: {}", map_parse_status_name(map.parse_status)),
+                format!("Open tasks: {}", map.stats.open_tasks),
+                format!("Relations: {}", map.stats.relations),
+                "Enter opens this map as the active editable file.".to_string(),
+            ],
+        });
+    }
+
+    for role in &landing.roles {
+        if role.role == MindspaceRole::Map || role.kind != MindspaceEntryKind::File {
+            continue;
+        }
+        entries.push(MindspaceSwitcherEntry {
+            group: role_group_name(role.role),
+            title: role.path.clone(),
+            subtitle: role.reason.clone(),
+            target: absolute_workspace_target(root, &role.path),
+            preview: vec![
+                format!("Role: {}", role_group_name(role.role)),
+                format!("Read-only: {}", role.read_only),
+                format!("Generated: {}", role.generated),
+                "Enter opens this file through the existing mdmind file view.".to_string(),
+            ],
+        });
+    }
+
+    entries
+}
+
+fn review_switcher_entry(root: &Path, review: &MindspaceReviewRecord) -> MindspaceSwitcherEntry {
+    let mut preview = vec![
+        format!("Status: {}", review_status_label(review.status)),
+        format!("Target: {}", review.target),
+        format!("Rationale: {}", review.rationale),
+    ];
+    if let Some(proposal) = &review.proposal {
+        preview.push(format!("Proposal: {}", compact_text(proposal, 120)));
+    }
+    if let Some(reason) = &review.decision_reason {
+        preview.push(format!("Decision: {reason}"));
+    }
+    if review.stale {
+        preview.push("stale digest: re-read context before applying changes".to_string());
+    }
+    MindspaceSwitcherEntry {
+        group: "Review",
+        title: format!(
+            "{} · {}",
+            review_status_label(review.status),
+            short_record_id(&review.id)
+        ),
+        subtitle: format!(
+            "{} · {}",
+            review.target,
+            compact_text(&review.rationale, 80)
+        ),
+        target: absolute_workspace_target(root, &review.target),
+        preview,
+    }
+}
+
+fn session_switcher_entry(root: &Path, session: &MindspaceSessionRecord) -> MindspaceSwitcherEntry {
+    MindspaceSwitcherEntry {
+        group: "Session",
+        title: format!(
+            "{} · {}",
+            session_status_label(session.status),
+            short_record_id(&session.id)
+        ),
+        subtitle: format!("{} · {}", session.target, compact_text(&session.goal, 80)),
+        target: absolute_workspace_target(root, &session.target),
+        preview: vec![
+            format!("Status: {}", session_status_label(session.status)),
+            format!("Role: {}", session.role),
+            format!("Goal: {}", session.goal),
+            format!("Target digest: {}", session.target_snapshot.digest),
+            format!("Review items: {}", session.review_ids.len()),
+            "Enter opens the session target in the existing map or Markdown view.".to_string(),
+        ],
+    }
+}
+
+fn absolute_workspace_target(root: &Path, target: &str) -> String {
+    let (path, anchor) = target
+        .split_once('#')
+        .map(|(path, anchor)| (path, Some(anchor)))
+        .unwrap_or((target, None));
+    let path = PathBuf::from(path);
+    let absolute = if path.is_absolute() {
+        path
+    } else {
+        root.join(path)
+    };
+    match anchor {
+        Some(anchor) => format!("{}#{anchor}", absolute.display()),
+        None => absolute.to_string_lossy().into_owned(),
+    }
+}
+
+fn role_group_name(role: MindspaceRole) -> &'static str {
+    match role {
+        MindspaceRole::Map => "Map",
+        MindspaceRole::Page => "Page",
+        MindspaceRole::Source => "Source",
+        MindspaceRole::Inbox => "Inbox",
+        MindspaceRole::Index => "Index",
+        MindspaceRole::Log => "Log",
+        MindspaceRole::Instruction => "Instruction",
+        MindspaceRole::Report => "Report",
+    }
+}
+
+fn map_parse_status_name(status: MindspaceMapParseStatus) -> &'static str {
+    match status {
+        MindspaceMapParseStatus::Ok => "ok",
+        MindspaceMapParseStatus::Errors => "errors",
+    }
+}
+
+fn review_status_label(status: MindspaceReviewStatus) -> &'static str {
+    match status {
+        MindspaceReviewStatus::Pending => "pending",
+        MindspaceReviewStatus::Approved => "approved",
+        MindspaceReviewStatus::Rejected => "rejected",
+        MindspaceReviewStatus::Stale => "stale",
+    }
+}
+
+fn session_status_label(status: MindspaceSessionStatus) -> &'static str {
+    match status {
+        MindspaceSessionStatus::Open => "open",
+        MindspaceSessionStatus::Submitted => "submitted",
+        MindspaceSessionStatus::Closed => "closed",
+    }
+}
+
+fn short_record_id(id: &str) -> String {
+    if id.len() <= 22 {
+        return id.to_string();
+    }
+    let prefix = id.chars().take(19).collect::<String>();
+    format!("{prefix}...")
+}
+
+fn compact_text(value: &str, max_chars: usize) -> String {
+    let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.chars().count() <= max_chars {
+        normalized
+    } else {
+        let keep = max_chars.saturating_sub(3);
+        let mut compacted = normalized.chars().take(keep).collect::<String>();
+        compacted.push_str("...");
+        compacted
+    }
 }
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>, AppError> {
@@ -645,6 +1034,250 @@ fn render_startup(frame: &mut Frame, state: &StartupState) {
             .style(Style::default().bg(surface)),
     );
     frame.render_widget(footer, outer[2]);
+}
+
+fn render_mindspace_switcher(frame: &mut Frame, state: &MindspaceSwitcherState) {
+    let area = frame.area();
+    let background = Color::Rgb(12, 16, 20);
+    let surface = Color::Rgb(22, 28, 34);
+    let border = Color::Rgb(72, 86, 98);
+    let accent = Color::Rgb(116, 193, 255);
+    let text = Color::Rgb(234, 239, 244);
+    let muted = Color::Rgb(155, 168, 180);
+    let warning = Color::Rgb(255, 191, 106);
+    let error = Color::Rgb(255, 121, 121);
+
+    frame.render_widget(
+        Block::default().style(Style::default().bg(background)),
+        area,
+    );
+
+    let outer = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(5),
+            Constraint::Min(18),
+            Constraint::Length(3),
+        ])
+        .split(area);
+
+    let header = Paragraph::new(vec![
+        Line::from(vec![
+            Span::styled(
+                "mdmind",
+                Style::default().fg(accent).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                "Mindspace Workspace",
+                Style::default().fg(text).add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("Root: ", Style::default().fg(muted)),
+            Span::styled(state.root.display().to_string(), Style::default().fg(text)),
+        ]),
+        Line::from(vec![Span::styled(
+            format!(
+                "maps {}  pages {}  sources {}  reviews pending {} stale {}  sessions open {}",
+                state.landing.summary.roles.maps,
+                state.landing.summary.roles.pages,
+                state.landing.summary.roles.sources,
+                state.landing.review_summary.pending,
+                state.landing.review_summary.stale,
+                state.landing.session_summary.open
+            ),
+            Style::default().fg(muted),
+        )]),
+    ])
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border))
+            .style(Style::default().bg(surface)),
+    );
+    frame.render_widget(header, outer[0]);
+
+    let body = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(44), Constraint::Percentage(56)])
+        .split(outer[1]);
+
+    render_mindspace_entries(frame, body[0], state, surface, border, accent, text, muted);
+    render_mindspace_entry_preview(
+        frame, body[1], state, surface, border, accent, text, muted, warning, error,
+    );
+
+    let status_color = match state.status.tone {
+        StatusTone::Info => muted,
+        StatusTone::Warning => warning,
+        StatusTone::Error => error,
+    };
+    let footer = Paragraph::new(vec![
+        Line::from(vec![Span::styled(
+            state.status.text.clone(),
+            Style::default().fg(status_color),
+        )]),
+        Line::from(vec![
+            Span::styled("Type", Style::default().fg(accent)),
+            Span::styled(" filter  ", Style::default().fg(muted)),
+            Span::styled("Arrows", Style::default().fg(accent)),
+            Span::styled(" browse  ", Style::default().fg(muted)),
+            Span::styled("Enter", Style::default().fg(accent)),
+            Span::styled(" open  ", Style::default().fg(muted)),
+            Span::styled("Del", Style::default().fg(accent)),
+            Span::styled(" clear  ", Style::default().fg(muted)),
+            Span::styled("Esc", Style::default().fg(accent)),
+            Span::styled(" close", Style::default().fg(muted)),
+        ]),
+    ])
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border))
+            .style(Style::default().bg(surface)),
+    );
+    frame.render_widget(footer, outer[2]);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_mindspace_entries(
+    frame: &mut Frame,
+    area: Rect,
+    state: &MindspaceSwitcherState,
+    surface: Color,
+    border: Color,
+    accent: Color,
+    text: Color,
+    muted: Color,
+) {
+    let visible = state.visible_indices();
+    let title = if state.query.is_empty() {
+        "Workspace Switcher".to_string()
+    } else {
+        format!("Workspace Switcher · {}", state.query)
+    };
+    if visible.is_empty() {
+        let block = Block::default()
+            .title(title)
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border))
+            .style(Style::default().bg(surface));
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+        frame.render_widget(
+            Paragraph::new("No entries match. Backspace edits the filter; Delete clears it.")
+                .style(Style::default().fg(muted))
+                .wrap(Wrap { trim: true }),
+            inner,
+        );
+        return;
+    }
+
+    let items = visible
+        .iter()
+        .filter_map(|index| state.entries.get(*index))
+        .map(|entry| {
+            ListItem::new(vec![
+                Line::from(vec![
+                    Span::styled(entry.group, Style::default().fg(accent)),
+                    Span::styled("  ", Style::default().fg(muted)),
+                    Span::styled(
+                        entry.title.clone(),
+                        Style::default().fg(text).add_modifier(Modifier::BOLD),
+                    ),
+                ]),
+                Line::from(Span::styled(
+                    entry.subtitle.clone(),
+                    Style::default().fg(muted),
+                )),
+            ])
+        })
+        .collect::<Vec<_>>();
+    let mut list_state = ListState::default();
+    list_state.select(Some(state.selected.min(items.len().saturating_sub(1))));
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title(title)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(border))
+                .style(Style::default().bg(surface)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(Color::Rgb(32, 44, 56))
+                .fg(text)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("› ");
+    frame.render_stateful_widget(list, area, &mut list_state);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_mindspace_entry_preview(
+    frame: &mut Frame,
+    area: Rect,
+    state: &MindspaceSwitcherState,
+    surface: Color,
+    border: Color,
+    accent: Color,
+    text: Color,
+    muted: Color,
+    warning: Color,
+    error: Color,
+) {
+    let block = Block::default()
+        .title("Preview")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border))
+        .style(Style::default().bg(surface));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let lines = if let Some(entry) = state.selected_entry() {
+        let mut lines = vec![
+            Line::from(Span::styled(
+                entry.title.clone(),
+                Style::default().fg(text).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                entry.subtitle.clone(),
+                Style::default().fg(muted),
+            )),
+            Line::from(Span::styled(
+                format!("Opens: {}", entry.target),
+                Style::default().fg(accent),
+            )),
+            Line::from(""),
+        ];
+        for preview in &entry.preview {
+            let color = if preview.contains("stale") || preview.contains("warning") {
+                warning
+            } else if preview.contains("error") {
+                error
+            } else {
+                text
+            };
+            lines.push(Line::from(Span::styled(
+                preview.clone(),
+                Style::default().fg(color),
+            )));
+        }
+        lines
+    } else {
+        render_mindspace_workspace_landing(&state.landing)
+            .lines()
+            .map(|line| Line::from(Span::styled(line.to_string(), Style::default().fg(muted))))
+            .collect::<Vec<_>>()
+    };
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(Style::default().fg(text))
+            .wrap(Wrap { trim: true }),
+        inner,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -1,9 +1,10 @@
 # mdmind Agent Plugin
 
-This plugin bundles the two mdmind skills for agents:
+This plugin bundles three mdmind skills for agents:
 
 - `mdmind-map-authoring`
 - `mdm-cli-inspection`
+- `mdmind-mindspace-workflow`
 
 > Install with `mdm skills install`, then pick the agent or agents where you
 > want the mdmind skills available.
@@ -32,6 +33,18 @@ Use `mdmind-map-authoring` when the core task is content creation. Use
 `mdm-cli-inspection` when the core task is CLI-based inspection or export. If
 both are needed, author first and inspect second.
 
+### `mdmind-mindspace-workflow`
+
+Use when the main job is organizing or maintaining a folder-level Mindspace
+through an agent. This skill helps Claude Code, Codex, Hermes, or another agent
+choose a persona/job template, run `mdm mindspace scan` and `lint`, inspect
+built-in templates, keep sources read-only, produce bounded context plans,
+create reviewable changes, and tell the human what to inspect in `mdmind .`.
+
+It composes the two existing skills rather than duplicating map authoring or CLI
+inspection guidance. Design source:
+[Mindspace agent skill](../../docs/mindspace/AGENT_SKILL.md).
+
 ## Skills CLI
 
 Run the installer and choose your agent target when prompted:
@@ -58,12 +71,13 @@ Preview the mdmind skills:
 npx skills add dudash/mdmind --list
 ```
 
-Install both skills for the current project in Claude Code and Codex:
+Install all three skills for the current project in Claude Code and Codex:
 
 ```bash
 npx skills add dudash/mdmind \
   --skill mdmind-map-authoring \
   --skill mdm-cli-inspection \
+  --skill mdmind-mindspace-workflow \
   -a claude-code \
   -a codex
 ```
@@ -74,6 +88,7 @@ Install globally for your user account:
 npx skills add dudash/mdmind \
   --skill mdmind-map-authoring \
   --skill mdm-cli-inspection \
+  --skill mdmind-mindspace-workflow \
   -g \
   -a claude-code \
   -a codex
@@ -88,7 +103,7 @@ Useful maintenance commands:
 ```bash
 npx skills list
 npx skills update
-npx skills remove mdmind-map-authoring mdm-cli-inspection
+npx skills remove mdmind-map-authoring mdm-cli-inspection mdmind-mindspace-workflow
 ```
 
 ## Claude Code
@@ -119,6 +134,7 @@ Claude Code exposes plugin skills with the plugin namespace, for example:
 ```text
 /mdmind:mdmind-map-authoring
 /mdmind:mdm-cli-inspection
+/mdmind:mdmind-mindspace-workflow
 ```
 
 ## Codex
@@ -155,6 +171,7 @@ Codex and other agents that support the shared Agent Skills convention:
 mkdir -p .agents/skills
 cp -R ~/mdmind/plugins/mdmind/skills/mdmind-map-authoring .agents/skills/
 cp -R ~/mdmind/plugins/mdmind/skills/mdm-cli-inspection .agents/skills/
+cp -R ~/mdmind/plugins/mdmind/skills/mdmind-mindspace-workflow .agents/skills/
 ```
 
 Claude Code native skills directory:
@@ -163,6 +180,7 @@ Claude Code native skills directory:
 mkdir -p .claude/skills
 cp -R ~/mdmind/plugins/mdmind/skills/mdmind-map-authoring .claude/skills/
 cp -R ~/mdmind/plugins/mdmind/skills/mdm-cli-inspection .claude/skills/
+cp -R ~/mdmind/plugins/mdmind/skills/mdmind-mindspace-workflow .claude/skills/
 ```
 
 Restart the agent if the skills do not appear.
@@ -186,4 +204,5 @@ For an isolated Codex test home, run:
 ```bash
 scripts/agents/test-skills.sh --skill mdmind-map-authoring
 scripts/agents/test-skills.sh --skill mdm-cli-inspection
+scripts/agents/test-skills.sh --skill mdmind-mindspace-workflow
 ```

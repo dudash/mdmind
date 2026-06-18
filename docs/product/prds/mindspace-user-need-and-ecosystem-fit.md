@@ -1,17 +1,28 @@
 # PRD: Mindspace User Need And Ecosystem Fit
 
-Status: Draft for review
-Last reviewed: 2026-05-22
+Status: Product rationale; canonical Mindspace docs live in
+[../../mindspace/](../../mindspace/)
+Last reviewed: 2026-06-17
 
 ## Summary
 
-`mdmind` is a local-first structured knowledge workspace with three product
-surfaces:
+This PRD explains the product need and ecosystem fit for Mindspace. The
+implementation contract lives in
+[../../mindspace/REFERENCE.md](../../mindspace/REFERENCE.md).
 
+`mdmind` is a local-first structured knowledge workspace with four product
+surfaces in the Mindspace story:
+
+- agent conversation, the natural-language work surface where users ask Claude
+  Code, Codex, Hermes, or another agent to organize, link, generate, move, and
+  maintain local knowledge
+- Mindspace job templates, the guided request layer that helps non-expert users
+  tell agents what job to do, what outputs to create, what safety rules to
+  follow, and what the human should review
 - `mdmind`, the human-facing TUI for outlines, notes, todos, decisions, maps,
   reviews, and focused navigation
-- `mdm`, the CLI surface for agents, scripts, validation, inspection, export,
-  and future workspace maintenance
+- `mdm`, the deterministic CLI contract for agents, scripts, validation,
+  inspection, export, and future workspace maintenance
 - the mdmind `.md` spec, a portable plain-text structure for hierarchy, ids,
   details, tags, metadata, relations, tasks, and deep links
 
@@ -19,14 +30,14 @@ Mindspace should extend these surfaces from one map file to a folder-level
 workspace without turning mdmind into Obsidian-in-a-terminal. The first bet is
 not "replace Obsidian" or "be another LLM wiki." The first bet is:
 
-> Users who let agents maintain Markdown knowledge need deterministic structure,
-> inspection, repair, and context packaging so the knowledge base stays useful
-> as it grows.
+> Users who ask agents to maintain Markdown knowledge need a local workspace
+> where the agent can organize and link files, while humans can inspect, edit,
+> and review the structured result.
 
 Mindspace should support native mdmind workspaces and mixed Markdown folders.
 That lets `mdmind` stand alone for outline/map-first users while also improving
-Obsidian, Hermes LLM Wiki, Claude Code, OpenClaw, and other agent-maintained
-Markdown workflows.
+Obsidian, Hermes LLM Wiki, Claude Code, Codex, OpenClaw, and other
+agent-maintained Markdown workflows.
 
 The single-map editor remains the core workshop. Mindspace adds the layer around
 it: inventory, switching, indexing, linting, context packaging, agent sessions,
@@ -43,8 +54,8 @@ Agent-maintained knowledge bases are becoming a recognizable workflow:
 5. Periodically ask the agent to ingest, query, lint, and repair the knowledge
    base.
 
-This is powerful, but most implementations rely on convention and agent
-discipline:
+This is powerful, but most implementations rely on convention, prompts, and
+agent discipline:
 
 - indexes drift
 - logs become inconsistent
@@ -58,7 +69,14 @@ discipline:
 
 Users can paper over this with better prompts, but that only works while the
 workspace is small and the agent behaves well. `mdmind` can turn parts of the
-workflow into inspectable product behavior.
+workflow into inspectable product behavior: branch-addressable maps, role-aware
+files, deterministic checks, context bundles, and local review.
+
+The product should also reduce prompting burden. Most users do not know how to
+ask an agent for "bounded context with provenance" or "source read-only
+writeback with review fallback." Mindspace job templates should translate
+common jobs into concrete agent guidance while keeping the local file contract
+predictable.
 
 ## Existing Signals
 
@@ -114,9 +132,9 @@ OpenClaw's docs distinguish tools, skills, and plugins: skills teach workflows,
 tools perform typed actions, and plugins package runtime capabilities. That
 maps cleanly to mdmind:
 
-- mdmind skills teach map authoring and CLI inspection
+- mdmind skills teach map authoring, CLI inspection, and Mindspace workflow templates
 - `mdm` commands can become typed tools later
-- plugin packaging can distribute both skills and tools
+- plugin packaging can distribute skills and tools together
 
 Product implication: first ship the local workflow and CLI contract. Package for
 agent ecosystems after the user need is clear, not before.
@@ -125,6 +143,45 @@ Sources:
 
 - <https://hermes-agent.nousresearch.com/docs/reference/skills-catalog/>
 - <https://docs.openclaw.ai/tools>
+
+### Claude Code, Codex, And Agent Skills
+
+Claude Code and Codex have moved the default developer workflow toward
+natural-language delegation over real local files. Claude Code documents an
+agent that reads codebases, edits files, runs commands, and uses skills,
+subagents, hooks, and project memory. Codex positions the agent around
+understanding projects, editing files, reviewing, debugging, automating work,
+and loading layered `AGENTS.md` guidance before work starts.
+
+Product implication: Mindspace should not make users operate a new CLI as the
+main experience. It should make Claude Code, Codex, Hermes, and similar agents
+better at maintaining local Markdown knowledge, then make `mdmind .` the place
+where humans inspect, edit, navigate, and review the result.
+
+Mindspace should also ship a dedicated workflow skill. The existing mdmind
+skills cover map authoring and single-map CLI inspection; a Mindspace skill
+should add job-template selection, scan/lint workflow, setup preview, safe write
+policy, context/session/review guidance, and `mdmind .` handoff.
+
+Sources:
+
+- <https://code.claude.com/docs/en/overview>
+- <https://code.claude.com/docs/en/skills>
+- <https://code.claude.com/docs/en/sub-agents>
+- <https://developers.openai.com/codex>
+- <https://developers.openai.com/codex/guides/agents-md>
+
+### Agent-Native Retrieval
+
+Recent LLM-Wiki research argues that agent retrieval should behave less like
+flat chunk lookup and more like search, read, traversal, linking, and
+self-correction over structured knowledge.
+
+Product implication: Mindspace should expose maps, pages, sources, backlinks,
+review items, and context bundles as traversable local objects. The agent should
+not need to invent a private folder model from ad hoc file reads.
+
+Source: <https://arxiv.org/abs/2605.25480>
 
 ### Existing LLM Wiki Implementations
 
@@ -165,13 +222,16 @@ sessions from "nice future idea" to staged product requirements.
 
 Mindspace should be positioned as:
 
-> An outline/map-first local knowledge workspace that keeps agent-maintained
-> Markdown folders inspectable, navigable, and safe to update.
+> A local knowledge workspace where agents organize and link Markdown files, and
+> humans inspect, edit, navigate, and review the result in mdmind.
 
 This preserves the existing product truth:
 
 - `mdmind` is a human-facing TUI, not only an agent backend.
-- `mdm` is a real CLI product surface, not only a helper binary.
+- `mdm` is the deterministic contract underneath agent and TUI workflows, not
+  the main product habit for most users.
+- job templates help users ask for useful agent work without becoming prompt
+  engineers.
 - mdmind `.md` files are durable plain-text artifacts, not hidden database
   records.
 
@@ -182,9 +242,10 @@ This preserves the existing product truth:
 | Obsidian | Page-first notes, browsing, graph view, plugins, sync, longform Markdown | Companion, not primary replacement target |
 | LLM Wiki pattern | Workflow for raw sources, generated wiki, schema, index, log | Compatible pattern mdmind can make more deterministic |
 | Hermes `llm-wiki` | Research skill for maintaining LLM wikis | Complement; mdmind provides structure, validation, context bundles, source checks |
+| Claude Code / Codex | Agent work surfaces over local projects | Primary delegation environments Mindspace should support through skills, instructions, and CLI contracts |
 | OpenClaw | Agent runtime with tools, skills, plugins | Distribution and future typed-tool surface |
-| mdmind TUI | Human outline/map workspace | Primary product surface for structured users |
-| mdm CLI | Agent/script maintenance layer | Primary deterministic automation surface |
+| mdmind TUI | Human outline/map workspace | Primary inspection, editing, navigation, and review surface |
+| mdm CLI | Agent/script maintenance layer | Deterministic automation substrate, not the main UX story |
 | mdmind `.md` spec | Structured local artifact format | Substrate for maps inside mixed Markdown folders |
 
 ## Core Objects
@@ -282,12 +343,20 @@ Mindspace should not initially:
 
 ## Product Principles
 
-### Adopt The Folder, Do Not Ask Users To Classify It
+### Ask The Agent, Do Not Ask Users To Classify The Folder
 
-Users should not have to pick a product taxonomy. They have a folder. `mdm`
-should inspect it and explain what it found.
+Users should not have to pick a product taxonomy or learn command sequences
+first. They have a folder and a goal. They should be able to ask an agent:
 
 Good user-facing shape:
+
+```text
+Organize this folder as a mindspace. Keep sources read-only, identify maps and
+ordinary pages, propose a manifest, and show me what you would write before you
+write it.
+```
+
+Good deterministic substrate:
 
 ```bash
 mdm mindspace scan .
@@ -296,7 +365,8 @@ mdmind .
 ```
 
 `scan` should work read-only even when no manifest exists. `setup` should write
-a manifest only after preview.
+a manifest only after preview. `mdmind .` should make the proposed or accepted
+workspace visible to the human.
 
 ### Mixed Format By Design
 
@@ -328,10 +398,11 @@ Use mdmind maps where branch-level structure matters:
 
 Use normal Markdown where prose pages are enough.
 
-### Deterministic First, Agent Judgment Second
+### Agent Request First, Deterministic Checks Underneath
 
-`mdm` should provide deterministic checks before asking an LLM to reason about
-the workspace. Agents can then fix one concrete category at a time.
+The user starts with a natural-language request, but the agent should ground the
+work in deterministic commands before claiming the workspace is valid. Agents
+can then fix one concrete category at a time.
 
 ### Human Review Is A Feature
 
@@ -354,7 +425,7 @@ manager. The first human upgrade is a switcher-and-stack model:
 Named working sets and saved layouts can wait until the workspace model proves
 itself.
 
-### Sessions Before Autonomous Agents
+### Sessions Before Invisible Agent Mutation
 
 mdmind should not expose a broad "AI mode." It should provide durable session
 objects that agents and humans can both inspect:
@@ -374,21 +445,24 @@ This keeps agent collaboration local, bounded, and reviewable.
 ## MVP Hypothesis
 
 Users maintaining Markdown knowledge with agents will get immediate value from a
-folder-level mdmind workspace if it can:
+folder-level mdmind workspace if they can ask an agent to shape the folder and
+then review the result locally:
 
 1. inspect an existing folder without writing anything
 2. identify native maps, Markdown pages, sources, inbox files, index/log files,
    and agent instructions
-3. lint high-confidence structural problems
-4. export a focused context bundle for an agent task
-5. open the workspace in the TUI for human review, map switching, and map editing
+3. recommend or customize a persona/job template for the requested work
+4. propose a manifest and file roles before setup writes
+5. lint high-confidence structural problems
+6. export a focused context bundle for an agent task
+7. open the workspace in the TUI for human review, map switching, and map editing
 
 The MVP should prove that mdmind adds value before building broad ecosystem
 packaging or paid-product surfaces.
 
 ## MVP Scope
 
-### 1. Mindspace Scan
+### 1. Mindspace Scan As Agent Substrate
 
 Command:
 
@@ -411,7 +485,8 @@ Read-only inventory:
 - warnings for ambiguous roles
 
 Human output should summarize what was found. JSON output should be stable
-enough for agents and tests.
+enough for agents and tests. User-facing docs should usually show the natural
+request first and this command as the reproducible layer underneath.
 
 ### 2. Mindspace Setup Preview
 
@@ -432,7 +507,29 @@ Behavior:
 
 This replaces user-visible adoption profiles.
 
-### 3. Mindspace Lint
+### 3. Mindspace Job Templates
+
+Commands:
+
+```bash
+mdm mindspace template list --json
+mdm mindspace template show launch-planning --json
+mdm mindspace template show launch-planning --prompt
+```
+
+Behavior:
+
+- lists built-in job templates first; trusted local templates can follow later
+- helps an agent choose between launch planning, project memory, story
+  continuity, claims/evidence, or a customized common template
+- exposes expected roles, map shapes, write policy, deterministic checks, and
+  `mdmind .` review surface
+- stays separate from manifest roles and adoption profiles
+
+Templates should make vague user requests safer and more useful without making
+the user operate a new command-first workflow.
+
+### 4. Mindspace Lint
 
 Command:
 
@@ -460,7 +557,7 @@ Later checks:
 - index drift
 - candidate contradictions
 
-### 4. Focused Context Bundle
+### 5. Focused Context Bundle For Agent Work
 
 Command:
 
@@ -477,7 +574,7 @@ Behavior:
 - does not summarize with an LLM
 - emits Markdown for human/agent reading and JSON for tooling
 
-### 5. TUI Workspace Entry And Switcher
+### 6. TUI Workspace Entry And Switcher
 
 Command:
 
@@ -499,8 +596,9 @@ First TUI slice:
 - keep normal `mdmind file.md` behavior unchanged
 
 The TUI is important because mdmind is not only an automation backend.
+It is where the human inspects and edits what the agent organized.
 
-### 6. Basic Cross-File References
+### 7. Basic Cross-File References
 
 Mindspace needs path-qualified branch targets early enough for scan, lint,
 context bundles, and TUI switching to share one addressing model.
@@ -522,21 +620,24 @@ references unless they are explicitly promoted to mdmind relations.
 Agent sessions should be a v1 feature, not part of the smallest scan/lint MVP.
 The PRD includes them because they shape the safety model and future sidecars.
 
-Candidate commands:
+Candidate substrate commands:
 
 ```bash
-mdm agent session start maps/tasks.md#todo/focus --role implementer
-mdm agent session plan <session-id> --json
-mdm agent session apply <session-id> --preview
-mdm agent session submit <session-id>
-mdm agent review list --json
-mdm agent review approve <review-id>
-mdm agent review reject <review-id> --reason "wrong target branch"
-mdm agent session close <session-id>
+mdm mindspace session start maps/tasks.md#todo/focus --role implementer
+mdm mindspace session plan <session-id> --json
+mdm mindspace session apply <session-id> --preview
+mdm mindspace session submit <session-id>
+mdm mindspace review list --json
+mdm mindspace review approve <review-id>
+mdm mindspace review reject <review-id> --reason "wrong target branch"
+mdm mindspace session close <session-id>
 ```
 
 These commands should create and operate on durable workspace records. They
-should not require any particular agent vendor.
+should not require any particular agent vendor. The reference spec owns the
+canonical command namespace. User-facing agent skills may wrap these in natural
+requests such as "start a scoped memory update for this branch" or "submit
+those proposed links for review."
 
 ## State And Safety Model
 
@@ -594,30 +695,33 @@ Recommended user-facing verbs:
 
 | Verb | User | Meaning |
 | --- | --- | --- |
-| `new` | human | create a fresh native mdmind workspace |
-| `scan` | human or agent | inspect an existing folder, read-only |
-| `setup` | human or explicit agent task | write mindspace configuration after preview |
-| `lint` | human or agent | find structural problems |
-| `context` | agent or human | export focused context with provenance |
+| `new` | human or agent with approval | create a fresh native mdmind workspace |
+| `scan` | agent or human | inspect an existing folder, read-only |
+| `setup` | explicit human approval or agent task | write mindspace configuration after preview |
+| `lint` | agent or human | find structural problems |
+| `context` | agent first, human optional | export focused context with provenance |
 | `open` / `mdmind .` | human | enter the workspace in the TUI |
-| `session` | agent or human | create and manage scoped agent collaboration |
+| `session` | agent first, human inspectable | create and manage scoped agent collaboration |
 | `review` | human first | inspect, approve, or reject proposed writeback |
 
 Avoid leading with `adopt` as a user-facing verb. It is accurate internally but
 less clear than `scan` plus `setup`. Fresh creation can be named `new` in user
-copy or `init` in CLI if consistency with existing `mdm init` wins.
+copy or `init` in CLI if consistency with existing `mdm init` wins. Most user
+stories should lead with "ask your agent" or "open the workspace," not the verb
+table.
 
 ## Phased Roadmap
 
 ### MVP: Mindspace Navigation And Deterministic Context
 
-Target: make a folder understandable and navigable without turning mdmind into a
-full notes app.
+Target: make an agent-shaped folder understandable and navigable without
+turning mdmind into a full notes app.
 
 Scope:
 
 - `.mdmind/mindspace.json`
 - `mindspace scan`, `status`, `tree` or equivalent inventory
+- built-in job templates and template helper commands
 - basic cross-file branch refs
 - `mindspace lint` for high-confidence errors
 - `mindspace context` with provenance
@@ -625,8 +729,10 @@ Scope:
 - universal switcher over maps and ids
 - recent-map stack and pinned working set
 
-Success: a user can open a folder, discover maps, switch between maps in the
-TUI, lint obvious problems, and hand a bounded context bundle to an agent.
+Success: a user can ask for a recognizable job, get a template-shaped workflow,
+open a folder, discover maps, switch between maps in the TUI, lint obvious
+problems, and see that an agent used a bounded context bundle instead of
+dumping the folder into its prompt.
 
 ### v1: Reviewable Agent Teaming
 
@@ -635,14 +741,15 @@ Target: make human-plus-agent collaboration reliable across several maps.
 Scope:
 
 - agent sessions with goal, role, target, and write scope
+- packaged Mindspace workflow skill with persona/job template references
 - review queue with diff preview and rationale
 - checkpoint-before-write flows
 - generated `index.md` and `log.md`
 - source records and stale-source report
 - structured JSON envelopes for all mindspace commands
 
-Success: a human can assign scoped work to an agent, review proposed changes,
-approve or reject them, and recover from mistakes.
+Success: a human can ask an agent for scoped workspace work, review proposed
+changes, approve or reject them, and recover from mistakes.
 
 ### v2: Ecosystem And Advanced Automation
 
@@ -665,8 +772,10 @@ review, safety, and provenance.
 
 Early qualitative signals:
 
-- a user can point `mdm` at an existing Markdown folder and understand what it
-  found without reading docs
+- a user can ask an agent to inspect an existing Markdown folder and understand
+  what it found without reading docs
+- a user can open `mdmind .` after agent work and see touched files, target
+  branches, warnings, and review items
 - an agent can run `scan --json` and choose a safer next command
 - lint finds real issues the user cares about
 - context bundles reduce the need for agents to read entire folders
@@ -685,6 +794,8 @@ Possible quantitative checks:
 - session proposals with stale digests become review items rather than applying
 - eval cases show agents choose `mdm mindspace context` or `lint` instead of
   ad hoc folder-wide reads for relevant tasks
+- eval cases show agents leave risky generated maps, moves, and links as review
+  items rather than silently changing the workspace
 
 ## Risks And Open Questions
 
@@ -739,8 +850,6 @@ incremental inventory, content digests, and cache invalidation under `.mdmind/`.
 - Does the first TUI workspace slice need map switching only, or also pinned
   working sets?
 - Should source staleness be in MVP or the first follow-up?
-- Should session/review commands live under `mdm agent ...`, `mdm mindspace
-  session ...`, or both?
 
 ## Linear Recommendation
 
@@ -754,9 +863,13 @@ this PRD:
   `setup` flow.
 - Promote scan, lint, context, source/staleness, and TUI workspace entry as the
   core candidate slices.
+- Add Mindspace job templates as the user guidance layer between vague agent
+  prompts and deterministic CLI/TUI behavior.
 - Promote TUI map switching from future polish to MVP scope.
 - Add a v1 issue for agent sessions, review queue, digest checks, and scoped
   writeback.
+- Track `MDM-22` for the `mdmind-mindspace-workflow` skill and template
+  reference files.
 - Defer paid product, community, and broad ecosystem packaging until one
   workflow proves clear user value.
 
@@ -765,6 +878,7 @@ Candidate issue changes:
 - Update `MDM-33` to define mixed-format mindspace and command vocabulary.
 - Update `MDM-35` around `scan` and deterministic `lint`.
 - Update `MDM-36` around focused context bundles with provenance.
+- Create or update an issue for Mindspace job templates and the workflow skill.
 - Update `MDM-38` as the likely first follow-up for source manifests and stale
   synthesis.
 - Update `MDM-42` so TUI workspace entry, universal switching, recents, pinned

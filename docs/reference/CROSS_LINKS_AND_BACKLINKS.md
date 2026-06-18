@@ -16,12 +16,28 @@ This says: this node is connected to `product/api-design`.
 
 It does not say why. It just preserves the connection.
 
+Same-file targets are file-scoped. `product/api-design` means an id in the
+current map, not a global id across every file.
+
+For a branch in another map, include the path plus `#` plus the branch id:
+
+```text
+- Launch Readiness [[maps/decisions.md#product/api-design]]
+```
+
+`mdm validate` checks the target file and branch id when it can read the
+referenced Markdown map. For single-map validation, local relation paths are
+resolved from the current map directory and then ancestor directories, so
+Mindspace-style root paths such as `maps/decisions.md#product/api-design` work
+from maps inside `maps/`.
+
 ## The Typed Form
 
 Use a typed relation when the meaning matters:
 
 ```text
 - Launch Readiness [[rel:blocked-by->product/api-design]]
+- Launch Readiness [[rel:blocked-by->maps/decisions.md#product/api-design]]
 ```
 
 This says more than “these are connected.” It says the current branch is blocked by the target branch.
@@ -66,12 +82,25 @@ Use:
 ```bash
 mdm relations map.md
 mdm relations map.md#product/api-design
+mdm validate map.md
 ```
 
 The deep-linked form is the most useful when you want to inspect both:
 
 - outgoing relations from one node
 - incoming backlinks to that same node
+
+`mdm relations --json` and `--plain` include a target kind so agents and humans
+can tell same-file ids from path-qualified branch refs, external files, and
+URLs.
+
+`mdm validate` warns when:
+
+- a same-file relation target does not match an id in the current map
+- a path-qualified target file is missing
+- a path-qualified target file exists but the requested branch id is missing or
+  ambiguous
+- a path-qualified branch points at a non-Markdown file
 
 ## When Relations Add Real Value
 

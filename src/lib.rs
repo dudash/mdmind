@@ -13,6 +13,7 @@ pub mod interactive;
 pub mod locations;
 pub mod markdown_render;
 pub mod mindmap;
+pub mod mindspace;
 pub mod model;
 pub mod parser;
 pub mod query;

@@ -1,4 +1,7 @@
-use mdmind::model::{ExternalRefKind, TaskState};
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use mdmind::model::{ExternalRefKind, RelationTarget, TaskState};
 use mdmind::parser::parse_document;
 use mdmind::query::{
     find_matches, link_entries, metadata_rows, reference_entries, relation_entries,
@@ -8,6 +11,16 @@ use mdmind::validate::{validate_document, validate_document_with_base_path};
 
 fn fixture(name: &str) -> String {
     std::fs::read_to_string(format!("tests/fixtures/{name}")).expect("fixture should be readable")
+}
+
+fn temp_dir(name: &str) -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be after unix epoch")
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("mdmind-{nonce}-{name}"));
+    std::fs::create_dir_all(&path).expect("temp dir should be writable");
+    path
 }
 
 #[test]
@@ -173,6 +186,38 @@ fn parser_extracts_inline_relations_and_backlinks_are_queryable() {
 }
 
 #[test]
+fn parser_classifies_path_qualified_branch_relations() {
+    let parsed = parse_document(
+        "- Research [id:research] [[maps/decisions.md#decision/api-shape]] [[rel:implements->maps/tasks.md#todo/focus]]\n",
+    );
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "parser diagnostics: {:?}",
+        parsed.diagnostics
+    );
+
+    let node = &parsed.document.nodes[0];
+    assert_eq!(node.relations.len(), 2);
+    assert_eq!(
+        node.relations[0].target_kind(),
+        RelationTarget::PathQualifiedBranch {
+            path: "maps/decisions.md",
+            id: "decision/api-shape"
+        }
+    );
+    assert_eq!(node.relations[1].kind.as_deref(), Some("implements"));
+    assert_eq!(
+        node.relations[1].target_kind().label(),
+        "path_qualified_branch"
+    );
+
+    let rows = relation_entries(&parsed.document);
+    assert_eq!(rows[0].target_kind, "path_qualified_branch");
+    assert_eq!(rows[0].target, "maps/decisions.md#decision/api-shape");
+    assert!(rows[0].resolved_path.is_none());
+}
+
+#[test]
 fn parser_extracts_markdown_file_and_image_references() {
     let parsed = parse_document(
         "- Research [brief](docs/brief.md) ![diagram](assets/diagram.png) [id:research]\n",
@@ -251,6 +296,109 @@ fn validate_reports_unresolved_relation_targets() {
         "expected unresolved relation diagnostic, got: {:?}",
         diagnostics
     );
+}
+
+#[test]
+fn dotted_same_file_relation_ids_stay_file_scoped() {
+    let parsed = parse_document("- Release [id:release/v1.0]\n- Note [[release/v1.0]]\n");
+    let diagnostics = validate_document(&parsed.document);
+
+    assert!(
+        diagnostics.is_empty(),
+        "dotted same-file ids should not be treated as external files: {:?}",
+        diagnostics
+    );
+}
+
+#[test]
+fn validate_accepts_existing_path_qualified_branch_relation_targets() {
+    let root = temp_dir("cross-file-relations");
+    let maps_dir = root.join("maps");
+    std::fs::create_dir_all(&maps_dir).expect("maps dir should be writable");
+    std::fs::write(
+        maps_dir.join("decisions.md"),
+        "- Decision Log [id:decision]\n  - API Shape [id:decision/api-shape]\n",
+    )
+    .expect("target map should be writable");
+
+    let parsed = parse_document(
+        "- Research [id:research] [[maps/decisions.md#decision/api-shape]] [[rel:implements->maps/decisions.md#decision/api-shape]]\n",
+    );
+    let diagnostics = validate_document_with_base_path(&parsed.document, Some(&root));
+
+    assert!(
+        diagnostics.is_empty(),
+        "expected valid cross-file relation target, got: {:?}",
+        diagnostics
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn validate_accepts_mindspace_root_relative_branch_relation_targets() {
+    let root = temp_dir("root-relative-cross-file-relations");
+    let maps_dir = root.join("maps");
+    std::fs::create_dir_all(&maps_dir).expect("maps dir should be writable");
+    std::fs::write(
+        maps_dir.join("decisions.md"),
+        "- Decision Log [id:decision]\n  - Auth Model [id:decision/auth-token-model]\n",
+    )
+    .expect("target map should be writable");
+
+    let parsed =
+        parse_document("- Task [[rel:depends-on->maps/decisions.md#decision/auth-token-model]]\n");
+    let diagnostics = validate_document_with_base_path(&parsed.document, Some(&maps_dir));
+
+    assert!(
+        diagnostics.is_empty(),
+        "expected root-relative cross-file relation target, got: {:?}",
+        diagnostics
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn validate_reports_missing_path_qualified_branch_ids() {
+    let root = temp_dir("missing-cross-file-id");
+    let maps_dir = root.join("maps");
+    std::fs::create_dir_all(&maps_dir).expect("maps dir should be writable");
+    std::fs::write(
+        maps_dir.join("decisions.md"),
+        "- Decision Log [id:decision]\n  - Other Shape [id:decision/other]\n",
+    )
+    .expect("target map should be writable");
+
+    let parsed = parse_document("- Research [[maps/decisions.md#decision/api-shape]]\n");
+    let diagnostics = validate_document_with_base_path(&parsed.document, Some(&root));
+
+    assert!(
+        diagnostics.iter().any(|diagnostic| diagnostic
+            .message
+            .contains("maps/decisions.md#decision/api-shape")),
+        "expected missing cross-file branch id diagnostic, got: {:?}",
+        diagnostics
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn validate_reports_missing_path_qualified_relation_files() {
+    let root = temp_dir("missing-cross-file");
+    let parsed = parse_document("- Research [[maps/decisions.md#decision/api-shape]]\n");
+    let diagnostics = validate_document_with_base_path(&parsed.document, Some(&root));
+
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("maps/decisions.md")),
+        "expected missing cross-file relation target diagnostic, got: {:?}",
+        diagnostics
+    );
+
+    std::fs::remove_dir_all(root).ok();
 }
 
 #[test]

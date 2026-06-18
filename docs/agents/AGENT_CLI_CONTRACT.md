@@ -119,12 +119,25 @@ payload lives in `data`:
 | `refs --json` | `reference_rows.v1` | `ReferenceRow[]` |
 | `relations --json` | `relation_rows.v1` | `RelationRow[]` |
 | `validate --json` | `diagnostics.v1` | `Diagnostic[]` |
+| `mindspace scan --json` | `mindspace_scan.v1` | `MindspaceScan` object |
+| `mindspace setup --json` | `mindspace_setup.v1` | `MindspaceSetupReport` object |
+| `mindspace lint --json` | `mindspace_diagnostics.v1` | `MindspaceDiagnosticsReport` object |
+| `mindspace context --json` | `mindspace_context.v1` | `MindspaceContextBundle` object |
+| `mindspace template list --json` | `mindspace_template_catalog.v1` | `MindspaceTemplateCatalog` object |
+| `mindspace template show --json` | `mindspace_template.v1` | `MindspaceTemplate` object |
+| `mindspace session --json` | `mindspace_session.v1` | `MindspaceSessionReport` or `MindspaceSessionApplyReport` object |
+| `mindspace review --json` | `mindspace_review.v1` | `MindspaceReviewRecord` or `MindspaceReviewList` object |
 | `commands --json` | `command_catalog.v1` | `CommandCatalog` object |
 | `changelog --json` | `changelog_entry.v1` or `changelog.v1` | `ChangelogEntry` object or `ChangelogEntry[]` |
 | `export --format json` | raw export | `ExportDocument` object |
 
 `mdm export --format json` intentionally remains raw document export because
 downstream tools use it as document data, not command metadata.
+
+`RelationRow[]` includes `target_kind` for relation target classification.
+Current values are `same_file_id`, `path_qualified_branch`, `external_file`,
+and `url`. Agents should use `target_kind` before deciding whether a relation
+can be followed inside the current map or needs future mindspace inventory.
 
 Target success envelope:
 
@@ -241,7 +254,7 @@ listed as interactive in `mdm commands --json`.
 | `mdm kv <target>` | map | no | no | no | Use `--keys a,b` to narrow audits; use `--json` for rows. |
 | `mdm links <target>` | map | no | no | no | Use before deep-linking if ids are unknown. |
 | `mdm refs <target>` | map | no | no | no | Use for external Markdown links and images; do not confuse with relations. |
-| `mdm relations <target>` | map | no | no | no | Whole-map target lists outgoing relations; deep-linked target lists incoming and outgoing context for that node. |
+| `mdm relations <target>` | map | no | no | no | Whole-map target lists outgoing relations; deep-linked target lists incoming and outgoing context for that node. Rows classify same-file ids, path-qualified branch refs, external files, and URLs. |
 | `mdm validate <target>` | map | no | no | no | Run after generated or edited maps; exit `1` when diagnostics include errors. |
 | `mdm export <target>` | map | no | no | no | Use `--format json`, `mermaid`, or `opml`; use `--query` for filtered exports. |
 | `mdm init <path>` | templates | map file | no | no | Requires `--template`; use `--force` only when overwriting intentionally. |
@@ -250,15 +263,63 @@ listed as interactive in `mdm commands --json`.
 | `mdm examples path` | installed examples | no | no | no | Prints examples directory when available. |
 | `mdm examples copy <name>` | bundled examples | files | no | no | Use `all` to materialize examples; use `--force` only when intentional. |
 | `mdm skills install` | bundled skill reference | agent skills | yes | no | Convenience wrapper for `npx skills add dudash/mdmind`; use `--print` to show the command without running it. |
+| `mdm mindspace scan <root>` | folder, optional manifest, maps, Markdown | no | no | no | Read-only inventory for a folder-level Mindspace; use `--json` for `mindspace_scan.v1`. |
+| `mdm mindspace lint <root>` | folder, optional manifest, maps, Markdown | no | no | no | Deterministic diagnostics with stable issue codes; exits `1` when diagnostics include errors. |
+| `mdm mindspace setup <root> --preview` | folder, optional manifest, maps, Markdown | no | no | no | Preview the proposed manifest; use `--json` for `mindspace_setup.v1`. |
+| `mdm mindspace setup <root> --write` | folder, optional manifest, maps, Markdown | `.mdmind/mindspace.json` | no | no | Write only the manifest and required `.mdmind/` directory; never move or rewrite notes. |
+| `mdm mindspace context <target>` | maps, selected pages, refs, sources | no | no | no | Export bounded context with provenance; use `--json` for `mindspace_context.v1`. |
+| `mdm mindspace session ...` | maps, session records | `.mdmind/sessions/`, `.mdmind/reviews/` | no | no | Record agent sessions and submit review items; current apply is preview-only. |
+| `mdm mindspace review ...` | review records, target maps | `.mdmind/reviews/` | no | no | List, approve, reject, or stale-mark review items after digest checks; current approval does not mutate maps. |
+| `mdm mindspace template list` | built-in Mindspace templates | no | no | no | List persona/job templates; use `--json` for `mindspace_template_catalog.v1`. |
+| `mdm mindspace template show <id>` | built-in Mindspace templates | no | no | no | Show one template as human text, `--plain`, `--json`, or `--prompt`. |
 | `mdm changelog` | bundled changelog | no | no | no | Reads pretty release notes for the bundled version; use `--version` or `--all` for other sections, `--plain` for raw Markdown, and `--json` for scripts. |
 | `mdm open <target>` | map | session/location sidecars in interactive mode | no | yes by default | Agents should use `--preview` or `--json`; avoid bare `open`. |
 | `mdm check-keys` | terminal input | no | no | yes | Humans only; agents should not run it. |
 | `mdm version` | no | no | only with `--check` | no | Prints `mdm <version>`; `--check --json` checks GitHub Releases for a newer build. |
-| `mdmind <target>` | map or Markdown | map sidecars only when a native map opens; ordinary Markdown can write and open `<stem>-mind.md` when the human presses `i` | no | yes by default | Humans only unless `--preview` is used; ordinary Markdown opens read-only. |
-| `mdmind --preview <target>` | map or Markdown | no | no | no | Static preview equivalent to a readable tree view for maps or rendered Markdown for ordinary Markdown. |
+| `mdmind <target>` | map, Markdown, or Mindspace folder | map/session/view sidecars in interactive map mode; ordinary Markdown can write and open `<stem>-mind.md` when the human presses `i` | no | yes by default | Humans only unless `--preview` is used; folders open the Mindspace switcher. |
+| `mdmind --preview <target>` | map, Markdown, or Mindspace folder | no | no | no | Static preview equivalent to a readable tree view for maps, rendered Markdown for ordinary Markdown, or a read-only Mindspace workspace landing for folders. |
 | `mdmind --as markdown <target>` | Markdown | no | no | no with `--preview`, yes otherwise | Forces read-only Markdown routing for ambiguous or broken files. |
 | `mdmind --as map <target>` | map | map sidecars only in interactive mode | no | no with `--preview`, yes otherwise | Forces strict native map parsing and reports parser errors for ordinary Markdown. |
 | `mdmind --check-keys` | terminal input | no | no | yes | Humans only; agents should not run it. |
+
+## Mindspace Command Targets
+
+These rows keep current and planned Mindspace behavior in one place. Mindspace
+is an optional workspace layer with its own docs in
+[../mindspace/](../mindspace/). The product experience is agent-first and
+`mdmind`-reviewed: users ask Claude Code, Codex, Hermes, or another agent to do
+workspace work; agents call this deterministic CLI contract underneath; humans
+inspect and edit in `mdmind .`. Session/review commands use `mdm mindspace`,
+not a broad `mdm agent` namespace. Job-template commands should also stay under
+`mdm mindspace`; templates guide the requested work, but they are not hidden
+adoption profiles.
+
+| Command | Reads | Writes | Network | Interactive | Agent-safe usage |
+| --- | --- | --- | --- | --- | --- |
+| `mdm mindspace scan <root>` | folder, manifest when present, maps, Markdown | no | no | no | Current: read-only inventory for an existing folder; agents should use `--json`. |
+| `mdm mindspace setup <root> --preview` | folder, scan results | no | no | no | Current: preview the proposed `.mdmind/mindspace.json`; safe before setup writes. |
+| `mdm mindspace setup <root> --write` | folder, scan results | `.mdmind/mindspace.json` | no | no | Current: write only the manifest and required `.mdmind/` directory; never move or rewrite notes. |
+| `mdm mindspace lint <root>` | folder, manifest, maps, Markdown refs | no | no | no | Current: return deterministic diagnostics with stable issue codes and exit `1` on errors. |
+| `mdm mindspace context <target>` | maps, selected pages, refs, sources | no | no | no | Current: export bounded context with provenance, budgets, and omission reasons. |
+| `mdm mindspace template list` | built-in template refs | no | no | no | Current: list persona/job templates available to guide agent workflows. Trusted local templates are future. |
+| `mdm mindspace template show <id>` | one built-in template ref | no | no | no | Current: print a job template as JSON, human text, plain text, or an agent prompt. |
+| `mdm mindspace session ...` | session records, maps, context bundles | `.mdmind/sessions/`, `.mdmind/reviews/` | no | no | Current: manage scoped agent collaboration records with target digests; apply is preview-only. |
+| `mdm mindspace review ...` | review records, target files | `.mdmind/reviews/` | no | no | Current: inspect, approve, reject, or stale-mark review items; approval does not mutate maps yet. |
+| `mdmind --preview .` | folder, manifest, inventory, session/review sidecars | no | no | no | Current: agent-safe static workspace landing for summaries and handoff checks. |
+| `mdmind .` | folder, manifest, inventory, maps, Markdown, session/review sidecars | map/session/view sidecars after a human selects and opens a file | no | yes | Current: human workspace switcher; agents should not launch the interactive TUI. |
+
+Reserved JSON formats:
+
+| Format | Payload |
+| --- | --- |
+| `mindspace_scan.v1` | Inventory, detected roles, validation summaries, warnings, and next actions. |
+| `mindspace_setup.v1` | Proposed or written manifest plus role explanations and write summary. |
+| `mindspace_diagnostics.v1` | Deterministic lint diagnostics with stable issue codes. |
+| `mindspace_context.v1` | Context bundle with included items, provenance, budgets, and omission reasons. |
+| `mindspace_template_catalog.v1` | Template ids, names, persona fit, job fit, safety defaults, and provenance. |
+| `mindspace_template.v1` | One template with prompt, folder roles, map shapes, checks, write policy, review surface, and customization knobs. |
+| `mindspace_session.v1` | Session records, state transitions, plans, previews, and closeouts. |
+| `mindspace_review.v1` | Review items, decisions, rationale, and target/digest state. |
 
 ## Command Discovery Target
 

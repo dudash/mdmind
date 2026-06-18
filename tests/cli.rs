@@ -238,6 +238,24 @@ fn commands_json_lists_agent_command_catalog() {
         "ai quick-add",
         "skills",
         "skills install",
+        "mindspace",
+        "mindspace scan",
+        "mindspace lint",
+        "mindspace setup",
+        "mindspace context",
+        "mindspace session",
+        "mindspace session start",
+        "mindspace session plan",
+        "mindspace session apply",
+        "mindspace session submit",
+        "mindspace session close",
+        "mindspace review",
+        "mindspace review list",
+        "mindspace review approve",
+        "mindspace review reject",
+        "mindspace template",
+        "mindspace template list",
+        "mindspace template show",
         "commands",
         "changelog",
         "open",
@@ -274,6 +292,865 @@ fn commands_json_lists_agent_command_catalog() {
             .unwrap()
             .contains(&"session_sidecars".into())
     );
+}
+
+#[test]
+fn mindspace_scan_json_inventories_mixed_folder_without_writing() {
+    let root = temp_file("mindspace-scan");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::create_dir_all(root.join("docs")).expect("docs directory should be writable");
+    std::fs::create_dir_all(root.join("sources")).expect("sources directory should be writable");
+    std::fs::create_dir_all(root.join("inbox")).expect("inbox directory should be writable");
+
+    std::fs::write(
+        root.join("maps").join("tasks.md"),
+        "- Launch plan #launch [id:launch]\n  - Pricing work [[rel:depends_on->maps/decisions.md#decision/pricing]] [id:launch/pricing]\n",
+    )
+    .expect("map fixture should be writable");
+    std::fs::write(
+        root.join("maps").join("decisions.md"),
+        "- Decisions [id:decisions]\n  - Billing model [id:decision/billing]\n",
+    )
+    .expect("map fixture should be writable");
+    std::fs::write(
+        root.join("docs").join("brief.md"),
+        "# Brief\n\nOrdinary page.\n",
+    )
+    .expect("page fixture should be writable");
+    std::fs::write(
+        root.join("sources").join("interview.md"),
+        "# Interview\n\nRaw notes.\n",
+    )
+    .expect("source fixture should be writable");
+    std::fs::write(root.join("inbox").join("capture.md"), "- loose capture\n")
+        .expect("inbox fixture should be writable");
+    std::fs::write(root.join("AGENTS.md"), "# Agent guidance\n")
+        .expect("instruction fixture should be writable");
+    std::fs::write(root.join("index.md"), "# Index\n").expect("index fixture should be writable");
+    std::fs::write(root.join("log.md"), "# Log\n").expect("log fixture should be writable");
+
+    let output = run_mdm(&["mindspace", "scan", root.to_str().unwrap(), "--json"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "mindspace scan");
+    assert_eq!(value["format"], "mindspace_scan.v1");
+    assert_eq!(value["target"], root.to_string_lossy().as_ref());
+    assert_eq!(value["data"]["manifest"]["present"], false);
+    assert_eq!(value["summary"]["roles"]["maps"], 2);
+    assert_eq!(value["summary"]["roles"]["pages"], 1);
+    assert!(value["summary"]["roles"]["sources"].as_u64().unwrap() >= 1);
+    assert!(value["summary"]["roles"]["inbox"].as_u64().unwrap() >= 1);
+    assert_eq!(value["summary"]["roles"]["instructions"], 1);
+    assert_eq!(value["summary"]["roles"]["indexes"], 1);
+    assert_eq!(value["summary"]["roles"]["logs"], 1);
+    assert_eq!(value["summary"]["diagnostics"]["warnings"], 1);
+
+    let role_paths = value["data"]["roles"]
+        .as_array()
+        .expect("roles should be an array")
+        .iter()
+        .filter_map(|role| role["path"].as_str())
+        .collect::<Vec<_>>();
+    assert!(role_paths.contains(&"maps/tasks.md"));
+    assert!(role_paths.contains(&"docs/brief.md"));
+    assert!(role_paths.contains(&"sources/interview.md"));
+    assert!(role_paths.contains(&"inbox/capture.md"));
+    assert!(role_paths.contains(&"AGENTS.md"));
+
+    let diagnostic_codes = value["data"]["diagnostics"]
+        .as_array()
+        .expect("diagnostics should be an array")
+        .iter()
+        .filter_map(|diagnostic| diagnostic["code"].as_str())
+        .collect::<Vec<_>>();
+    assert!(diagnostic_codes.contains(&"map_validation_warning"));
+    assert!(
+        !root.join(".mdmind").exists(),
+        "scan should not create a mindspace manifest directory"
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_setup_preview_empty_folder_does_not_write() {
+    let root = temp_file("mindspace-setup-empty");
+    std::fs::create_dir_all(&root).expect("empty mindspace root should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "setup",
+        root.to_str().unwrap(),
+        "--preview",
+        "--json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "mindspace setup");
+    assert_eq!(value["format"], "mindspace_setup.v1");
+    assert_eq!(value["target"], root.to_string_lossy().as_ref());
+    assert_eq!(value["data"]["mode"], "preview");
+    assert_eq!(value["data"]["written"], false);
+    assert_eq!(
+        value["data"]["manifest"]["schema_version"],
+        "mdmind.mindspace.v1"
+    );
+    assert_eq!(value["data"]["manifest"]["root"], "..");
+    assert_eq!(value["data"]["summary"]["roles"], 1);
+    assert!(
+        value["data"]["notes"]
+            .as_array()
+            .expect("notes should be an array")
+            .iter()
+            .any(|note| note.as_str() == Some("Preview mode did not write files."))
+    );
+
+    let role_paths = value["data"]["manifest"]["roles"]
+        .as_array()
+        .expect("roles should be an array")
+        .iter()
+        .filter_map(|role| role["path"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(role_paths, vec![".mdmind/reports"]);
+    assert!(
+        !root.join(".mdmind").exists(),
+        "setup preview should not create the manifest directory"
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_setup_write_native_folder_creates_manifest_only() {
+    let root = temp_file("mindspace-setup-native");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    let map_path = root.join("maps").join("tasks.md");
+    let map_source = "- Tasks [id:tasks]\n  - Ship setup [id:tasks/setup]\n";
+    std::fs::write(&map_path, map_source).expect("map fixture should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "setup",
+        root.to_str().unwrap(),
+        "--write",
+        "--json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "mindspace setup");
+    assert_eq!(value["format"], "mindspace_setup.v1");
+    assert_eq!(value["data"]["mode"], "write");
+    assert_eq!(value["data"]["written"], true);
+    assert_eq!(value["data"]["created_directory"], true);
+    assert_eq!(std::fs::read_to_string(&map_path).unwrap(), map_source);
+    assert!(root.join(".mdmind").join("mindspace.json").exists());
+    assert!(
+        !root.join(".mdmind").join("reports").exists(),
+        "setup should not create generated report directories"
+    );
+
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(root.join(".mdmind").join("mindspace.json")).unwrap(),
+    )
+    .expect("written manifest should be valid json");
+    assert_eq!(manifest["schema_version"], "mdmind.mindspace.v1");
+    assert_eq!(manifest["root"], "..");
+    assert!(
+        manifest["roles"]
+            .as_array()
+            .expect("roles should be an array")
+            .iter()
+            .any(|role| role["role"] == "map" && role["path"] == "maps/tasks.md")
+    );
+    assert!(
+        manifest["roles"]
+            .as_array()
+            .expect("roles should be an array")
+            .iter()
+            .any(|role| role["role"] == "report" && role["generated"] == true)
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_setup_preview_mixed_folder_infers_roles_without_adopting() {
+    let root = temp_file("mindspace-setup-mixed");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::create_dir_all(root.join("docs")).expect("docs directory should be writable");
+    std::fs::create_dir_all(root.join("sources")).expect("sources directory should be writable");
+    std::fs::create_dir_all(root.join("inbox")).expect("inbox directory should be writable");
+    std::fs::write(
+        root.join("maps").join("roadmap.md"),
+        "- Roadmap [id:roadmap]\n",
+    )
+    .expect("map fixture should be writable");
+    std::fs::write(
+        root.join("docs").join("brief.md"),
+        "# Brief\n\nOrdinary Markdown.\n",
+    )
+    .expect("page fixture should be writable");
+    std::fs::write(
+        root.join("sources").join("interview.md"),
+        "# Interview\n\nRaw notes.\n",
+    )
+    .expect("source fixture should be writable");
+    std::fs::write(root.join("inbox").join("capture.md"), "- loose capture\n")
+        .expect("inbox fixture should be writable");
+    std::fs::write(root.join("AGENTS.md"), "# Agent guidance\n")
+        .expect("instruction fixture should be writable");
+    std::fs::write(root.join("index.md"), "# Index\n").expect("index fixture should be writable");
+    std::fs::write(root.join("log.md"), "# Log\n").expect("log fixture should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "setup",
+        root.to_str().unwrap(),
+        "--template",
+        "launch-planning",
+        "--preview",
+        "--json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["data"]["mode"], "preview");
+    assert_eq!(value["data"]["template"]["id"], "launch-planning");
+    assert_eq!(value["data"]["template"]["persona_fit"], "Priya Planner");
+    let roles = value["data"]["manifest"]["roles"]
+        .as_array()
+        .expect("roles should be an array");
+    let role_pairs = roles
+        .iter()
+        .filter_map(|role| Some((role["role"].as_str()?, role["path"].as_str()?)))
+        .collect::<Vec<_>>();
+    for expected in [
+        ("instruction", "AGENTS.md"),
+        ("index", "index.md"),
+        ("log", "log.md"),
+        ("map", "maps/roadmap.md"),
+        ("page", "docs/brief.md"),
+        ("source", "sources"),
+        ("inbox", "inbox"),
+        ("report", ".mdmind/reports"),
+    ] {
+        assert!(
+            role_pairs.contains(&expected),
+            "setup preview should include role {expected:?}; got {role_pairs:?}"
+        );
+    }
+    assert!(
+        !role_pairs.contains(&("source", "sources/interview.md")),
+        "directory roles should cover source files without duplicate manifest entries"
+    );
+    assert!(
+        !root.join(".mdmind").exists(),
+        "setup preview should not create a manifest directory"
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_setup_write_existing_manifest_preserves_overrides() {
+    let root = temp_file("mindspace-setup-existing");
+    std::fs::create_dir_all(root.join(".mdmind")).expect("manifest directory should be writable");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::create_dir_all(root.join("docs")).expect("docs directory should be writable");
+    std::fs::write(root.join("maps").join("tasks.md"), "- Tasks [id:tasks]\n")
+        .expect("map fixture should be writable");
+    std::fs::write(root.join("docs").join("brief.md"), "# Brief\n")
+        .expect("page fixture should be writable");
+    std::fs::write(
+        root.join(".mdmind").join("mindspace.json"),
+        r#"{
+  "schema_version": "mdmind.mindspace.v1",
+  "name": "Existing Brain",
+  "root": "..",
+  "roles": [
+    {"role": "source", "path": "docs/brief.md", "read_only": true}
+  ],
+  "settings": {
+    "source_read_only_default": false,
+    "custom_setting": "keep"
+  }
+}
+"#,
+    )
+    .expect("existing manifest should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "setup",
+        root.to_str().unwrap(),
+        "--write",
+        "--json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["data"]["existing_manifest"], true);
+    assert_eq!(value["data"]["created_directory"], false);
+    assert_eq!(value["data"]["summary"]["preserved_roles"], 1);
+    let manifest = &value["data"]["manifest"];
+    assert_eq!(manifest["name"], "Existing Brain");
+    assert_eq!(manifest["settings"]["source_read_only_default"], false);
+    assert_eq!(manifest["settings"]["custom_setting"], "keep");
+
+    let roles = manifest["roles"]
+        .as_array()
+        .expect("roles should be an array");
+    assert!(
+        roles
+            .iter()
+            .any(|role| role["role"] == "source" && role["path"] == "docs/brief.md")
+    );
+    assert!(
+        !roles
+            .iter()
+            .any(|role| role["role"] == "page" && role["path"] == "docs/brief.md"),
+        "existing role override should prevent an inferred page duplicate"
+    );
+    assert!(
+        roles
+            .iter()
+            .any(|role| role["role"] == "map" && role["path"] == "maps/tasks.md")
+    );
+
+    let written_manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(root.join(".mdmind").join("mindspace.json")).unwrap(),
+    )
+    .expect("written manifest should be valid json");
+    assert_eq!(&written_manifest, manifest);
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_setup_write_rejects_malformed_existing_manifest_roles() {
+    let root = temp_file("mindspace-setup-invalid-existing");
+    std::fs::create_dir_all(root.join(".mdmind")).expect("manifest directory should be writable");
+    let manifest_path = root.join(".mdmind").join("mindspace.json");
+    let source = r#"{
+  "schema_version": "mdmind.mindspace.v1",
+  "name": "Needs Review",
+  "root": "..",
+  "roles": "source/*.md",
+  "settings": {}
+}
+"#;
+    std::fs::write(&manifest_path, source).expect("existing manifest should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "setup",
+        root.to_str().unwrap(),
+        "--write",
+        "--json",
+    ]);
+
+    assert!(!output.status.success());
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+    assert_eq!(value["ok"], false);
+    assert_eq!(value["error"]["code"], "runtime_error");
+    assert!(
+        value["error"]["message"]
+            .as_str()
+            .expect("json error should include a message")
+            .contains("roles field, but it is not an array")
+    );
+    assert_eq!(std::fs::read_to_string(&manifest_path).unwrap(), source);
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_context_target_bundle_includes_relation_and_bounded_source() {
+    let root = temp_file("mindspace-context-target");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::create_dir_all(root.join("sources")).expect("sources directory should be writable");
+    std::fs::write(
+        root.join("maps").join("roadmap.md"),
+        "- Launch [id:launch]\n  - Pricing [id:launch/pricing] [pricing source](sources/pricing.md) [[rel:depends-on->maps/decisions.md#decision/pricing]]\n    | Pricing needs the decision record and a source excerpt.\n",
+    )
+    .expect("roadmap map should be writable");
+    std::fs::write(
+        root.join("maps").join("decisions.md"),
+        "- Decisions [id:decision]\n  - Pricing Decision [id:decision/pricing]\n    | Use the simple packaging model.\n",
+    )
+    .expect("decisions map should be writable");
+    std::fs::write(
+        root.join("sources").join("pricing.md"),
+        "# Pricing interview\n\nCustomers asked for simple packaging and fewer tiers.\n",
+    )
+    .expect("source should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "context",
+        "maps/roadmap.md#launch/pricing",
+        "--root",
+        root.to_str().unwrap(),
+        "--include-source-refs",
+        "--max-source-chars",
+        "24",
+        "--json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "mindspace context");
+    assert_eq!(value["format"], "mindspace_context.v1");
+    assert_eq!(value["data"]["summary"]["branches"], 2);
+    assert_eq!(value["data"]["summary"]["files"], 2);
+    assert_eq!(value["data"]["summary"]["sources"], 1);
+
+    let branches = value["data"]["branches"]
+        .as_array()
+        .expect("branches should be an array");
+    let branch_refs = branches
+        .iter()
+        .map(|branch| {
+            (
+                branch["file"].as_str().unwrap(),
+                branch["id"].as_str().unwrap(),
+                branch["reason"].as_str().unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(branch_refs.iter().any(|(file, id, reason)| {
+        *file == "maps/roadmap.md" && *id == "launch/pricing" && reason.contains("target branch")
+    }));
+    assert!(branch_refs.iter().any(|(file, id, reason)| {
+        *file == "maps/decisions.md" && *id == "decision/pricing" && reason.contains("relation")
+    }));
+
+    let source = &value["data"]["sources"][0];
+    assert_eq!(source["target"], "sources/pricing.md");
+    assert_eq!(source["kind"], "local_file");
+    assert_eq!(source["read_only"], true);
+    assert!(
+        source["excerpt"]
+            .as_str()
+            .unwrap()
+            .contains("# Pricing interview")
+    );
+    assert!(source["omitted_chars"].as_u64().unwrap() > 0);
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_context_query_bundle_spans_maps_and_bounds_details() {
+    let root = temp_file("mindspace-context-query");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::write(
+        root.join("maps").join("roadmap.md"),
+        "- Roadmap [id:roadmap]\n  - Activation work @owner:maya [id:roadmap/activation]\n    | Activation detail is intentionally long enough to be clipped.\n",
+    )
+    .expect("roadmap map should be writable");
+    std::fs::write(
+        root.join("maps").join("risks.md"),
+        "- Risks [id:risks]\n  - Activation risk @owner:maya [id:risks/activation]\n    | Another activation detail that should not fully fit.\n",
+    )
+    .expect("risks map should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "context",
+        ".",
+        "--root",
+        root.to_str().unwrap(),
+        "--query",
+        "@owner:maya",
+        "--max-detail-chars",
+        "16",
+        "--json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["data"]["query"], "@owner:maya");
+    assert_eq!(value["data"]["summary"]["branches"], 2);
+    assert_eq!(value["data"]["summary"]["files"], 2);
+
+    let branches = value["data"]["branches"]
+        .as_array()
+        .expect("branches should be an array");
+    let files = branches
+        .iter()
+        .filter_map(|branch| branch["file"].as_str())
+        .collect::<Vec<_>>();
+    assert!(files.contains(&"maps/roadmap.md"));
+    assert!(files.contains(&"maps/risks.md"));
+    assert!(branches.iter().any(|branch| {
+        branch["node"]["detail_omitted_chars"]
+            .as_u64()
+            .is_some_and(|count| count > 0)
+    }));
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_session_review_lifecycle_records_approve_and_reject_state() {
+    let root = temp_file("mindspace-session-lifecycle");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::write(
+        root.join("maps").join("tasks.md"),
+        "- Tasks [id:todo]\n  - Focus task [id:todo/focus]\n",
+    )
+    .expect("tasks map should be writable");
+
+    let start = run_mdm(&[
+        "mindspace",
+        "session",
+        "start",
+        "maps/tasks.md#todo/focus",
+        "--role",
+        "implementer",
+        "--goal",
+        "Add the missing implementation notes.",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(start.status.success(), "stderr: {}", stderr(&start));
+    let start_value = json_stdout(&start);
+    let session_id = start_value["data"]["session"]["id"]
+        .as_str()
+        .expect("session id should be present")
+        .to_string();
+    assert_eq!(start_value["data"]["session"]["status"], "open");
+    assert!(root.join(".mdmind").join("sessions").exists());
+
+    let submit = run_mdm(&[
+        "mindspace",
+        "session",
+        "submit",
+        &session_id,
+        "--rationale",
+        "Implementation notes are ready for review.",
+        "--proposal",
+        "Append a child task for tests.",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(submit.status.success(), "stderr: {}", stderr(&submit));
+    let submit_value = json_stdout(&submit);
+    let review_id = submit_value["data"]["id"]
+        .as_str()
+        .expect("review id should be present")
+        .to_string();
+    assert_eq!(submit_value["data"]["status"], "pending");
+    assert_eq!(submit_value["data"]["stale"], false);
+    assert!(root.join(".mdmind").join("reviews").exists());
+
+    let list = run_mdm(&[
+        "mindspace",
+        "review",
+        "list",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(list.status.success(), "stderr: {}", stderr(&list));
+    let list_value = json_stdout(&list);
+    assert_eq!(list_value["data"]["summary"]["pending"], 1);
+    assert_eq!(list_value["data"]["reviews"][0]["id"], review_id);
+
+    let reject = run_mdm(&[
+        "mindspace",
+        "review",
+        "reject",
+        &review_id,
+        "--reason",
+        "Wrong target branch.",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(reject.status.success(), "stderr: {}", stderr(&reject));
+    let reject_value = json_stdout(&reject);
+    assert_eq!(reject_value["data"]["status"], "rejected");
+    assert_eq!(
+        reject_value["data"]["decision_reason"],
+        "Wrong target branch."
+    );
+
+    let close = run_mdm(&[
+        "mindspace",
+        "session",
+        "close",
+        &session_id,
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(close.status.success(), "stderr: {}", stderr(&close));
+    let close_value = json_stdout(&close);
+    assert_eq!(close_value["data"]["status"], "closed");
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_review_approve_turns_stale_when_target_digest_changed() {
+    let root = temp_file("mindspace-review-stale");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    let map_path = root.join("maps").join("tasks.md");
+    std::fs::write(
+        &map_path,
+        "- Tasks [id:todo]\n  - Focus task [id:todo/focus]\n",
+    )
+    .expect("tasks map should be writable");
+
+    let start = run_mdm(&[
+        "mindspace",
+        "session",
+        "start",
+        "maps/tasks.md#todo/focus",
+        "--role",
+        "implementer",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(start.status.success(), "stderr: {}", stderr(&start));
+    let session_id = json_stdout(&start)["data"]["session"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let submit = run_mdm(&[
+        "mindspace",
+        "session",
+        "submit",
+        &session_id,
+        "--rationale",
+        "Ready to approve.",
+        "--proposal",
+        "Append stale-sensitive note.",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(submit.status.success(), "stderr: {}", stderr(&submit));
+    let review_id = json_stdout(&submit)["data"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    std::fs::write(
+        &map_path,
+        "- Tasks [id:todo]\n  - Focus task changed [id:todo/focus]\n",
+    )
+    .expect("target map should be mutable in test");
+
+    let approve = run_mdm(&[
+        "mindspace",
+        "review",
+        "approve",
+        &review_id,
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(approve.status.success(), "stderr: {}", stderr(&approve));
+    let approve_value = json_stdout(&approve);
+    assert_eq!(approve_value["data"]["status"], "stale");
+    assert_eq!(approve_value["data"]["stale"], true);
+    assert!(
+        approve_value["data"]["decision_reason"]
+            .as_str()
+            .unwrap()
+            .contains("Target digest changed")
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_session_ids_cannot_traverse_record_paths() {
+    let root = temp_file("mindspace-session-id-guard");
+    std::fs::create_dir_all(&root).expect("mindspace root should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "session",
+        "plan",
+        "../escape",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+    assert_eq!(value["ok"], false);
+    assert_eq!(value["command"], "mindspace session");
+    assert_eq!(value["format"], "error.v1");
+    assert_eq!(value["error"]["code"], "runtime_error");
+    assert!(
+        value["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Record ids use letters, numbers, hyphen, and underscore")
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_template_list_json_returns_built_in_persona_templates() {
+    let output = run_mdm(&["mindspace", "template", "list", "--json"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "mindspace template list");
+    assert_eq!(value["format"], "mindspace_template_catalog.v1");
+    assert_eq!(value["summary"]["count"], 4);
+
+    let ids = value["data"]["templates"]
+        .as_array()
+        .expect("templates should be an array")
+        .iter()
+        .filter_map(|template| template["id"].as_str())
+        .collect::<Vec<_>>();
+    for expected in [
+        "launch-planning",
+        "project-memory",
+        "story-continuity",
+        "claims-evidence",
+    ] {
+        assert!(
+            ids.contains(&expected),
+            "template list should include {expected}"
+        );
+    }
+}
+
+#[test]
+fn mindspace_template_show_json_returns_full_template_contract() {
+    let output = run_mdm(&["mindspace", "template", "show", "launch-planning", "--json"]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "mindspace template show");
+    assert_eq!(value["format"], "mindspace_template.v1");
+    assert_eq!(value["target"], "launch-planning");
+    assert_eq!(value["data"]["persona_fit"], "Priya Planner");
+    assert!(
+        value["data"]["starting_prompt"]
+            .as_str()
+            .expect("starting prompt should be a string")
+            .contains("Keep source material read-only")
+    );
+    assert!(
+        value["data"]["map_shapes"]
+            .as_array()
+            .expect("map shapes should be an array")
+            .iter()
+            .any(|shape| shape["path"] == "maps/roadmap.md")
+    );
+    assert!(
+        value["data"]["customization_knobs"]
+            .as_array()
+            .expect("knobs should be an array")
+            .iter()
+            .any(|knob| knob["name"] == "write_mode")
+    );
+}
+
+#[test]
+fn mindspace_template_show_prompt_prints_copyable_agent_guidance() {
+    let output = run_mdm(&[
+        "mindspace",
+        "template",
+        "show",
+        "claims-evidence",
+        "--prompt",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let stdout = stdout(&output);
+
+    assert!(stdout.contains("Use the claims and evidence template."));
+    assert!(stdout.contains("Keep sources read-only"));
+    assert!(stdout.contains("Agent workflow:"));
+    assert!(stdout.contains("Review in mdmind:"));
+}
+
+#[test]
+fn mindspace_template_show_unknown_json_returns_error_envelope() {
+    let output = run_mdm(&[
+        "mindspace",
+        "template",
+        "show",
+        "unknown-template",
+        "--json",
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], false);
+    assert_eq!(value["command"], "mindspace template show");
+    assert_eq!(value["format"], "error.v1");
+    assert_eq!(value["target"], "unknown-template");
+    assert_eq!(value["error"]["code"], "runtime_error");
+    assert!(
+        value["error"]["message"]
+            .as_str()
+            .expect("message should be a string")
+            .contains("Unknown Mindspace template")
+    );
+}
+
+#[test]
+fn mindspace_lint_returns_nonzero_for_parser_errors() {
+    let root = temp_file("mindspace-lint");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::write(
+        root.join("maps").join("broken.md"),
+        "- Valid root [id:root]\n   - Bad indentation\n",
+    )
+    .expect("broken map fixture should be writable");
+
+    let output = run_mdm(&["mindspace", "lint", root.to_str().unwrap(), "--json"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], false);
+    assert_eq!(value["command"], "mindspace lint");
+    assert_eq!(value["format"], "mindspace_diagnostics.v1");
+    assert_eq!(value["error"]["code"], "mindspace_lint_failed");
+    assert_eq!(value["summary"]["errors"], 1);
+    assert_eq!(value["data"]["diagnostics"][0]["code"], "map_parse_error");
+
+    std::fs::remove_dir_all(root).ok();
 }
 
 #[test]
@@ -640,6 +1517,34 @@ fn relations_can_list_outgoing_links_and_backlinks() {
     let focused_by_label_stdout = stdout(&focused_by_label);
     assert!(focused_by_label_stdout.contains("in\t"));
     assert!(focused_by_label_stdout.contains("out\t"));
+}
+
+#[test]
+fn relations_cli_reports_path_qualified_branch_targets() {
+    let root = temp_file("mindspace-relations");
+    std::fs::create_dir_all(root.join("maps")).expect("temp mindspace should be writable");
+    std::fs::write(
+        root.join("maps/decisions.md"),
+        "- Decision Log [id:decision]\n  - API Shape [id:decision/api-shape]\n",
+    )
+    .expect("target map should be writable");
+    let source = root.join("maps/tasks.md");
+    std::fs::write(
+        &source,
+        "- Research [id:research] [[rel:implements->maps/decisions.md#decision/api-shape]]\n",
+    )
+    .expect("source map should be writable");
+
+    let relations = run_mdm(&["relations", source.to_str().unwrap(), "--plain"]);
+    assert!(relations.status.success(), "stderr: {}", stderr(&relations));
+    let relations_stdout = stdout(&relations);
+    assert!(relations_stdout.contains("path_qualified_branch"));
+    assert!(relations_stdout.contains("maps/decisions.md#decision/api-shape"));
+
+    let validate = run_mdm(&["validate", source.to_str().unwrap()]);
+    assert!(validate.status.success(), "stderr: {}", stderr(&validate));
+
+    std::fs::remove_dir_all(root).ok();
 }
 
 #[test]
@@ -1337,6 +2242,78 @@ fn mdmind_preview_renders_ordinary_markdown() {
     assert!(!sidecar_path(&markdown_path, "checkpoints").exists());
 
     std::fs::remove_file(markdown_path).ok();
+}
+
+#[test]
+fn mdmind_preview_renders_mindspace_workspace_landing() {
+    let root = temp_file("mindspace-workspace-preview");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::create_dir_all(root.join("docs")).expect("docs directory should be writable");
+    std::fs::write(
+        root.join("maps").join("tasks.md"),
+        "- Tasks [id:todo]\n  - Focus task [id:todo/focus]\n",
+    )
+    .expect("tasks map should be writable");
+    std::fs::write(
+        root.join("docs").join("brief.md"),
+        "# Brief\n\nReadable page.\n",
+    )
+    .expect("brief page should be writable");
+
+    let start = run_mdm(&[
+        "mindspace",
+        "session",
+        "start",
+        "maps/tasks.md#todo/focus",
+        "--role",
+        "implementer",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(start.status.success(), "stderr: {}", stderr(&start));
+    let session_id = json_stdout(&start)["data"]["session"]["id"]
+        .as_str()
+        .expect("session id should be present")
+        .to_string();
+    let submit = run_mdm(&[
+        "mindspace",
+        "session",
+        "submit",
+        &session_id,
+        "--rationale",
+        "Add implementation notes for the focus task.",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(submit.status.success(), "stderr: {}", stderr(&submit));
+
+    let output = run_mdmind(&["--preview", root.to_str().unwrap()]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("Mindspace workspace:"));
+    assert!(stdout.contains("Reviews: pending 1"));
+    assert!(stdout.contains("Sessions: open 0, submitted 1"));
+    assert!(stdout.contains("Review queue"));
+    assert!(stdout.contains("maps/tasks.md"));
+    assert!(stdout.contains("Recent sessions"));
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mdmind_directory_without_tty_points_to_workspace_preview() {
+    let root = temp_file("mindspace-workspace-non-tty");
+    std::fs::create_dir_all(&root).expect("mindspace root should be writable");
+
+    let output = run_mdmind(&[root.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = stderr(&output);
+    assert!(stderr.contains("needs an interactive terminal"));
+    assert!(stderr.contains("mdmind --preview"));
+
+    std::fs::remove_dir_all(root).ok();
 }
 
 #[test]
