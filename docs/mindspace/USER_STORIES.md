@@ -17,7 +17,9 @@ single-map behavior.
 Experience note: these stories lead with agent requests because that is the
 intended user habit. The `mdm mindspace ...` commands are still shown where they
 matter, but as the deterministic substrate an agent, script, or power user can
-audit. See [EXPERIENCE_MODEL.md](EXPERIENCE_MODEL.md).
+audit. Persona/job templates make those requests easier to give; see
+[JOB_TEMPLATES.md](JOB_TEMPLATES.md) and
+[EXPERIENCE_MODEL.md](EXPERIENCE_MODEL.md).
 
 ## Cast
 
@@ -69,9 +71,9 @@ write happens, even if the discovery is being driven by an agent.
 What Priya asks Claude Code or Codex:
 
 ```text
-Organize this launch folder as a mindspace. Identify the maps, docs, inbox, log,
-and trusted instructions. Do not write anything yet; show me the proposed model
-first.
+Use the launch planning template. Organize this launch folder as a mindspace.
+Identify the maps, docs, inbox, log, and trusted instructions. Do not write
+anything yet; show me the proposed model first.
 ```
 
 Under the hood:

@@ -12,7 +12,8 @@ Mindspace does not replace single-file maps. `mdmind file.md`, `mdm view
 file.md`, `mdm validate file.md`, and the existing `.md` map format remain
 first-class. Mindspace adds a folder inventory and safety model around maps,
 Markdown pages, sources, generated artifacts, agent sessions, reviews, and
-checkpoints.
+checkpoints. It also adds guided job templates so users do not have to invent
+perfect agent prompts from scratch.
 
 For the user-facing experience model, see
 [EXPERIENCE_MODEL.md](EXPERIENCE_MODEL.md). The short version is: users ask an
@@ -41,6 +42,12 @@ A mindspace can contain mixed roles:
 The manifest records roles. It does not require every Markdown file to become a
 native mdmind map, and it does not ask users to choose visible adoption profiles
 such as `obsidian-vault` or `llm-wiki`.
+
+Job templates sit above the manifest. A template describes the work to be done,
+the expected outputs, and the review path. It may guide manifest setup, context
+selection, generated maps, review items, and TUI emphasis, but the manifest
+remains the durable role contract for the folder. See
+[JOB_TEMPLATES.md](JOB_TEMPLATES.md).
 
 The user-facing onboarding path is agent-first:
 
@@ -132,6 +139,7 @@ preserves the contract.
 | Relation edge | A same-file or cross-file relation with source branch, target, relation kind, parse provenance, and resolution status. |
 | Source record | A tracked source with path, kind, title, hash or digest when available, modified time, added time, and optional canonical URL. |
 | Context bundle | A bounded packet for a task with target, included branches/pages/sources, provenance, inclusion reasons, budgets, and output format. |
+| Job template | A reusable work pattern with persona fit, starting prompt, expected roles, map shapes, checks, write policy, review surface, success criteria, and customization knobs. |
 | Agent session | A scoped collaboration episode with goal, role, target branch or file, allowed paths, context bundle, status, proposed edits, validation results, and closeout summary. |
 | Review item | A proposed writeback, relation, repair, move, or stale-digest fallback with target, rationale, diff or proposed record, validation state, and accept/reject status. |
 | Checkpoint | A restorable local safety snapshot before risky writes, covering affected maps, generated artifacts, reviews, source metadata, or the whole mindspace when needed. |
@@ -193,6 +201,8 @@ behavior instead of creating hidden alternatives.
 | `mdm mindspace setup <root> --write` | MVP | Create or update `.mdmind/mindspace.json` only; never move or rewrite existing notes. |
 | `mdm mindspace lint <root>` | Current | Report deterministic structural problems without AI judgment. |
 | `mdm mindspace context <target>` | MVP | Export bounded context with provenance and budget controls. |
+| `mdm mindspace template list` | MVP | List built-in and trusted local job templates. |
+| `mdm mindspace template show <id>` | MVP | Print one template as JSON, human text, or an agent prompt. |
 | `mdmind .` | MVP | Open the human workspace surface while preserving one-active-map editing. |
 | `mdm mindspace session ...` | v1 | Create and manage scoped agent collaboration sessions. |
 | `mdm mindspace review ...` | v1 | List, approve, reject, or inspect proposed writeback and repair items. |
@@ -205,6 +215,8 @@ Reserved JSON format names:
 | `mindspace_setup.v1` | Proposed or written manifest plus role explanations and write summary. |
 | `mindspace_diagnostics.v1` | Deterministic lint diagnostics with stable issue codes. |
 | `mindspace_context.v1` | Context bundle with included items, provenance, budgets, and omission reasons. |
+| `mindspace_template_catalog.v1` | Template list with ids, names, persona fit, job fit, safety defaults, and built-in/local provenance. |
+| `mindspace_template.v1` | One template with prompt, expected roles, map shapes, checks, write policy, review surface, and customization knobs. |
 | `mindspace_session.v1` | Session records, state transitions, plans, previews, and closeouts. |
 | `mindspace_review.v1` | Review items, decisions, rationale, and target/digest state. |
 
@@ -272,16 +284,20 @@ The MVP makes a folder understandable and navigable:
 - `.mdmind/mindspace.json`
 - read-only `scan`
 - previewable `setup`
+- built-in persona/job templates and helper commands
 - path-qualified branch refs
 - deterministic `lint`
 - bounded `context` bundles with provenance
 - TUI workspace entry, switcher, peek/open navigation, recents, pinned maps, and
   cross-map navigation
+- an `mdmind .` landing that can show the active template, agent-touched files,
+  and review path
 
 ### v1: Reviewable Agent Teaming
 
 v1 adds durable collaboration:
 
+- packaged `mdmind-mindspace-workflow` skill with template references
 - `session` and `review` objects
 - scoped writeback with digest checks
 - checkpoint-before-write flows

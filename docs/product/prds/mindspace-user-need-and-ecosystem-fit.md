@@ -16,6 +16,9 @@ surfaces in the Mindspace story:
 - agent conversation, the natural-language work surface where users ask Claude
   Code, Codex, Hermes, or another agent to organize, link, generate, move, and
   maintain local knowledge
+- Mindspace job templates, the guided request layer that helps non-expert users
+  tell agents what job to do, what outputs to create, what safety rules to
+  follow, and what the human should review
 - `mdmind`, the human-facing TUI for outlines, notes, todos, decisions, maps,
   reviews, and focused navigation
 - `mdm`, the deterministic CLI contract for agents, scripts, validation,
@@ -68,6 +71,12 @@ Users can paper over this with better prompts, but that only works while the
 workspace is small and the agent behaves well. `mdmind` can turn parts of the
 workflow into inspectable product behavior: branch-addressable maps, role-aware
 files, deterministic checks, context bundles, and local review.
+
+The product should also reduce prompting burden. Most users do not know how to
+ask an agent for "bounded context with provenance" or "source read-only
+writeback with review fallback." Mindspace job templates should translate
+common jobs into concrete agent guidance while keeping the local file contract
+predictable.
 
 ## Existing Signals
 
@@ -149,6 +158,11 @@ main experience. It should make Claude Code, Codex, Hermes, and similar agents
 better at maintaining local Markdown knowledge, then make `mdmind .` the place
 where humans inspect, edit, navigate, and review the result.
 
+Mindspace should also ship a dedicated workflow skill. The existing mdmind
+skills cover map authoring and single-map CLI inspection; a Mindspace skill
+should add job-template selection, scan/lint workflow, setup preview, safe write
+policy, context/session/review guidance, and `mdmind .` handoff.
+
 Sources:
 
 - <https://code.claude.com/docs/en/overview>
@@ -216,6 +230,8 @@ This preserves the existing product truth:
 - `mdmind` is a human-facing TUI, not only an agent backend.
 - `mdm` is the deterministic contract underneath agent and TUI workflows, not
   the main product habit for most users.
+- job templates help users ask for useful agent work without becoming prompt
+  engineers.
 - mdmind `.md` files are durable plain-text artifacts, not hidden database
   records.
 
@@ -435,10 +451,11 @@ then review the result locally:
 1. inspect an existing folder without writing anything
 2. identify native maps, Markdown pages, sources, inbox files, index/log files,
    and agent instructions
-3. propose a manifest and file roles before setup writes
-4. lint high-confidence structural problems
-5. export a focused context bundle for an agent task
-6. open the workspace in the TUI for human review, map switching, and map editing
+3. recommend or customize a persona/job template for the requested work
+4. propose a manifest and file roles before setup writes
+5. lint high-confidence structural problems
+6. export a focused context bundle for an agent task
+7. open the workspace in the TUI for human review, map switching, and map editing
 
 The MVP should prove that mdmind adds value before building broad ecosystem
 packaging or paid-product surfaces.
@@ -490,7 +507,29 @@ Behavior:
 
 This replaces user-visible adoption profiles.
 
-### 3. Mindspace Lint
+### 3. Mindspace Job Templates
+
+Commands:
+
+```bash
+mdm mindspace template list --json
+mdm mindspace template show launch-planning --json
+mdm mindspace template show launch-planning --prompt
+```
+
+Behavior:
+
+- lists built-in and trusted local job templates
+- helps an agent choose between launch planning, project memory, story
+  continuity, claims/evidence, or a customized common template
+- exposes expected roles, map shapes, write policy, deterministic checks, and
+  `mdmind .` review surface
+- stays separate from manifest roles and adoption profiles
+
+Templates should make vague user requests safer and more useful without making
+the user operate a new command-first workflow.
+
+### 4. Mindspace Lint
 
 Command:
 
@@ -518,7 +557,7 @@ Later checks:
 - index drift
 - candidate contradictions
 
-### 4. Focused Context Bundle For Agent Work
+### 5. Focused Context Bundle For Agent Work
 
 Command:
 
@@ -535,7 +574,7 @@ Behavior:
 - does not summarize with an LLM
 - emits Markdown for human/agent reading and JSON for tooling
 
-### 5. TUI Workspace Entry And Switcher
+### 6. TUI Workspace Entry And Switcher
 
 Command:
 
@@ -559,7 +598,7 @@ First TUI slice:
 The TUI is important because mdmind is not only an automation backend.
 It is where the human inspects and edits what the agent organized.
 
-### 6. Basic Cross-File References
+### 7. Basic Cross-File References
 
 Mindspace needs path-qualified branch targets early enough for scan, lint,
 context bundles, and TUI switching to share one addressing model.
@@ -682,6 +721,7 @@ Scope:
 
 - `.mdmind/mindspace.json`
 - `mindspace scan`, `status`, `tree` or equivalent inventory
+- built-in job templates and template helper commands
 - basic cross-file branch refs
 - `mindspace lint` for high-confidence errors
 - `mindspace context` with provenance
@@ -689,9 +729,10 @@ Scope:
 - universal switcher over maps and ids
 - recent-map stack and pinned working set
 
-Success: a user can open a folder, discover maps, switch between maps in the
-TUI, lint obvious problems, and see that an agent used a bounded context bundle
-instead of dumping the folder into its prompt.
+Success: a user can ask for a recognizable job, get a template-shaped workflow,
+open a folder, discover maps, switch between maps in the TUI, lint obvious
+problems, and see that an agent used a bounded context bundle instead of
+dumping the folder into its prompt.
 
 ### v1: Reviewable Agent Teaming
 
@@ -700,6 +741,7 @@ Target: make human-plus-agent collaboration reliable across several maps.
 Scope:
 
 - agent sessions with goal, role, target, and write scope
+- packaged Mindspace workflow skill with persona/job template references
 - review queue with diff preview and rationale
 - checkpoint-before-write flows
 - generated `index.md` and `log.md`
@@ -821,9 +863,13 @@ this PRD:
   `setup` flow.
 - Promote scan, lint, context, source/staleness, and TUI workspace entry as the
   core candidate slices.
+- Add Mindspace job templates as the user guidance layer between vague agent
+  prompts and deterministic CLI/TUI behavior.
 - Promote TUI map switching from future polish to MVP scope.
 - Add a v1 issue for agent sessions, review queue, digest checks, and scoped
   writeback.
+- Add or update an issue for the `mdmind-mindspace-workflow` skill and template
+  reference files.
 - Defer paid product, community, and broad ecosystem packaging until one
   workflow proves clear user value.
 
@@ -832,6 +878,7 @@ Candidate issue changes:
 - Update `MDM-33` to define mixed-format mindspace and command vocabulary.
 - Update `MDM-35` around `scan` and deterministic `lint`.
 - Update `MDM-36` around focused context bundles with provenance.
+- Create or update an issue for Mindspace job templates and the workflow skill.
 - Update `MDM-38` as the likely first follow-up for source manifests and stale
   synthesis.
 - Update `MDM-42` so TUI workspace entry, universal switching, recents, pinned

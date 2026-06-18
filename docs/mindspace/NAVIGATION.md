@@ -45,7 +45,9 @@ It should avoid making the left side of the product a permanent file tree.
 
 The user should be able to ask an agent to create a map, link a source, move an
 inbox item, or generate a report, then open `mdmind .` and immediately see where
-that work landed.
+that work landed. If the work used a job template, the landing should also make
+the template legible: what job was requested, which files were touched, what the
+template expected, and what still needs review.
 
 ## Interaction Model
 
@@ -146,9 +148,30 @@ Users need a small remembered set more than they need a full file browser:
 - files touched by the latest agent session
 - optional "workspace landing" that shows current work, warnings, and open
   reviews
+- active or recent job template with its review checklist
 
 The working set is the calm replacement for leaving a file tree open all the
 time.
+
+## Template-Aware Landing
+
+Job templates should shape the workspace landing without making the TUI busy.
+
+Examples:
+
+- Priya's launch planning template emphasizes current work, blocked branches,
+  risks, decisions, and review items.
+- Mateo's project memory template emphasizes the active task branch, bounded
+  context, decisions, debug notes, and memory update proposals.
+- Ren's story continuity template emphasizes the chapter or scene, linked
+  characters and places, continuity risks, and story-bible updates.
+- Nova's claims and evidence template emphasizes claims, source previews, weak
+  evidence, open questions, and stale-source review.
+
+The landing should answer "what did the agent try to do, and where should I
+look first?" It should not become a dashboard framework for every possible
+template. The template provides ranking and grouping hints for existing
+workspace objects: maps, pages, sources, reports, sessions, and review items.
 
 ## What Happens To Existing Reference Preview?
 
@@ -186,13 +209,15 @@ inspection, editing, navigation, and review.
 The first useful navigation slice should include:
 
 1. `mdmind .` opens a workspace landing from scan/manifest inventory.
-2. A searchable switcher opens maps and branch ids.
-3. Cross-file map refs can peek, open, and return via back navigation.
-4. Recent maps and last focused branch per map are remembered.
-5. Missing targets show a helpful unresolved-target state.
-6. Ordinary Markdown and sources remain read-only unless explicitly imported or
+2. The landing can show the active/recent job template and latest agent-touched
+   files when that information exists.
+3. A searchable switcher opens maps and branch ids.
+4. Cross-file map refs can peek, open, and return via back navigation.
+5. Recent maps and last focused branch per map are remembered.
+6. Missing targets show a helpful unresolved-target state.
+7. Ordinary Markdown and sources remain read-only unless explicitly imported or
    edited through a future review flow.
-7. Agent-touched files and proposed review items are discoverable from the
+8. Agent-touched files and proposed review items are discoverable from the
    landing and switcher.
 
 This gives Mindspace its own many-file feel without losing the single-map heart

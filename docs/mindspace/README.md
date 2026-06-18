@@ -19,6 +19,11 @@ Mindspace starts only when someone wants a folder-level workspace around maps,
 ordinary Markdown, sources, indexes, logs, agent sessions, reviews, and
 checkpoints.
 
+Mindspace also needs to teach users how to guide their agents. The product
+model includes persona/job templates that translate vague requests like
+"organize this research folder" into safe, useful Claude Code, Codex, Hermes,
+or other agent workflows.
+
 Current implemented substrate:
 
 ```bash
@@ -35,6 +40,8 @@ still planned slices.
 
 - [VALUE.md](VALUE.md): user value, real-world examples, and the product wedge.
 - [EXPERIENCE_MODEL.md](EXPERIENCE_MODEL.md): the agent-first, `mdmind`-reviewed, CLI-backed UX model.
+- [JOB_TEMPLATES.md](JOB_TEMPLATES.md): persona-shaped job templates, customization knobs, and helper command targets.
+- [AGENT_SKILL.md](AGENT_SKILL.md): proposed Mindspace workflow skill package and reference-file structure.
 - [USER_STORIES.md](USER_STORIES.md): detailed persona journeys, aha moments, and delight tests for the target Mindspace experience.
 - [REFERENCE.md](REFERENCE.md): manifest schema, core objects, command vocabulary, JSON formats, phases, and safety model.
 - [BOUNDARIES.md](BOUNDARIES.md): how Mindspace stays optional and avoids bleeding into core map behavior.

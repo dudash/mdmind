@@ -275,7 +275,9 @@ is an optional workspace layer with its own docs in
 `mdmind`-reviewed: users ask Claude Code, Codex, Hermes, or another agent to do
 workspace work; agents call this deterministic CLI contract underneath; humans
 inspect and edit in `mdmind .`. Session/review commands use `mdm mindspace`,
-not a broad `mdm agent` namespace.
+not a broad `mdm agent` namespace. Job-template commands should also stay under
+`mdm mindspace`; templates guide the requested work, but they are not hidden
+adoption profiles.
 
 | Command | Reads | Writes | Network | Interactive | Agent-safe usage |
 | --- | --- | --- | --- | --- | --- |
@@ -284,6 +286,8 @@ not a broad `mdm agent` namespace.
 | `mdm mindspace setup <root> --write` | folder, scan results | `.mdmind/mindspace.json` | no | no | Write only the manifest and required `.mdmind/` directory; never move or rewrite notes. |
 | `mdm mindspace lint <root>` | folder, manifest, maps, Markdown refs | no | no | no | Current: return deterministic diagnostics with stable issue codes and exit `1` on errors. |
 | `mdm mindspace context <target>` | maps, selected pages, refs, sources | no | no | no | Export bounded context with provenance and budget controls. |
+| `mdm mindspace template list` | built-in and trusted local template refs | no | no | no | List persona/job templates available to guide agent workflows. |
+| `mdm mindspace template show <id>` | one template ref | no | no | no | Print a job template as JSON, human text, or an agent prompt. |
 | `mdm mindspace session ...` | session records, maps, context bundles | session/review/checkpoint sidecars; scoped map writes only on explicit apply | no | no | Manage scoped agent collaboration with target digests and previewable writeback. |
 | `mdm mindspace review ...` | review records, target files | review/checkpoint sidecars; scoped target writes only on approval | no | no | Inspect, approve, or reject proposed writeback and repair items. |
 | `mdmind .` | folder, manifest, inventory, maps | map/session/view sidecars in interactive mode | no | yes | Human workspace entry; agents should not launch the interactive TUI. |
@@ -296,6 +300,8 @@ Reserved JSON formats:
 | `mindspace_setup.v1` | Proposed or written manifest plus role explanations and write summary. |
 | `mindspace_diagnostics.v1` | Deterministic lint diagnostics with stable issue codes. |
 | `mindspace_context.v1` | Context bundle with included items, provenance, budgets, and omission reasons. |
+| `mindspace_template_catalog.v1` | Template ids, names, persona fit, job fit, safety defaults, and provenance. |
+| `mindspace_template.v1` | One template with prompt, folder roles, map shapes, checks, write policy, review surface, and customization knobs. |
 | `mindspace_session.v1` | Session records, state transitions, plans, previews, and closeouts. |
 | `mindspace_review.v1` | Review items, decisions, rationale, and target/digest state. |
 

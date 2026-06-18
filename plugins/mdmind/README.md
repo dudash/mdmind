@@ -5,6 +5,11 @@ This plugin bundles the two mdmind skills for agents:
 - `mdmind-map-authoring`
 - `mdm-cli-inspection`
 
+Mindspace will likely add a third skill, `mdmind-mindspace-workflow`, for
+folder-level job templates, scan/lint/setup/context/session/review workflows,
+and `mdmind .` human review handoff. It should compose the two existing skills
+rather than duplicating map authoring or CLI inspection guidance.
+
 > Install with `mdm skills install`, then pick the agent or agents where you
 > want the mdmind skills available.
 
@@ -31,6 +36,16 @@ refs, auditing metadata, or exporting an existing map with `mdm`.
 Use `mdmind-map-authoring` when the core task is content creation. Use
 `mdm-cli-inspection` when the core task is CLI-based inspection or export. If
 both are needed, author first and inspect second.
+
+### Planned: `mdmind-mindspace-workflow`
+
+Use when the main job is organizing or maintaining a folder-level Mindspace
+through an agent. This skill should help Claude Code, Codex, Hermes, or another
+agent choose a persona/job template, run `mdm mindspace scan` and `lint`,
+preview setup, keep sources read-only, produce bounded context, create
+reviewable changes, and tell the human what to inspect in `mdmind .`.
+
+Design target: [Mindspace agent skill](../../docs/mindspace/AGENT_SKILL.md).
 
 ## Skills CLI
 

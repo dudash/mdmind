@@ -15,6 +15,8 @@ Mindspace turns a loose folder into a dependable agent-maintained workspace:
 
 - users delegate organization, synthesis, linking, and cleanup in natural
   language
+- persona/job templates help users make better agent requests without learning
+  a command vocabulary first
 - agents can create native maps, ordinary Markdown pages, generated indexes,
   logs, reports, sessions, and review items
 - maps keep branch-level structure and stable ids
@@ -28,6 +30,30 @@ Mindspace turns a loose folder into a dependable agent-maintained workspace:
 
 The unique value is the combination of agent-native work, local plain files,
 branch-addressable maps, deterministic contracts, and human review in the TUI.
+
+## Template Value
+
+Many people do not know how to ask an agent for the outcome they want. They
+start with "clean this up" or "organize this folder," then get inconsistent
+results because the agent has to infer the job, the safety policy, the output
+shape, and the review path.
+
+Mindspace job templates make the request legible:
+
+- Priya gets a launch planning template for roadmap, decisions, blocked work,
+  risks, and status.
+- Mateo gets a project memory template for task branches, decisions, bounded
+  context, debugging notes, and memory update reviews.
+- Ren gets a story continuity template for character, place, timeline, and
+  story-bible checks without draft rewrites.
+- Nova gets a claims and evidence template for source-backed synthesis, open
+  questions, and weak-evidence review.
+
+The template is not a rigid vertical product. It is a common workflow with safe
+customization knobs: source strictness, write mode, structure depth, output
+type, relation density, context budget, and review tone. That lets Mindspace
+serve personas we have not named yet without asking users to invent prompts
+from scratch.
 
 ## Real-World Examples
 

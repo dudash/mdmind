@@ -6,7 +6,9 @@ workspace.
 The main user experience is not a new CLI habit. It is this loop:
 
 1. The user asks Claude Code, Codex, Hermes, or another capable agent to
-   organize, link, summarize, import, or maintain a local knowledge workspace.
+   organize, link, summarize, import, or maintain a local knowledge workspace,
+   often through a persona/job template rather than a perfect hand-written
+   prompt.
 2. The agent uses `mdm mindspace ...` as the deterministic tool layer for scan,
    setup, lint, context, session, review, and safe write proposals.
 3. The user opens `mdmind .` to inspect the workspace, edit maps and plans,
@@ -39,12 +41,38 @@ The agent can run commands, move files, add links, create Markdown pages,
 generate native mdmind maps, and propose reorganization. Mindspace makes those
 actions bounded, inspectable, and reversible.
 
+## Guided Request Layer
+
+Mindspace should assume that many users are not expert agent operators.
+
+They may know the outcome they want:
+
+- "make this launch folder usable"
+- "help me fix this task without rereading the whole repo"
+- "find continuity risks in this chapter"
+- "turn these interviews into source-backed claims"
+
+but not the prompt details that keep an agent safe and useful.
+
+Job templates are the guided request layer. A template packages:
+
+- a better starting prompt
+- expected folder roles
+- useful map shapes and branch ids
+- source and write policies
+- deterministic checks
+- the `mdmind .` review surface the user should see afterward
+
+The user can accept a recommended template, customize the common knobs, or ask
+the agent to adapt it. See [JOB_TEMPLATES.md](JOB_TEMPLATES.md).
+
 ## Surface Responsibilities
 
 | Surface | Primary role | User promise |
 | --- | --- | --- |
 | Agent conversation | The work request surface. Users ask for organization, synthesis, linking, cleanup, imports, and maintenance in natural language. | "I can ask for the workspace I want instead of operating a new tool by hand." |
-| Agent skill or project instructions | The workflow memory. Skills teach agents how to use Mindspace safely across Claude Code, Codex, Hermes, OpenClaw, or similar environments. | "My agent knows the right local protocol without me pasting rules every time." |
+| Agent skill or project instructions | The workflow memory. Skills teach agents how to use Mindspace safely and apply job templates across Claude Code, Codex, Hermes, OpenClaw, or similar environments. | "My agent knows the right local protocol without me pasting rules every time." |
+| Job templates | The guided request layer. Persona-shaped templates turn vague user goals into safe agent workflows with expected outputs and review paths. | "I can ask better without becoming an agent expert." |
 | `mdmind .` | The human workspace. Users inspect, edit, navigate, preview files, work with outlines/plans, and review proposed changes. | "I can see and shape what the agent did in plain local files." |
 | `mdm mindspace ...` | The deterministic contract. Agents, scripts, tests, and power users call it for predictable scan/lint/context/session/review behavior. | "The agent's work is grounded in commands I can audit and reproduce." |
 | Plain files | The durable substrate. Maps, Markdown pages, sources, indexes, logs, reviews, and sidecars remain readable. | "Nothing important disappears into a hidden database." |
@@ -62,15 +90,30 @@ instructions are becoming the natural place to teach repeatable workflows.
 Mindspace should meet users there:
 
 - make the agent good at organizing and maintaining local knowledge
+- make template-shaped requests easy for users who do not know how to prompt an
+  agent precisely
 - make `mdmind` excellent for human inspection, editing, navigation, and review
 - keep `mdm` precise enough that agents cannot pretend a guess is a verified
   workspace fact
 
 ## The Agent-Native Workflow
 
-### 1. Understand
+### 1. Choose The Job
 
-The agent scans the folder and explains what it found in human language:
+The agent identifies the likely job template and confirms it in human language:
+
+```text
+This looks like launch planning. I will use that template unless you want a
+lighter pass. It keeps sources read-only, organizes roadmap and decision maps,
+and leaves risky changes for review.
+```
+
+If the match is unclear, the agent asks one concise question rather than
+forcing the user to design the workflow.
+
+### 2. Understand
+
+The agent scans the folder and explains what it found:
 
 ```text
 I found three native maps, six ordinary Markdown pages, a source folder, an
@@ -89,7 +132,7 @@ Those two commands are implemented now. They do not write the folder; they give
 the agent a deterministic inventory and a fail/pass structural signal before it
 proposes setup or edits.
 
-### 2. Shape
+### 3. Shape
 
 The user asks for structure:
 
@@ -109,7 +152,7 @@ mdm mindspace setup . --preview
 mdm mindspace setup . --write
 ```
 
-### 3. Work
+### 4. Work
 
 The user delegates real work:
 
@@ -128,7 +171,7 @@ mdm mindspace context maps/roadmap.md#launch/pricing --relations 2 --backlinks
 mdm mindspace session ...
 ```
 
-### 4. Inspect
+### 5. Inspect
 
 The user opens:
 
@@ -140,7 +183,7 @@ They see the workspace landing, maps, branches, source previews, generated
 reports, recent targets, pinned maps, and review queue. The TUI is not the
 agent. It is the place where the human can think with the structured result.
 
-### 5. Review
+### 6. Review
 
 Risky changes become review items:
 
@@ -166,6 +209,7 @@ Mindspace is not just "AI notes."
 - It gives agents branch-addressable targets, not vague file folders.
 - It lets agents create and connect Markdown, maps, sources, logs, and reports
   without making every file the same kind of object.
+- It gives users job templates instead of expecting perfect prompts.
 - It gives humans a local workspace to inspect and edit the result.
 - It keeps safety outside the model: read-only scans, explicit setup writes,
   role-aware sources, scoped sessions, checkpoints, digests, and review queues.

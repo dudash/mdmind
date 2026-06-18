@@ -16,12 +16,39 @@ each claim to evidence, and leave risky edits for review.
 
 Then show the supporting surfaces:
 
+- the agent chooses or adapts a persona/job template
 - the agent uses `mdm mindspace scan`, `lint`, `context`, `session`, and
   `review`
 - the human opens `mdmind .` to inspect, edit, navigate, and approve
 - files remain ordinary Markdown, mdmind maps, and small sidecars
 
 Avoid making the first user story "run five commands."
+
+## Make Templates Teach The Prompt
+
+Assume users know the outcome, not the ideal agent prompt.
+
+Good templates turn:
+
+```text
+Clean up this folder.
+```
+
+into:
+
+```text
+Use the claims and evidence template. Keep sources read-only, build a claims
+map, link every claim to evidence, flag weak support, and leave risky edits for
+review.
+```
+
+Every template should define the job, expected outputs, safety rules,
+deterministic checks, and `mdmind .` review path. Keep templates customizable
+through knobs such as source strictness, write mode, structure depth, relation
+density, context budget, and review tone.
+
+Do not make templates into hidden adoption profiles. They are reusable jobs to
+be done, not permanent folder identities.
 
 ## Keep Adoption Explicit
 
@@ -43,7 +70,7 @@ entered the directory.
 
 Today, `scan` and `lint` are the only implemented Mindspace commands. Treat
 their read-only output as the foundation for every later setup, context,
-session, review, or TUI workspace slice.
+template, session, review, or TUI workspace slice.
 
 ## Keep Files Ordinary
 
