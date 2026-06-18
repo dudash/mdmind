@@ -200,7 +200,7 @@ behavior instead of creating hidden alternatives.
 | `mdm mindspace setup <root> --preview` | Current | Print the proposed `.mdmind/mindspace.json` without writing. |
 | `mdm mindspace setup <root> --write` | Current | Create or update `.mdmind/mindspace.json` only; never move or rewrite existing notes. |
 | `mdm mindspace lint <root>` | Current | Report deterministic structural problems without AI judgment. |
-| `mdm mindspace context <target>` | MVP | Export bounded context with provenance and budget controls. |
+| `mdm mindspace context <target>` | Current | Export bounded context with provenance and budget controls. |
 | `mdm mindspace template list` | Current | List built-in job templates. Trusted local templates are future. |
 | `mdm mindspace template show <id>` | Current | Print one built-in template as JSON, human text, or an agent prompt. |
 | `mdmind .` | MVP | Open the human workspace surface while preserving one-active-map editing. |
@@ -282,6 +282,54 @@ The `mindspace_setup.v1` data payload includes:
 | `summary` | Role totals, preserved/inferred/added counts, and scan diagnostics. |
 | `manifest` | The full proposed or written manifest object. |
 | `notes` | Human-readable safety notes agents can summarize. |
+
+### Current Context Output
+
+`mdm mindspace context <target> --json` emits `mindspace_context.v1` without
+writing files. It scans the mindspace root, loads native map files, and exports
+a bounded context bundle an agent can cite later.
+
+Current inputs:
+
+```bash
+mdm mindspace context maps/roadmap.md#roadmap/current --json
+mdm mindspace context . --query "@owner:jason" --max-branches 8 --json
+mdm mindspace context maps/roadmap.md#roadmap/current --include-source-refs
+```
+
+Supported controls:
+
+| Flag | Meaning |
+| --- | --- |
+| `--root <path>` | Mindspace root to scan; defaults to the current directory. |
+| `--query <query>` | Include matching branches across scanned maps using the existing filter language. |
+| `--template <id>` | Attach built-in job-template guidance to the bundle metadata. |
+| `--relation-depth <n>` | Follow outgoing same-file and path-qualified branch relations up to the given depth. |
+| `--include-backlinks` | Include incoming relation sources for included ids. |
+| `--include-source-refs` | Include bounded local source-reference excerpts and URL records. |
+| `--max-files <n>` | Maximum distinct map files included in branch records. |
+| `--max-branches <n>` | Maximum branch records included. |
+| `--max-detail-chars <n>` | Maximum detail characters across included branches. |
+| `--max-source-chars <n>` | Maximum characters per included local source excerpt. |
+
+The `mindspace_context.v1` data payload includes:
+
+| Field | Meaning |
+| --- | --- |
+| `root` | Canonical scanned root path. |
+| `target` | Requested target, such as `maps/roadmap.md#roadmap/current` or `.`. |
+| `query` | Optional query used to select branches. |
+| `template` | Optional built-in job template metadata. |
+| `options` | Relation, backlink, source, file, branch, detail, and source budgets. |
+| `summary` | Map, file, branch, source, omission, and diagnostic counts. |
+| `branches` | Included branch records with file path, line, id, breadcrumb, inclusion reason, relation depth, and bounded subtree. |
+| `sources` | Optional source-reference records with target, kind, origin branch, read-only flag, byte count, excerpt, and omitted chars. |
+| `omitted` | Deterministic omission records for budget limits, disabled source refs, unresolved relations, and unreadable sources. |
+| `diagnostics` | Stable scan diagnostics produced while building the bundle. |
+
+Context bundles are deterministic and non-AI. They rank by discovered order,
+relation expansion, and explicit budgets; they do not summarize sources with an
+LLM or fetch URLs.
 
 ### Current Template Output
 

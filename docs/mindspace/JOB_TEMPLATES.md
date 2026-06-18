@@ -346,11 +346,6 @@ mdm mindspace template list --json
 mdm mindspace template show launch-planning --json
 mdm mindspace template show launch-planning --prompt
 mdm mindspace setup . --template launch-planning --preview
-```
-
-Future template-aware helpers:
-
-```bash
 mdm mindspace context maps/roadmap.md#roadmap/current --template launch-planning --json
 ```
 

@@ -69,9 +69,9 @@ mdm mindspace session ...
 mdm mindspace review ...
 ```
 
-`scan`, `lint`, and template helpers are read-only. `setup --preview` is also
-read-only; `setup --write` writes only `.mdmind/mindspace.json`. `context`,
-`session`, and `review` remain future Mindspace commands.
+`scan`, `lint`, `context`, and template helpers are read-only. `setup --preview`
+is also read-only; `setup --write` writes only `.mdmind/mindspace.json`.
+`session` and `review` remain future Mindspace commands.
 
 Template helper commands are agent/user guidance helpers, not new top-level
 commands.

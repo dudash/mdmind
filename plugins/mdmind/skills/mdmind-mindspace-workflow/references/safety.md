@@ -35,6 +35,13 @@ Use `mdm mindspace setup <root> --preview --json` for the manifest preview and
 installs where setup is unavailable, propose the manifest content or folder role
 changes in prose and ask for approval before editing files manually.
 
+## Context Boundary
+
+`mdm mindspace context <target> --json` is read-only. Prefer it over ad hoc
+whole-folder reads when a user asks you to work inside a mindspace. Use
+`--include-source-refs` only when source snippets are useful, and treat included
+sources as read-only evidence.
+
 ## Risky Writes
 
 Treat these as review-first unless the user explicitly authorizes them:

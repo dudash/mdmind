@@ -167,7 +167,7 @@ roles, provenance, and proposed writes.
 Under the hood:
 
 ```bash
-mdm mindspace context maps/roadmap.md#launch/pricing --relations 2 --backlinks
+mdm mindspace context maps/roadmap.md#launch/pricing --relation-depth 2 --include-backlinks
 mdm mindspace session ...
 ```
 

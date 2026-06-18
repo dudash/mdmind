@@ -49,6 +49,7 @@ mdm mindspace scan . --json
 mdm mindspace lint . --json
 mdm mindspace setup . --preview --json
 mdm mindspace setup . --write --json
+mdm mindspace context <target> --json
 ```
 
 Use `mdm commands --json` when you need to confirm current command availability,
@@ -60,7 +61,6 @@ The following commands may be referenced in product docs but might not exist in
 the current installed version:
 
 ```bash
-mdm mindspace context <target> --json
 mdm mindspace session ...
 mdm mindspace review ...
 mdmind .

@@ -240,8 +240,8 @@ Under the hood:
 
 ```bash
 mdm mindspace context maps/roadmap.md#launch/pricing \
-  --relations 2 \
-  --backlinks \
+  --relation-depth 2 \
+  --include-backlinks \
   --max-files 8
 ```
 
@@ -380,10 +380,9 @@ Under the hood:
 
 ```bash
 mdm mindspace context maps/tasks.md#todo/auth-retry \
-  --relations 2 \
-  --backlinks \
-  --include-source-refs \
-  --format markdown
+  --relation-depth 2 \
+  --include-backlinks \
+  --include-source-refs
 ```
 
 The context bundle includes:
@@ -587,8 +586,8 @@ Under the hood:
 
 ```bash
 mdm mindspace context maps/book.md#chapter/08/reunion \
-  --relations 1 \
-  --backlinks \
+  --relation-depth 1 \
+  --include-backlinks \
   --max-branches 12
 ```
 
@@ -718,7 +717,7 @@ Under the hood:
 ```bash
 mdm mindspace context maps/claims.md#claim/local-review-trust \
   --include-source-refs \
-  --backlinks \
+  --include-backlinks \
   --max-detail-chars 4000
 ```
 

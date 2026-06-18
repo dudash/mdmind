@@ -1,16 +1,22 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, VecDeque};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 use crate::app::{AppError, ClassifiedTarget, OpenTargetMode, classify_open_target};
-use crate::model::{Diagnostic, Document, Node, Severity, TaskState};
+use crate::editor::{find_path_by_id, get_node};
+use crate::model::{
+    Diagnostic, Document, ExternalRef, MetadataEntry, Node, Relation, RelationTarget, Severity,
+    TaskState,
+};
+use crate::query::FilterQuery;
 
 pub const MINDSPACE_SCAN_FORMAT: &str = "mindspace_scan.v1";
 pub const MINDSPACE_DIAGNOSTICS_FORMAT: &str = "mindspace_diagnostics.v1";
 pub const MINDSPACE_SETUP_FORMAT: &str = "mindspace_setup.v1";
+pub const MINDSPACE_CONTEXT_FORMAT: &str = "mindspace_context.v1";
 pub const MINDSPACE_TEMPLATE_CATALOG_FORMAT: &str = "mindspace_template_catalog.v1";
 pub const MINDSPACE_TEMPLATE_FORMAT: &str = "mindspace_template.v1";
 const MANIFEST_SCHEMA_VERSION: &str = "mdmind.mindspace.v1";
@@ -188,6 +194,122 @@ pub struct MindspaceSetupSummary {
     pub inferred_roles: usize,
     pub added_roles: usize,
     pub diagnostics: MindspaceDiagnosticCounts,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MindspaceContextBundle {
+    pub root: String,
+    pub target: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template: Option<MindspaceContextTemplateRef>,
+    pub options: MindspaceContextOptions,
+    pub summary: MindspaceContextSummary,
+    pub branches: Vec<MindspaceContextBranch>,
+    pub sources: Vec<MindspaceContextSource>,
+    pub omitted: Vec<MindspaceContextOmission>,
+    pub diagnostics: Vec<MindspaceDiagnostic>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct MindspaceContextOptions {
+    pub relation_depth: usize,
+    pub include_backlinks: bool,
+    pub include_source_refs: bool,
+    pub max_files: usize,
+    pub max_branches: usize,
+    pub max_detail_chars: usize,
+    pub max_source_chars: usize,
+}
+
+impl Default for MindspaceContextOptions {
+    fn default() -> Self {
+        Self {
+            relation_depth: 1,
+            include_backlinks: false,
+            include_source_refs: false,
+            max_files: 8,
+            max_branches: 24,
+            max_detail_chars: 4000,
+            max_source_chars: 800,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MindspaceContextTemplateRef {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub persona_fit: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct MindspaceContextSummary {
+    pub maps_scanned: usize,
+    pub files: usize,
+    pub branches: usize,
+    pub sources: usize,
+    pub omitted: usize,
+    pub diagnostics: MindspaceDiagnosticCounts,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MindspaceContextBranch {
+    pub file: String,
+    pub line: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    pub breadcrumb: String,
+    pub reason: String,
+    pub relation_depth: usize,
+    pub node: MindspaceContextNode,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MindspaceContextNode {
+    pub line: usize,
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task: Option<TaskState>,
+    pub detail: Vec<String>,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub detail_omitted_chars: usize,
+    pub tags: Vec<String>,
+    pub metadata: Vec<MetadataEntry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    pub references: Vec<ExternalRef>,
+    pub relations: Vec<Relation>,
+    pub children: Vec<MindspaceContextNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MindspaceContextSource {
+    pub target: String,
+    pub kind: String,
+    pub from_file: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_id: Option<String>,
+    pub label: String,
+    pub reason: String,
+    pub read_only: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bytes: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub excerpt: Option<String>,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub omitted_chars: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MindspaceContextOmission {
+    pub code: &'static str,
+    pub reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -387,6 +509,150 @@ pub fn setup_mindspace(
         summary: proposal.summary,
         manifest: proposal.manifest,
         notes,
+    })
+}
+
+pub fn context_mindspace(
+    root: &Path,
+    target: &str,
+    query: Option<&str>,
+    template_id: Option<&str>,
+    options: MindspaceContextOptions,
+) -> Result<MindspaceContextBundle, AppError> {
+    let scan = scan_mindspace(root)?;
+    let canonical_root = PathBuf::from(&scan.root);
+    let maps = load_context_maps(&canonical_root, &scan.maps)?;
+    let template = match template_id {
+        Some(id) => {
+            let template = mindspace_template(id)
+                .ok_or_else(|| AppError::new(format!("Unknown Mindspace template '{id}'.")))?;
+            Some(MindspaceContextTemplateRef {
+                id: template.id,
+                name: template.name,
+                persona_fit: template.persona_fit,
+            })
+        }
+        None => None,
+    };
+    let filter = match query {
+        Some(query) => Some(FilterQuery::parse(query).ok_or_else(|| {
+            AppError::new("Mindspace context query must include at least one term.")
+        })?),
+        None => None,
+    };
+
+    let mut omitted = Vec::new();
+    let mut candidates = VecDeque::new();
+    seed_target_candidates(target, &canonical_root, &maps, &mut candidates)?;
+    if let Some(filter) = &filter {
+        seed_query_candidates(filter, query.unwrap_or_default(), &maps, &mut candidates);
+    }
+    if candidates.is_empty() && filter.is_none() {
+        seed_workspace_candidates(&maps, &mut candidates);
+    }
+
+    let mut branches = Vec::new();
+    let mut included_branches = BTreeSet::new();
+    let mut included_files = BTreeSet::new();
+    let mut remaining_detail_chars = options.max_detail_chars;
+
+    while let Some(candidate) = candidates.pop_front() {
+        let Some(map) = maps.get(candidate.map_index) else {
+            continue;
+        };
+        let Some(node) = get_node(&map.document.nodes, &candidate.path) else {
+            continue;
+        };
+        let key = context_branch_key(map, node);
+        if !included_branches.insert(key) {
+            continue;
+        }
+
+        if !included_files.contains(&map.path) && included_files.len() >= options.max_files {
+            omitted.push(MindspaceContextOmission {
+                code: "file_budget_exceeded",
+                reason: format!(
+                    "Skipped '{}' because max_files={} was reached.",
+                    map.path, options.max_files
+                ),
+                file: Some(map.path.clone()),
+                id: node.id.clone(),
+            });
+            continue;
+        }
+        if branches.len() >= options.max_branches {
+            omitted.push(MindspaceContextOmission {
+                code: "branch_budget_exceeded",
+                reason: format!(
+                    "Skipped '{}' because max_branches={} was reached.",
+                    context_branch_ref(&map.path, node),
+                    options.max_branches
+                ),
+                file: Some(map.path.clone()),
+                id: node.id.clone(),
+            });
+            continue;
+        }
+
+        included_files.insert(map.path.clone());
+        let branch = build_context_branch(map, node, &candidate, &mut remaining_detail_chars);
+
+        if candidate.relation_depth < options.relation_depth {
+            enqueue_relation_targets(
+                &canonical_root,
+                &maps,
+                map,
+                node,
+                candidate.relation_depth + 1,
+                &mut candidates,
+                &mut omitted,
+            );
+        }
+        if options.include_backlinks {
+            enqueue_backlinks(
+                &maps,
+                map,
+                node,
+                candidate.relation_depth + 1,
+                &mut candidates,
+            );
+        }
+
+        branches.push(branch);
+    }
+
+    let sources = if options.include_source_refs {
+        collect_context_sources(
+            &canonical_root,
+            &branches,
+            options.max_source_chars,
+            &mut omitted,
+        )
+    } else {
+        note_omitted_source_refs(&branches, &mut omitted);
+        Vec::new()
+    };
+    let mut diagnostics = scan.diagnostics.clone();
+    diagnostics.extend(context_map_diagnostics(&maps));
+
+    Ok(MindspaceContextBundle {
+        root: scan.root,
+        target: target.to_string(),
+        query: query.map(str::to_string),
+        template,
+        options,
+        summary: MindspaceContextSummary {
+            maps_scanned: maps.len(),
+            files: included_files.len(),
+            branches: branches.len(),
+            sources: sources.len(),
+            omitted: omitted.len(),
+            diagnostics: count_diagnostics(&diagnostics),
+        },
+        branches,
+        sources,
+        omitted,
+        diagnostics,
     })
 }
 
@@ -615,6 +881,175 @@ pub fn render_mindspace_setup_plain(report: &MindspaceSetupReport) -> String {
         lines.push(format!("role\t{role_name}\t{path}"));
     }
     lines.join("\n")
+}
+
+pub fn render_mindspace_context(bundle: &MindspaceContextBundle) -> String {
+    let mut lines = vec![
+        format!("Mindspace context: {}", bundle.root),
+        format!("Target: {}", bundle.target),
+    ];
+    if let Some(query) = &bundle.query {
+        lines.push(format!("Query: {query}"));
+    }
+    if let Some(template) = &bundle.template {
+        lines.push(format!(
+            "Template guidance: {} ({})",
+            template.id, template.persona_fit
+        ));
+    }
+    lines.push(format!(
+        "Included: {} branches from {} files, {} sources, {} omissions",
+        bundle.summary.branches,
+        bundle.summary.files,
+        bundle.summary.sources,
+        bundle.summary.omitted
+    ));
+    lines.push(format!(
+        "Budgets: max_files={}, max_branches={}, max_detail_chars={}, max_source_chars={}, relation_depth={}, backlinks={}, source_refs={}",
+        bundle.options.max_files,
+        bundle.options.max_branches,
+        bundle.options.max_detail_chars,
+        bundle.options.max_source_chars,
+        bundle.options.relation_depth,
+        bundle.options.include_backlinks,
+        bundle.options.include_source_refs
+    ));
+
+    if !bundle.branches.is_empty() {
+        lines.push(String::new());
+        lines.push("Branches:".to_string());
+        for branch in &bundle.branches {
+            lines.push(format!(
+                "- {}{} line {} ({})",
+                branch.file,
+                branch
+                    .id
+                    .as_ref()
+                    .map(|id| format!("#{id}"))
+                    .unwrap_or_default(),
+                branch.line,
+                branch.reason
+            ));
+            lines.push(format!("  breadcrumb: {}", branch.breadcrumb));
+            render_context_node(&branch.node, 1, &mut lines);
+        }
+    }
+
+    if !bundle.sources.is_empty() {
+        lines.push(String::new());
+        lines.push("Sources:".to_string());
+        for source in &bundle.sources {
+            lines.push(format!(
+                "- {} ({}, from {})",
+                source.target, source.kind, source.from_file
+            ));
+            lines.push(format!("  reason: {}", source.reason));
+            if let Some(bytes) = source.bytes {
+                lines.push(format!("  bytes: {bytes}"));
+            }
+            if let Some(excerpt) = &source.excerpt {
+                lines.push("  excerpt:".to_string());
+                for line in excerpt.lines() {
+                    lines.push(format!("    {line}"));
+                }
+            }
+            if source.omitted_chars > 0 {
+                lines.push(format!("  omitted_chars: {}", source.omitted_chars));
+            }
+        }
+    }
+
+    if !bundle.omitted.is_empty() {
+        lines.push(String::new());
+        lines.push("Omitted:".to_string());
+        for omitted in &bundle.omitted {
+            lines.push(format!("- {}: {}", omitted.code, omitted.reason));
+        }
+    }
+
+    lines.join("\n")
+}
+
+pub fn render_mindspace_context_plain(bundle: &MindspaceContextBundle) -> String {
+    let mut lines = vec![
+        format!("root\t{}", bundle.root),
+        format!("target\t{}", bundle.target),
+        format!("branches\t{}", bundle.summary.branches),
+        format!("files\t{}", bundle.summary.files),
+        format!("sources\t{}", bundle.summary.sources),
+        format!("omitted\t{}", bundle.summary.omitted),
+    ];
+    if let Some(query) = &bundle.query {
+        lines.push(format!("query\t{query}"));
+    }
+    for branch in &bundle.branches {
+        lines.push(format!(
+            "branch\t{}\t{}\t{}\t{}",
+            branch.file,
+            branch.id.as_deref().unwrap_or("-"),
+            branch.line,
+            branch.reason
+        ));
+    }
+    for source in &bundle.sources {
+        lines.push(format!(
+            "source\t{}\t{}\t{}\t{}",
+            source.kind, source.target, source.from_file, source.reason
+        ));
+    }
+    for omitted in &bundle.omitted {
+        lines.push(format!(
+            "omitted\t{}\t{}\t{}",
+            omitted.code,
+            omitted.file.as_deref().unwrap_or("-"),
+            omitted.reason
+        ));
+    }
+    lines.join("\n")
+}
+
+fn render_context_node(node: &MindspaceContextNode, depth: usize, lines: &mut Vec<String>) {
+    let indent = "  ".repeat(depth);
+    lines.push(format!("{indent}- {}", context_node_display_line(node)));
+    for detail in &node.detail {
+        lines.push(format!("{indent}  | {detail}"));
+    }
+    if node.detail_omitted_chars > 0 {
+        lines.push(format!(
+            "{indent}  | ... omitted {} detail chars",
+            node.detail_omitted_chars
+        ));
+    }
+    for child in &node.children {
+        render_context_node(child, depth + 1, lines);
+    }
+}
+
+fn context_node_display_line(node: &MindspaceContextNode) -> String {
+    let mut parts = Vec::new();
+    if let Some(task) = node.task {
+        parts.push(task.marker().to_string());
+    }
+    if !node.text.is_empty() {
+        parts.push(node.text.clone());
+    }
+    parts.extend(node.tags.iter().cloned());
+    parts.extend(
+        node.metadata
+            .iter()
+            .map(|entry| format!("@{}:{}", entry.key, entry.value)),
+    );
+    if let Some(id) = &node.id {
+        parts.push(format!("[id:{id}]"));
+    }
+    parts.extend(node.references.iter().map(ExternalRef::display_token));
+    parts.extend(node.relations.iter().map(Relation::display_token));
+
+    if parts.is_empty() {
+        "(empty)".to_string()
+    } else {
+        parts.join(" ")
+    }
 }
 
 pub fn mindspace_template_catalog() -> MindspaceTemplateCatalog {
@@ -1276,6 +1711,654 @@ fn built_in_mindspace_templates() -> Vec<MindspaceTemplate> {
             provenance: "built_in",
         },
     ]
+}
+
+struct LoadedContextMap {
+    path: String,
+    absolute_path: PathBuf,
+    document: Document,
+}
+
+struct ContextCandidate {
+    map_index: usize,
+    path: Vec<usize>,
+    reason: String,
+    relation_depth: usize,
+}
+
+struct ContextTargetRef {
+    path: Option<String>,
+    anchor: Option<String>,
+}
+
+fn load_context_maps(
+    root: &Path,
+    map_records: &[MindspaceMapRecord],
+) -> Result<Vec<LoadedContextMap>, AppError> {
+    let mut maps = Vec::new();
+    for record in map_records
+        .iter()
+        .filter(|record| record.parse_status == MindspaceMapParseStatus::Ok)
+    {
+        let absolute_path = root.join(&record.path);
+        match classify_open_target(&absolute_path.to_string_lossy(), OpenTargetMode::Map)? {
+            ClassifiedTarget::NativeMap(loaded) => maps.push(LoadedContextMap {
+                path: record.path.clone(),
+                absolute_path,
+                document: loaded.document,
+            }),
+            ClassifiedTarget::OrdinaryMarkdown { .. } | ClassifiedTarget::NearMissMap { .. } => {}
+        }
+    }
+    maps.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(maps)
+}
+
+fn seed_target_candidates(
+    target: &str,
+    root: &Path,
+    maps: &[LoadedContextMap],
+    candidates: &mut VecDeque<ContextCandidate>,
+) -> Result<(), AppError> {
+    let target = target.trim();
+    if target.is_empty() {
+        return Err(AppError::new("Mindspace context target must not be empty."));
+    }
+
+    let target_ref = parse_context_target(target);
+    match (&target_ref.path, &target_ref.anchor) {
+        (Some(path), anchor) if path != "." => {
+            let map_path = normalize_context_path(root, path);
+            let Some(map_index) = maps.iter().position(|map| map.path == map_path) else {
+                return Err(AppError::new(format!(
+                    "Mindspace context target map '{map_path}' was not found in the scan."
+                )));
+            };
+            if let Some(anchor) = anchor {
+                let path =
+                    find_path_by_id(&maps[map_index].document.nodes, anchor).ok_or_else(|| {
+                        AppError::new(format!(
+                            "Mindspace context target id '{anchor}' was not found in '{map_path}'."
+                        ))
+                    })?;
+                candidates.push_back(ContextCandidate {
+                    map_index,
+                    path,
+                    reason: format!("target branch {map_path}#{anchor}"),
+                    relation_depth: 0,
+                });
+            } else {
+                seed_file_root_candidates(map_index, &maps[map_index], candidates);
+            }
+        }
+        (None | Some(_), Some(anchor)) => {
+            let mut matched = false;
+            for (map_index, map) in maps.iter().enumerate() {
+                if let Some(path) = find_path_by_id(&map.document.nodes, anchor) {
+                    candidates.push_back(ContextCandidate {
+                        map_index,
+                        path,
+                        reason: format!("target branch {}#{}", map.path, anchor),
+                        relation_depth: 0,
+                    });
+                    matched = true;
+                }
+            }
+            if !matched {
+                return Err(AppError::new(format!(
+                    "Mindspace context target id '{anchor}' was not found in scanned maps."
+                )));
+            }
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
+fn parse_context_target(target: &str) -> ContextTargetRef {
+    match target.split_once('#') {
+        Some((path, anchor)) => ContextTargetRef {
+            path: (!path.is_empty()).then(|| path.to_string()),
+            anchor: (!anchor.is_empty()).then(|| anchor.to_string()),
+        },
+        None => ContextTargetRef {
+            path: Some(target.to_string()),
+            anchor: None,
+        },
+    }
+}
+
+fn normalize_context_path(root: &Path, path: &str) -> String {
+    let path = Path::new(path);
+    if path.is_absolute() {
+        display_path(root, path)
+    } else {
+        display_path(root, &root.join(path))
+    }
+}
+
+fn seed_file_root_candidates(
+    map_index: usize,
+    map: &LoadedContextMap,
+    candidates: &mut VecDeque<ContextCandidate>,
+) {
+    for index in 0..map.document.nodes.len() {
+        candidates.push_back(ContextCandidate {
+            map_index,
+            path: vec![index],
+            reason: format!("target file {}", map.path),
+            relation_depth: 0,
+        });
+    }
+}
+
+fn seed_query_candidates(
+    filter: &FilterQuery,
+    raw_query: &str,
+    maps: &[LoadedContextMap],
+    candidates: &mut VecDeque<ContextCandidate>,
+) {
+    for (map_index, map) in maps.iter().enumerate() {
+        let mut paths = Vec::new();
+        collect_matching_paths(&map.document.nodes, filter, &mut Vec::new(), &mut paths);
+        for path in paths {
+            candidates.push_back(ContextCandidate {
+                map_index,
+                path,
+                reason: format!("query match '{raw_query}'"),
+                relation_depth: 0,
+            });
+        }
+    }
+}
+
+fn seed_workspace_candidates(
+    maps: &[LoadedContextMap],
+    candidates: &mut VecDeque<ContextCandidate>,
+) {
+    for (map_index, map) in maps.iter().enumerate() {
+        for index in 0..map.document.nodes.len() {
+            candidates.push_back(ContextCandidate {
+                map_index,
+                path: vec![index],
+                reason: "workspace seed branch".to_string(),
+                relation_depth: 0,
+            });
+        }
+    }
+}
+
+fn collect_matching_paths(
+    nodes: &[Node],
+    filter: &FilterQuery,
+    prefix: &mut Vec<usize>,
+    matches: &mut Vec<Vec<usize>>,
+) {
+    for (index, node) in nodes.iter().enumerate() {
+        prefix.push(index);
+        if filter.matches(node) {
+            matches.push(prefix.clone());
+        }
+        collect_matching_paths(&node.children, filter, prefix, matches);
+        prefix.pop();
+    }
+}
+
+fn build_context_branch(
+    map: &LoadedContextMap,
+    node: &Node,
+    candidate: &ContextCandidate,
+    remaining_detail_chars: &mut usize,
+) -> MindspaceContextBranch {
+    MindspaceContextBranch {
+        file: map.path.clone(),
+        line: node.line,
+        id: node.id.clone(),
+        breadcrumb: breadcrumb_for_path(&map.document, &candidate.path),
+        reason: candidate.reason.clone(),
+        relation_depth: candidate.relation_depth,
+        node: context_node_from_node(node, remaining_detail_chars),
+    }
+}
+
+fn context_node_from_node(node: &Node, remaining_detail_chars: &mut usize) -> MindspaceContextNode {
+    let (detail, detail_omitted_chars) = bounded_lines(&node.detail, remaining_detail_chars);
+    MindspaceContextNode {
+        line: node.line,
+        text: node.text.clone(),
+        task: node.task,
+        detail,
+        detail_omitted_chars,
+        tags: node.tags.clone(),
+        metadata: node.metadata.clone(),
+        id: node.id.clone(),
+        references: node.references.clone(),
+        relations: node.relations.clone(),
+        children: node
+            .children
+            .iter()
+            .map(|child| context_node_from_node(child, remaining_detail_chars))
+            .collect(),
+    }
+}
+
+fn bounded_lines(lines: &[String], remaining_chars: &mut usize) -> (Vec<String>, usize) {
+    let mut bounded = Vec::new();
+    let mut omitted_chars = 0;
+
+    for line in lines {
+        if *remaining_chars == 0 {
+            omitted_chars += line.len();
+            continue;
+        }
+        if line.len() <= *remaining_chars {
+            bounded.push(line.clone());
+            *remaining_chars -= line.len();
+            continue;
+        }
+
+        let clipped = truncate_to_bytes(line, *remaining_chars);
+        omitted_chars += line.len().saturating_sub(clipped.len());
+        bounded.push(clipped);
+        *remaining_chars = 0;
+    }
+
+    (bounded, omitted_chars)
+}
+
+fn enqueue_relation_targets(
+    root: &Path,
+    maps: &[LoadedContextMap],
+    source_map: &LoadedContextMap,
+    node: &Node,
+    relation_depth: usize,
+    candidates: &mut VecDeque<ContextCandidate>,
+    omitted: &mut Vec<MindspaceContextOmission>,
+) {
+    let mut relations = Vec::new();
+    collect_branch_relations(node, &mut relations);
+    for (source_node, relation) in relations {
+        match relation.target_kind() {
+            RelationTarget::SameFileId(id) => {
+                let Some(map_index) = maps.iter().position(|map| map.path == source_map.path) else {
+                    continue;
+                };
+                if let Some(path) = find_path_by_id(&source_map.document.nodes, id) {
+                    candidates.push_back(ContextCandidate {
+                        map_index,
+                        path,
+                        reason: format!(
+                            "relation {} from {}",
+                            relation.display_token(),
+                            context_branch_ref(&source_map.path, source_node)
+                        ),
+                        relation_depth,
+                    });
+                } else {
+                    omitted.push(MindspaceContextOmission {
+                        code: "relation_target_missing",
+                        reason: format!(
+                            "Relation {} did not resolve in '{}'.",
+                            relation.display_token(),
+                            source_map.path
+                        ),
+                        file: Some(source_map.path.clone()),
+                        id: Some(id.to_string()),
+                    });
+                }
+            }
+            RelationTarget::PathQualifiedBranch { path, id } => {
+                let map_path = resolve_context_relative_path(root, source_map, path);
+                let Some(map_index) = maps.iter().position(|map| map.path == map_path) else {
+                    omitted.push(MindspaceContextOmission {
+                        code: "relation_file_missing",
+                        reason: format!(
+                            "Relation {} points at '{}', which was not found in scanned maps.",
+                            relation.display_token(),
+                            map_path
+                        ),
+                        file: Some(map_path),
+                        id: Some(id.to_string()),
+                    });
+                    continue;
+                };
+                if let Some(path) = find_path_by_id(&maps[map_index].document.nodes, id) {
+                    candidates.push_back(ContextCandidate {
+                        map_index,
+                        path,
+                        reason: format!(
+                            "relation {} from {}",
+                            relation.display_token(),
+                            context_branch_ref(&source_map.path, source_node)
+                        ),
+                        relation_depth,
+                    });
+                } else {
+                    omitted.push(MindspaceContextOmission {
+                        code: "relation_target_missing",
+                        reason: format!(
+                            "Relation {} target id was not found.",
+                            relation.display_token()
+                        ),
+                        file: Some(maps[map_index].path.clone()),
+                        id: Some(id.to_string()),
+                    });
+                }
+            }
+            RelationTarget::ExternalFile(path) => omitted.push(MindspaceContextOmission {
+                code: "external_relation_not_included",
+                reason: format!(
+                    "Relation {} points at external file '{}'; include source refs for Markdown references instead.",
+                    relation.display_token(),
+                    path
+                ),
+                file: Some(source_map.path.clone()),
+                id: source_node.id.clone(),
+            }),
+            RelationTarget::Url(url) => omitted.push(MindspaceContextOmission {
+                code: "url_relation_not_fetched",
+                reason: format!("Relation {} points at URL '{}'; URLs are not fetched.", relation.display_token(), url),
+                file: Some(source_map.path.clone()),
+                id: source_node.id.clone(),
+            }),
+        }
+    }
+}
+
+fn collect_branch_relations<'a>(node: &'a Node, relations: &mut Vec<(&'a Node, &'a Relation)>) {
+    for relation in &node.relations {
+        relations.push((node, relation));
+    }
+    for child in &node.children {
+        collect_branch_relations(child, relations);
+    }
+}
+
+fn enqueue_backlinks(
+    maps: &[LoadedContextMap],
+    target_map: &LoadedContextMap,
+    target_node: &Node,
+    relation_depth: usize,
+    candidates: &mut VecDeque<ContextCandidate>,
+) {
+    let Some(target_id) = target_node.id.as_deref() else {
+        return;
+    };
+    for (map_index, map) in maps.iter().enumerate() {
+        let mut backlinks = Vec::new();
+        collect_backlink_paths(
+            &map.document.nodes,
+            &mut Vec::new(),
+            map,
+            target_map,
+            target_id,
+            &mut backlinks,
+        );
+        for path in backlinks {
+            candidates.push_back(ContextCandidate {
+                map_index,
+                path,
+                reason: format!("backlink to {}#{target_id}", target_map.path),
+                relation_depth,
+            });
+        }
+    }
+}
+
+fn collect_backlink_paths(
+    nodes: &[Node],
+    prefix: &mut Vec<usize>,
+    source_map: &LoadedContextMap,
+    target_map: &LoadedContextMap,
+    target_id: &str,
+    matches: &mut Vec<Vec<usize>>,
+) {
+    for (index, node) in nodes.iter().enumerate() {
+        prefix.push(index);
+        if node.relations.iter().any(|relation| {
+            relation_points_to_context_target(relation, source_map, target_map, target_id)
+        }) {
+            matches.push(prefix.clone());
+        }
+        collect_backlink_paths(
+            &node.children,
+            prefix,
+            source_map,
+            target_map,
+            target_id,
+            matches,
+        );
+        prefix.pop();
+    }
+}
+
+fn relation_points_to_context_target(
+    relation: &Relation,
+    source_map: &LoadedContextMap,
+    target_map: &LoadedContextMap,
+    target_id: &str,
+) -> bool {
+    match relation.target_kind() {
+        RelationTarget::SameFileId(id) => source_map.path == target_map.path && id == target_id,
+        RelationTarget::PathQualifiedBranch { path, id } => {
+            id == target_id && path == target_map.path
+        }
+        RelationTarget::ExternalFile(_) | RelationTarget::Url(_) => false,
+    }
+}
+
+fn resolve_context_relative_path(
+    root: &Path,
+    source_map: &LoadedContextMap,
+    target: &str,
+) -> String {
+    let target_path = Path::new(target);
+    if target_path.is_absolute() {
+        return display_path(root, target_path);
+    }
+
+    let root_relative = display_path(root, &root.join(target_path));
+    if root.join(&root_relative).exists() {
+        return root_relative;
+    }
+
+    let Some(parent) = source_map.absolute_path.parent() else {
+        return root_relative;
+    };
+    for ancestor in parent.ancestors() {
+        if !ancestor.starts_with(root) {
+            break;
+        }
+        let resolved = ancestor.join(target_path);
+        if resolved.exists() {
+            return display_path(root, &resolved);
+        }
+    }
+    root_relative
+}
+
+fn collect_context_sources(
+    root: &Path,
+    branches: &[MindspaceContextBranch],
+    max_source_chars: usize,
+    omitted: &mut Vec<MindspaceContextOmission>,
+) -> Vec<MindspaceContextSource> {
+    let mut sources = Vec::new();
+    let mut seen = BTreeSet::new();
+    for branch in branches {
+        let mut references = Vec::new();
+        collect_context_references(&branch.node, &mut references);
+        for reference in references {
+            let source_key = format!("{}:{}", branch.file, reference.target);
+            if !seen.insert(source_key) {
+                continue;
+            }
+            if reference.is_url() {
+                sources.push(MindspaceContextSource {
+                    target: reference.target.clone(),
+                    kind: "url".to_string(),
+                    from_file: branch.file.clone(),
+                    from_id: branch.id.clone(),
+                    label: reference.label.clone(),
+                    reason: "URL reference recorded without network fetch.".to_string(),
+                    read_only: true,
+                    bytes: None,
+                    excerpt: None,
+                    omitted_chars: 0,
+                });
+                continue;
+            }
+
+            let resolved = resolve_source_reference_path(root, &branch.file, &reference.target);
+            let display = display_path(root, &resolved);
+            match fs::read(&resolved) {
+                Ok(bytes) => {
+                    let (excerpt, omitted_chars) = source_excerpt(&bytes, max_source_chars);
+                    sources.push(MindspaceContextSource {
+                        target: display,
+                        kind: "local_file".to_string(),
+                        from_file: branch.file.clone(),
+                        from_id: branch.id.clone(),
+                        label: reference.label.clone(),
+                        reason: "Local reference included as bounded source excerpt.".to_string(),
+                        read_only: true,
+                        bytes: Some(bytes.len()),
+                        excerpt,
+                        omitted_chars,
+                    });
+                }
+                Err(error) => omitted.push(MindspaceContextOmission {
+                    code: "source_ref_unreadable",
+                    reason: format!("Referenced source '{}' could not be read: {error}", display),
+                    file: Some(branch.file.clone()),
+                    id: branch.id.clone(),
+                }),
+            }
+        }
+    }
+    sources
+}
+
+fn note_omitted_source_refs(
+    branches: &[MindspaceContextBranch],
+    omitted: &mut Vec<MindspaceContextOmission>,
+) {
+    for branch in branches {
+        if context_node_has_references(&branch.node) {
+            omitted.push(MindspaceContextOmission {
+                code: "source_refs_disabled",
+                reason: "Source references were detected but --include-source-refs was not set."
+                    .to_string(),
+                file: Some(branch.file.clone()),
+                id: branch.id.clone(),
+            });
+        }
+    }
+}
+
+fn collect_context_references<'a>(
+    node: &'a MindspaceContextNode,
+    references: &mut Vec<&'a ExternalRef>,
+) {
+    references.extend(node.references.iter());
+    for child in &node.children {
+        collect_context_references(child, references);
+    }
+}
+
+fn context_node_has_references(node: &MindspaceContextNode) -> bool {
+    !node.references.is_empty() || node.children.iter().any(context_node_has_references)
+}
+
+fn resolve_source_reference_path(root: &Path, branch_file: &str, target: &str) -> PathBuf {
+    let target_path = Path::new(target);
+    if target_path.is_absolute() {
+        return target_path.to_path_buf();
+    }
+
+    let root_candidate = root.join(target_path);
+    if root_candidate.exists() {
+        return root_candidate;
+    }
+
+    let branch_parent = Path::new(branch_file)
+        .parent()
+        .map(|parent| root.join(parent))
+        .unwrap_or_else(|| root.to_path_buf());
+    for ancestor in branch_parent.ancestors() {
+        if !ancestor.starts_with(root) {
+            break;
+        }
+        let resolved = ancestor.join(target_path);
+        if resolved.exists() {
+            return resolved;
+        }
+    }
+
+    root_candidate
+}
+
+fn source_excerpt(bytes: &[u8], max_source_chars: usize) -> (Option<String>, usize) {
+    let Ok(source) = std::str::from_utf8(bytes) else {
+        return (None, bytes.len());
+    };
+    if source.len() <= max_source_chars {
+        return (Some(source.to_string()), 0);
+    }
+    let excerpt = truncate_to_bytes(source, max_source_chars);
+    let omitted_chars = source.len().saturating_sub(excerpt.len());
+    (Some(excerpt), omitted_chars)
+}
+
+fn context_map_diagnostics(_maps: &[LoadedContextMap]) -> Vec<MindspaceDiagnostic> {
+    Vec::new()
+}
+
+fn context_branch_key(map: &LoadedContextMap, node: &Node) -> String {
+    match &node.id {
+        Some(id) => format!("{}#{id}", map.path),
+        None => format!("{}:{}", map.path, node.line),
+    }
+}
+
+fn context_branch_ref(file: &str, node: &Node) -> String {
+    match &node.id {
+        Some(id) => format!("{file}#{id}"),
+        None => format!("{file}:{}", node.line),
+    }
+}
+
+fn breadcrumb_for_path(document: &Document, path: &[usize]) -> String {
+    let mut breadcrumb = Vec::new();
+    let mut nodes = &document.nodes;
+    for index in path {
+        let Some(node) = nodes.get(*index) else {
+            break;
+        };
+        breadcrumb.push(if node.text.is_empty() {
+            "(empty)".to_string()
+        } else {
+            node.text.clone()
+        });
+        nodes = &node.children;
+    }
+    breadcrumb.join(" / ")
+}
+
+fn truncate_to_bytes(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
+        return value.to_string();
+    }
+    let mut end = max_bytes;
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value[..end].to_string()
+}
+
+fn is_zero(value: &usize) -> bool {
+    *value == 0
 }
 
 struct MindspaceManifestProposal {

@@ -186,6 +186,7 @@ mdm mindspace scan <root> --json
 mdm mindspace lint <root> --json
 mdm mindspace setup <root> --preview --json
 mdm mindspace setup <root> --write --json
+mdm mindspace context <target> --template <template-id> --json
 mdm mindspace template list --json
 mdm mindspace template show <template-id> --json
 mdm mindspace template show <template-id> --prompt
@@ -195,7 +196,6 @@ mdm commands --json
 Planned helpers:
 
 ```bash
-mdm mindspace context <target> --template <template-id> --json
 mdm mindspace session ...
 mdm mindspace review ...
 ```

@@ -79,14 +79,15 @@ mdm mindspace scan <root> --json
 mdm mindspace lint <root> --json
 mdm mindspace setup <root> --preview --json
 mdm mindspace setup <root> --write --json
+mdm mindspace context <target> --template <template-id> --json
 mdm mindspace template list --json
 mdm mindspace template show <template-id> --json
 mdm commands --json
 ```
 
-Planned helpers include `context`, `session`, `review`, and `mdmind .`
-workspace landing behavior. When they are unavailable, describe the intended
-review path and keep proposed writes explicit.
+Planned helpers include `session`, `review`, and `mdmind .` workspace landing
+behavior. When they are unavailable, describe the intended review path and keep
+proposed writes explicit.
 
 ## Closeout Standard
 

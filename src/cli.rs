@@ -39,14 +39,16 @@ use crate::interactive::{
 };
 use crate::markdown_render::{ColorMode, RenderOptions, RenderTarget, render_markdown};
 use crate::mindspace::{
-    MINDSPACE_DIAGNOSTICS_FORMAT, MINDSPACE_SCAN_FORMAT, MINDSPACE_SETUP_FORMAT,
-    MINDSPACE_TEMPLATE_CATALOG_FORMAT, MINDSPACE_TEMPLATE_FORMAT, MindspaceDiagnosticsReport,
-    MindspaceSetupMode, mindspace_template, mindspace_template_catalog,
-    render_mindspace_diagnostics, render_mindspace_diagnostics_plain, render_mindspace_scan,
-    render_mindspace_scan_plain, render_mindspace_setup, render_mindspace_setup_plain,
-    render_mindspace_template, render_mindspace_template_catalog,
-    render_mindspace_template_catalog_plain, render_mindspace_template_plain,
-    render_mindspace_template_prompt, scan_mindspace, setup_mindspace,
+    MINDSPACE_CONTEXT_FORMAT, MINDSPACE_DIAGNOSTICS_FORMAT, MINDSPACE_SCAN_FORMAT,
+    MINDSPACE_SETUP_FORMAT, MINDSPACE_TEMPLATE_CATALOG_FORMAT, MINDSPACE_TEMPLATE_FORMAT,
+    MindspaceContextOptions, MindspaceDiagnosticsReport, MindspaceSetupMode, context_mindspace,
+    mindspace_template, mindspace_template_catalog, render_mindspace_context,
+    render_mindspace_context_plain, render_mindspace_diagnostics,
+    render_mindspace_diagnostics_plain, render_mindspace_scan, render_mindspace_scan_plain,
+    render_mindspace_setup, render_mindspace_setup_plain, render_mindspace_template,
+    render_mindspace_template_catalog, render_mindspace_template_catalog_plain,
+    render_mindspace_template_plain, render_mindspace_template_prompt, scan_mindspace,
+    setup_mindspace,
 };
 use crate::model::{Document, ExternalRefKind, Node, Severity, TaskState};
 use crate::query::{
@@ -250,7 +252,7 @@ enum Commands {
     },
     #[command(
         about = "Inspect and lint optional folder-level Mindspace workspaces.",
-        after_help = "Examples:\n  mdm mindspace scan .\n  mdm mindspace setup . --preview\n  mdm mindspace setup . --write\n  mdm mindspace lint .\n  mdm mindspace template list\n  mdm mindspace template show launch-planning --prompt"
+        after_help = "Examples:\n  mdm mindspace scan .\n  mdm mindspace setup . --preview\n  mdm mindspace setup . --write\n  mdm mindspace context maps/roadmap.md#roadmap/current\n  mdm mindspace lint .\n  mdm mindspace template list\n  mdm mindspace template show launch-planning --prompt"
     )]
     Mindspace {
         #[command(subcommand)]
@@ -389,6 +391,57 @@ enum MindspaceCommands {
         write: bool,
         #[arg(long, help = "Optional job template id used for setup guidance.")]
         template: Option<String>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        plain: bool,
+    },
+    #[command(about = "Export a bounded Mindspace context bundle with provenance.")]
+    Context {
+        target: String,
+        #[arg(
+            long,
+            help = "Mindspace root to scan; defaults to the current directory."
+        )]
+        root: Option<PathBuf>,
+        #[arg(long, help = "Filter query to include matching branches across maps.")]
+        query: Option<String>,
+        #[arg(long, help = "Optional job template id used for context guidance.")]
+        template: Option<String>,
+        #[arg(
+            long,
+            default_value_t = 1,
+            help = "Outgoing relation depth to include."
+        )]
+        relation_depth: usize,
+        #[arg(long, action = ArgAction::SetTrue, help = "Include incoming relation sources.")]
+        include_backlinks: bool,
+        #[arg(long, action = ArgAction::SetTrue, help = "Include bounded local source reference excerpts.")]
+        include_source_refs: bool,
+        #[arg(
+            long,
+            default_value_t = 8,
+            help = "Maximum distinct map files to include."
+        )]
+        max_files: usize,
+        #[arg(
+            long,
+            default_value_t = 24,
+            help = "Maximum branch records to include."
+        )]
+        max_branches: usize,
+        #[arg(
+            long,
+            default_value_t = 4000,
+            help = "Maximum detail characters across included branches."
+        )]
+        max_detail_chars: usize,
+        #[arg(
+            long,
+            default_value_t = 800,
+            help = "Maximum characters per included source excerpt."
+        )]
+        max_source_chars: usize,
         #[arg(long)]
         json: bool,
         #[arg(long)]
@@ -649,6 +702,12 @@ impl Cli {
             } if *json => Some(JsonContext {
                 command: "mindspace setup",
                 target: Some(root.to_string_lossy().to_string()),
+            }),
+            Commands::Mindspace {
+                command: MindspaceCommands::Context { target, json, .. },
+            } if *json => Some(JsonContext {
+                command: "mindspace context",
+                target: Some(target.clone()),
             }),
             Commands::Mindspace {
                 command:
@@ -1063,6 +1122,56 @@ fn dispatch_mindspace(command: MindspaceCommands) -> Result<(), CliError> {
                 &report,
                 || render_mindspace_setup(&report),
                 || render_mindspace_setup_plain(&report),
+            )
+        }
+        MindspaceCommands::Context {
+            target,
+            root,
+            query,
+            template,
+            relation_depth,
+            include_backlinks,
+            include_source_refs,
+            max_files,
+            max_branches,
+            max_detail_chars,
+            max_source_chars,
+            json,
+            plain,
+        } => {
+            let root = root.unwrap_or_else(|| PathBuf::from("."));
+            let options = MindspaceContextOptions {
+                relation_depth,
+                include_backlinks,
+                include_source_refs,
+                max_files,
+                max_branches,
+                max_detail_chars,
+                max_source_chars,
+            };
+            let bundle = context_mindspace(
+                &root,
+                &target,
+                query.as_deref(),
+                template.as_deref(),
+                options,
+            )
+            .map_err(CliError::from_app)?;
+            print_output(
+                OutputSpec {
+                    json,
+                    plain,
+                    command: "mindspace context",
+                    target: Some(&target),
+                    format: MINDSPACE_CONTEXT_FORMAT,
+                    summary: Some(
+                        serde_json::to_value(bundle.summary)
+                            .expect("mindspace context summary should serialize"),
+                    ),
+                },
+                &bundle,
+                || render_mindspace_context(&bundle),
+                || render_mindspace_context_plain(&bundle),
             )
         }
         MindspaceCommands::Template { command } => dispatch_mindspace_template(command),
@@ -2239,10 +2348,12 @@ fn command_catalog() -> CommandCatalog {
             ),
             command_info!(
                 "mindspace",
-                "Inspect and lint optional folder-level Mindspace workspaces.",
+                "Inspect, set up, and export optional folder-level Mindspace workspaces.",
                 &[
                     "folder",
                     "mindspace_manifest",
+                    "maps",
+                    "markdown",
                     "built_in_mindspace_templates"
                 ],
                 &["mindspace_manifest"],
@@ -2255,12 +2366,14 @@ fn command_catalog() -> CommandCatalog {
                     "mindspace_scan.v1",
                     "mindspace_diagnostics.v1",
                     "mindspace_setup.v1",
+                    "mindspace_context.v1",
                     "mindspace_template_catalog.v1",
                     "mindspace_template.v1",
                 ],
                 &[
                     "mdm mindspace scan .",
                     "mdm mindspace setup . --preview",
+                    "mdm mindspace context maps/roadmap.md#roadmap/current",
                     "mdm mindspace lint .",
                     "mdm mindspace template list",
                 ],
@@ -2312,6 +2425,42 @@ fn command_catalog() -> CommandCatalog {
                     "mdm mindspace setup . --preview",
                     "mdm mindspace setup . --write",
                     "mdm mindspace setup . --template launch-planning --preview --json",
+                ],
+            ),
+            command_info!(
+                "mindspace context",
+                "Export a bounded Mindspace context bundle with provenance.",
+                &[
+                    "folder",
+                    "mindspace_manifest",
+                    "maps",
+                    "markdown",
+                    "sources"
+                ],
+                &[],
+                false,
+                false,
+                &["pretty", "plain", "json"],
+                &[arg("target", true)],
+                &[
+                    flag_value("--root", &["path"]),
+                    flag_value("--query", &["query"]),
+                    flag_value("--template", &["template-id"]),
+                    flag_value("--relation-depth", &["count"]),
+                    flag("--include-backlinks"),
+                    flag("--include-source-refs"),
+                    flag_value("--max-files", &["count"]),
+                    flag_value("--max-branches", &["count"]),
+                    flag_value("--max-detail-chars", &["count"]),
+                    flag_value("--max-source-chars", &["count"]),
+                    flag("--json"),
+                    flag("--plain"),
+                ],
+                &["mindspace_context.v1"],
+                &[
+                    "mdm mindspace context maps/roadmap.md#roadmap/current --json",
+                    "mdm mindspace context . --query '@owner:jason' --max-branches 8 --json",
+                    "mdm mindspace context maps/roadmap.md#roadmap/current --include-source-refs",
                 ],
             ),
             command_info!(
@@ -2989,6 +3138,7 @@ fn raw_args_json_context() -> Option<JsonContext> {
             Some("scan") => "mindspace scan",
             Some("lint") => "mindspace lint",
             Some("setup") => "mindspace setup",
+            Some("context") => "mindspace context",
             Some("template") if args.get(2).is_some_and(|arg| arg == "list") => {
                 "mindspace template list"
             }
@@ -2998,7 +3148,9 @@ fn raw_args_json_context() -> Option<JsonContext> {
             _ => "mindspace",
         };
         let target = match command {
-            "mindspace scan" | "mindspace lint" | "mindspace setup" => args.get(2),
+            "mindspace scan" | "mindspace lint" | "mindspace setup" | "mindspace context" => {
+                args.get(2)
+            }
             "mindspace template show" => args.get(3),
             _ => None,
         }

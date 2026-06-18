@@ -263,6 +263,7 @@ listed as interactive in `mdm commands --json`.
 | `mdm mindspace lint <root>` | folder, optional manifest, maps, Markdown | no | no | no | Deterministic diagnostics with stable issue codes; exits `1` when diagnostics include errors. |
 | `mdm mindspace setup <root> --preview` | folder, optional manifest, maps, Markdown | no | no | no | Preview the proposed manifest; use `--json` for `mindspace_setup.v1`. |
 | `mdm mindspace setup <root> --write` | folder, optional manifest, maps, Markdown | `.mdmind/mindspace.json` | no | no | Write only the manifest and required `.mdmind/` directory; never move or rewrite notes. |
+| `mdm mindspace context <target>` | maps, selected pages, refs, sources | no | no | no | Export bounded context with provenance; use `--json` for `mindspace_context.v1`. |
 | `mdm mindspace template list` | built-in Mindspace templates | no | no | no | List persona/job templates; use `--json` for `mindspace_template_catalog.v1`. |
 | `mdm mindspace template show <id>` | built-in Mindspace templates | no | no | no | Show one template as human text, `--plain`, `--json`, or `--prompt`. |
 | `mdm changelog` | bundled changelog | no | no | no | Reads pretty release notes for the bundled version; use `--version` or `--all` for other sections, `--plain` for raw Markdown, and `--json` for scripts. |
@@ -293,7 +294,7 @@ adoption profiles.
 | `mdm mindspace setup <root> --preview` | folder, scan results | no | no | no | Current: preview the proposed `.mdmind/mindspace.json`; safe before setup writes. |
 | `mdm mindspace setup <root> --write` | folder, scan results | `.mdmind/mindspace.json` | no | no | Current: write only the manifest and required `.mdmind/` directory; never move or rewrite notes. |
 | `mdm mindspace lint <root>` | folder, manifest, maps, Markdown refs | no | no | no | Current: return deterministic diagnostics with stable issue codes and exit `1` on errors. |
-| `mdm mindspace context <target>` | maps, selected pages, refs, sources | no | no | no | Export bounded context with provenance and budget controls. |
+| `mdm mindspace context <target>` | maps, selected pages, refs, sources | no | no | no | Current: export bounded context with provenance, budgets, and omission reasons. |
 | `mdm mindspace template list` | built-in template refs | no | no | no | Current: list persona/job templates available to guide agent workflows. Trusted local templates are future. |
 | `mdm mindspace template show <id>` | one built-in template ref | no | no | no | Current: print a job template as JSON, human text, plain text, or an agent prompt. |
 | `mdm mindspace session ...` | session records, maps, context bundles | session/review/checkpoint sidecars; scoped map writes only on explicit apply | no | no | Manage scoped agent collaboration with target digests and previewable writeback. |

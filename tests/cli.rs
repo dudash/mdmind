@@ -242,6 +242,7 @@ fn commands_json_lists_agent_command_catalog() {
         "mindspace scan",
         "mindspace lint",
         "mindspace setup",
+        "mindspace context",
         "mindspace template",
         "mindspace template list",
         "mindspace template show",
@@ -661,6 +662,138 @@ fn mindspace_setup_write_rejects_malformed_existing_manifest_roles() {
             .contains("roles field, but it is not an array")
     );
     assert_eq!(std::fs::read_to_string(&manifest_path).unwrap(), source);
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_context_target_bundle_includes_relation_and_bounded_source() {
+    let root = temp_file("mindspace-context-target");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::create_dir_all(root.join("sources")).expect("sources directory should be writable");
+    std::fs::write(
+        root.join("maps").join("roadmap.md"),
+        "- Launch [id:launch]\n  - Pricing [id:launch/pricing] [pricing source](sources/pricing.md) [[rel:depends-on->maps/decisions.md#decision/pricing]]\n    | Pricing needs the decision record and a source excerpt.\n",
+    )
+    .expect("roadmap map should be writable");
+    std::fs::write(
+        root.join("maps").join("decisions.md"),
+        "- Decisions [id:decision]\n  - Pricing Decision [id:decision/pricing]\n    | Use the simple packaging model.\n",
+    )
+    .expect("decisions map should be writable");
+    std::fs::write(
+        root.join("sources").join("pricing.md"),
+        "# Pricing interview\n\nCustomers asked for simple packaging and fewer tiers.\n",
+    )
+    .expect("source should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "context",
+        "maps/roadmap.md#launch/pricing",
+        "--root",
+        root.to_str().unwrap(),
+        "--include-source-refs",
+        "--max-source-chars",
+        "24",
+        "--json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "mindspace context");
+    assert_eq!(value["format"], "mindspace_context.v1");
+    assert_eq!(value["data"]["summary"]["branches"], 2);
+    assert_eq!(value["data"]["summary"]["files"], 2);
+    assert_eq!(value["data"]["summary"]["sources"], 1);
+
+    let branches = value["data"]["branches"]
+        .as_array()
+        .expect("branches should be an array");
+    let branch_refs = branches
+        .iter()
+        .map(|branch| {
+            (
+                branch["file"].as_str().unwrap(),
+                branch["id"].as_str().unwrap(),
+                branch["reason"].as_str().unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(branch_refs.iter().any(|(file, id, reason)| {
+        *file == "maps/roadmap.md" && *id == "launch/pricing" && reason.contains("target branch")
+    }));
+    assert!(branch_refs.iter().any(|(file, id, reason)| {
+        *file == "maps/decisions.md" && *id == "decision/pricing" && reason.contains("relation")
+    }));
+
+    let source = &value["data"]["sources"][0];
+    assert_eq!(source["target"], "sources/pricing.md");
+    assert_eq!(source["kind"], "local_file");
+    assert_eq!(source["read_only"], true);
+    assert!(
+        source["excerpt"]
+            .as_str()
+            .unwrap()
+            .contains("# Pricing interview")
+    );
+    assert!(source["omitted_chars"].as_u64().unwrap() > 0);
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mindspace_context_query_bundle_spans_maps_and_bounds_details() {
+    let root = temp_file("mindspace-context-query");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::write(
+        root.join("maps").join("roadmap.md"),
+        "- Roadmap [id:roadmap]\n  - Activation work @owner:maya [id:roadmap/activation]\n    | Activation detail is intentionally long enough to be clipped.\n",
+    )
+    .expect("roadmap map should be writable");
+    std::fs::write(
+        root.join("maps").join("risks.md"),
+        "- Risks [id:risks]\n  - Activation risk @owner:maya [id:risks/activation]\n    | Another activation detail that should not fully fit.\n",
+    )
+    .expect("risks map should be writable");
+
+    let output = run_mdm(&[
+        "mindspace",
+        "context",
+        ".",
+        "--root",
+        root.to_str().unwrap(),
+        "--query",
+        "@owner:maya",
+        "--max-detail-chars",
+        "16",
+        "--json",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let value = json_stdout(&output);
+
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["data"]["query"], "@owner:maya");
+    assert_eq!(value["data"]["summary"]["branches"], 2);
+    assert_eq!(value["data"]["summary"]["files"], 2);
+
+    let branches = value["data"]["branches"]
+        .as_array()
+        .expect("branches should be an array");
+    let files = branches
+        .iter()
+        .filter_map(|branch| branch["file"].as_str())
+        .collect::<Vec<_>>();
+    assert!(files.contains(&"maps/roadmap.md"));
+    assert!(files.contains(&"maps/risks.md"));
+    assert!(branches.iter().any(|branch| {
+        branch["node"]["detail_omitted_chars"]
+            .as_u64()
+            .is_some_and(|count| count > 0)
+    }));
 
     std::fs::remove_dir_all(root).ok();
 }
