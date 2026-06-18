@@ -36,6 +36,8 @@ mdm mindspace session start maps/tasks.md#todo/focus --role implementer --json
 mdm mindspace review list --json
 mdm mindspace template list --json
 mdm mindspace template show launch-planning --json
+mdmind --preview .
+mdmind .
 ```
 
 `scan` inventories a folder without writing. `lint` reports deterministic
@@ -45,7 +47,9 @@ errors. `setup --preview` prints the proposed manifest without writing, while
 provenance-rich branch bundles for agents without writing. `session` and
 `review` create durable sidecar records for agent work and human decisions, but
 do not yet mutate maps. Template helpers expose built-in persona/job templates
-for agents and scripts. `mdmind .` workspace behavior is still a planned slice.
+for agents and scripts. `mdmind --preview .` prints an agent-safe static
+workspace landing. `mdmind .` opens a human workspace switcher in an interactive
+terminal, then hands off to the existing one-active-file map or Markdown view.
 
 ## Start Here
 

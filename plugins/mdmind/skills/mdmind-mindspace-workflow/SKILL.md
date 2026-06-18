@@ -87,11 +87,14 @@ mdm mindspace review approve <review-id> --json
 mdm mindspace review reject <review-id> --reason <text> --json
 mdm mindspace template list --json
 mdm mindspace template show <template-id> --json
+mdmind --preview .
 mdm commands --json
 ```
 
-Planned helpers include `mdmind .` workspace landing behavior. Current
-session/review helpers write durable sidecars only; they do not mutate maps.
+`mdmind --preview .` is safe for non-interactive handoff checks. `mdmind .` is
+the current human workspace switcher; do not launch it from an agent session.
+Current session/review helpers write durable sidecars only; they do not mutate
+maps.
 
 ## Closeout Standard
 

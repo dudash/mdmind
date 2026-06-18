@@ -73,7 +73,7 @@ the agent to adapt it. See [JOB_TEMPLATES.md](JOB_TEMPLATES.md).
 | Agent conversation | The work request surface. Users ask for organization, synthesis, linking, cleanup, imports, and maintenance in natural language. | "I can ask for the workspace I want instead of operating a new tool by hand." |
 | Agent skill or project instructions | The workflow memory. Skills teach agents how to use Mindspace safely and apply job templates across Claude Code, Codex, Hermes, OpenClaw, or similar environments. | "My agent knows the right local protocol without me pasting rules every time." |
 | Job templates | The guided request layer. Persona-shaped templates turn vague user goals into safe agent workflows with expected outputs and review paths. | "I can ask better without becoming an agent expert." |
-| `mdmind .` | The human workspace. Users inspect, edit, navigate, preview files, work with outlines/plans, and review proposed changes. | "I can see and shape what the agent did in plain local files." |
+| `mdmind .` | The human workspace. Users inspect a landing, search across reviews/sessions/maps/role-aware files, open one active file, and review proposed changes. | "I can see and shape what the agent did in plain local files." |
 | `mdm mindspace ...` | The deterministic contract. Agents, scripts, tests, and power users call it for predictable scan/lint/context/session/review behavior. | "The agent's work is grounded in commands I can audit and reproduce." |
 | Plain files | The durable substrate. Maps, Markdown pages, sources, indexes, logs, reviews, and sidecars remain readable. | "Nothing important disappears into a hidden database." |
 
@@ -181,8 +181,11 @@ mdmind .
 ```
 
 They see the workspace landing, maps, branches, source previews, generated
-reports, recent targets, pinned maps, and review queue. The TUI is not the
-agent. It is the place where the human can think with the structured result.
+reports, recent targets, pinned maps, and review queue. The current slice starts
+with a static `mdmind --preview .` landing plus an interactive `mdmind .`
+switcher; richer peeks, recents, pinned maps, and grouped review surfaces build
+from there. The TUI is not the agent. It is the place where the human can think
+with the structured result.
 
 ### 6. Review
 

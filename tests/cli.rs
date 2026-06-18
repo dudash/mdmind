@@ -2245,6 +2245,78 @@ fn mdmind_preview_renders_ordinary_markdown() {
 }
 
 #[test]
+fn mdmind_preview_renders_mindspace_workspace_landing() {
+    let root = temp_file("mindspace-workspace-preview");
+    std::fs::create_dir_all(root.join("maps")).expect("maps directory should be writable");
+    std::fs::create_dir_all(root.join("docs")).expect("docs directory should be writable");
+    std::fs::write(
+        root.join("maps").join("tasks.md"),
+        "- Tasks [id:todo]\n  - Focus task [id:todo/focus]\n",
+    )
+    .expect("tasks map should be writable");
+    std::fs::write(
+        root.join("docs").join("brief.md"),
+        "# Brief\n\nReadable page.\n",
+    )
+    .expect("brief page should be writable");
+
+    let start = run_mdm(&[
+        "mindspace",
+        "session",
+        "start",
+        "maps/tasks.md#todo/focus",
+        "--role",
+        "implementer",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(start.status.success(), "stderr: {}", stderr(&start));
+    let session_id = json_stdout(&start)["data"]["session"]["id"]
+        .as_str()
+        .expect("session id should be present")
+        .to_string();
+    let submit = run_mdm(&[
+        "mindspace",
+        "session",
+        "submit",
+        &session_id,
+        "--rationale",
+        "Add implementation notes for the focus task.",
+        "--root",
+        root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(submit.status.success(), "stderr: {}", stderr(&submit));
+
+    let output = run_mdmind(&["--preview", root.to_str().unwrap()]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let stdout = stdout(&output);
+    assert!(stdout.contains("Mindspace workspace:"));
+    assert!(stdout.contains("Reviews: pending 1"));
+    assert!(stdout.contains("Sessions: open 0, submitted 1"));
+    assert!(stdout.contains("Review queue"));
+    assert!(stdout.contains("maps/tasks.md"));
+    assert!(stdout.contains("Recent sessions"));
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mdmind_directory_without_tty_points_to_workspace_preview() {
+    let root = temp_file("mindspace-workspace-non-tty");
+    std::fs::create_dir_all(&root).expect("mindspace root should be writable");
+
+    let output = run_mdmind(&[root.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = stderr(&output);
+    assert!(stderr.contains("needs an interactive terminal"));
+    assert!(stderr.contains("mdmind --preview"));
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
 fn mdmind_preview_force_map_rejects_readme_markdown() {
     let markdown_path = temp_file("README-force-map.md");
     std::fs::write(

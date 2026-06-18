@@ -423,6 +423,28 @@ pub struct MindspaceReviewSummary {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct MindspaceWorkspaceLanding {
+    pub root: String,
+    pub manifest: MindspaceManifestStatus,
+    pub summary: MindspaceSummary,
+    pub maps: Vec<MindspaceMapRecord>,
+    pub roles: Vec<MindspaceRoleRecord>,
+    pub sessions: Vec<MindspaceSessionRecord>,
+    pub session_summary: MindspaceSessionSummary,
+    pub reviews: Vec<MindspaceReviewRecord>,
+    pub review_summary: MindspaceReviewSummary,
+    pub diagnostics: Vec<MindspaceDiagnostic>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct MindspaceSessionSummary {
+    pub open: usize,
+    pub submitted: usize,
+    pub closed: usize,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct MindspaceTemplateCatalog {
     pub templates: Vec<MindspaceTemplateSummary>,
 }
@@ -919,6 +941,39 @@ pub fn list_mindspace_reviews(root: &Path) -> Result<MindspaceReviewList, AppErr
         root: canonical_root.to_string_lossy().to_string(),
         reviews,
         summary,
+    })
+}
+
+pub fn workspace_mindspace(root: &Path) -> Result<MindspaceWorkspaceLanding, AppError> {
+    let scan = scan_mindspace(root)?;
+    let canonical_root = PathBuf::from(&scan.root);
+    let mut sessions = read_all_session_records(&canonical_root)?;
+    sessions.sort_by(|left, right| {
+        right
+            .updated_at_ms
+            .cmp(&left.updated_at_ms)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    let mut reviews = read_all_review_records(&canonical_root)?;
+    reviews.sort_by(|left, right| {
+        review_sort_rank(left.status)
+            .cmp(&review_sort_rank(right.status))
+            .then_with(|| right.updated_at_ms.cmp(&left.updated_at_ms))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    let session_summary = summarize_sessions(&sessions);
+    let review_summary = summarize_reviews(&reviews);
+    Ok(MindspaceWorkspaceLanding {
+        root: scan.root,
+        manifest: scan.manifest,
+        summary: scan.summary,
+        maps: scan.maps,
+        roles: scan.roles,
+        sessions,
+        session_summary,
+        reviews,
+        review_summary,
+        diagnostics: scan.diagnostics,
     })
 }
 
@@ -1487,6 +1542,99 @@ pub fn render_mindspace_review_list_plain(list: &MindspaceReviewList) -> String 
             review.rationale
         ));
     }
+    lines.join("\n")
+}
+
+pub fn render_mindspace_workspace_landing(landing: &MindspaceWorkspaceLanding) -> String {
+    let mut lines = Vec::new();
+    lines.push(format!("Mindspace workspace: {}", landing.root));
+    lines.push(format!(
+        "Manifest: {}",
+        if landing.manifest.present {
+            if landing.manifest.valid {
+                "present"
+            } else {
+                "present with issues"
+            }
+        } else {
+            "missing"
+        }
+    ));
+    lines.push(format!(
+        "Roles: maps {}, pages {}, sources {}, inbox {}, reports {}",
+        landing.summary.roles.maps,
+        landing.summary.roles.pages,
+        landing.summary.roles.sources,
+        landing.summary.roles.inbox,
+        landing.summary.roles.reports
+    ));
+    lines.push(format!(
+        "Reviews: pending {}, stale {}, approved {}, rejected {}",
+        landing.review_summary.pending,
+        landing.review_summary.stale,
+        landing.review_summary.approved,
+        landing.review_summary.rejected
+    ));
+    lines.push(format!(
+        "Sessions: open {}, submitted {}, closed {}",
+        landing.session_summary.open,
+        landing.session_summary.submitted,
+        landing.session_summary.closed
+    ));
+    lines.push(format!(
+        "Diagnostics: errors {}, warnings {}",
+        landing.summary.diagnostics.errors, landing.summary.diagnostics.warnings
+    ));
+
+    if !landing.reviews.is_empty() {
+        lines.push(String::new());
+        lines.push("Review queue".to_string());
+        for review in landing.reviews.iter().take(8) {
+            lines.push(format!(
+                "- {} {} {}",
+                review_status_name(review.status),
+                review.target,
+                compact_record_text(&review.rationale, 72)
+            ));
+        }
+    }
+
+    if !landing.sessions.is_empty() {
+        lines.push(String::new());
+        lines.push("Recent sessions".to_string());
+        for session in landing.sessions.iter().take(6) {
+            lines.push(format!(
+                "- {} {} {}",
+                session_status_name(session.status),
+                session.target,
+                compact_record_text(&session.goal, 72)
+            ));
+        }
+    }
+
+    if !landing.maps.is_empty() {
+        lines.push(String::new());
+        lines.push("Maps".to_string());
+        for map in landing.maps.iter().take(12) {
+            lines.push(format!(
+                "- {} {} nodes:{} ids:{}",
+                map.path,
+                parse_status_name(map.parse_status),
+                map.stats.nodes,
+                map.stats.ids.len()
+            ));
+        }
+        if landing.maps.len() > 12 {
+            lines.push(format!("- ... {} more maps", landing.maps.len() - 12));
+        }
+    }
+
+    lines.push(String::new());
+    lines.push("Next".to_string());
+    lines.push("- mdmind . opens the interactive workspace switcher in a terminal.".to_string());
+    lines.push("- mdm mindspace review list --json shows review records.".to_string());
+    lines
+        .push("- mdm mindspace context <target> --json exports bounded agent context.".to_string());
     lines.join("\n")
 }
 
@@ -2795,6 +2943,17 @@ fn truncate_to_bytes(value: &str, max_bytes: usize) -> String {
     value[..end].to_string()
 }
 
+fn compact_record_text(value: &str, max_chars: usize) -> String {
+    let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.chars().count() <= max_chars {
+        return normalized;
+    }
+    let keep = max_chars.saturating_sub(3);
+    let mut compacted = normalized.chars().take(keep).collect::<String>();
+    compacted.push_str("...");
+    compacted
+}
+
 fn is_zero(value: &usize) -> bool {
     *value == 0
 }
@@ -3067,6 +3226,40 @@ fn read_reviews_for_session(
     Ok(reviews)
 }
 
+fn read_all_session_records(root: &Path) -> Result<Vec<MindspaceSessionRecord>, AppError> {
+    let directory = root.join(SESSIONS_RELATIVE_DIR);
+    let entries = match fs::read_dir(&directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => {
+            return Err(AppError::new(format!(
+                "Could not read sessions directory '{}': {error}",
+                directory.display()
+            )));
+        }
+    };
+
+    let mut sessions = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            AppError::new(format!(
+                "Could not inspect sessions directory '{}': {error}",
+                directory.display()
+            ))
+        })?;
+        if entry
+            .path()
+            .extension()
+            .and_then(|extension| extension.to_str())
+            != Some("json")
+        {
+            continue;
+        }
+        sessions.push(read_json_file(&entry.path(), "session")?);
+    }
+    Ok(sessions)
+}
+
 fn read_all_review_records(root: &Path) -> Result<Vec<MindspaceReviewRecord>, AppError> {
     let directory = root.join(REVIEWS_RELATIVE_DIR);
     let entries = match fs::read_dir(&directory) {
@@ -3101,6 +3294,23 @@ fn read_all_review_records(root: &Path) -> Result<Vec<MindspaceReviewRecord>, Ap
     Ok(reviews)
 }
 
+fn summarize_sessions(sessions: &[MindspaceSessionRecord]) -> MindspaceSessionSummary {
+    let mut summary = MindspaceSessionSummary {
+        open: 0,
+        submitted: 0,
+        closed: 0,
+        count: sessions.len(),
+    };
+    for session in sessions {
+        match session.status {
+            MindspaceSessionStatus::Open => summary.open += 1,
+            MindspaceSessionStatus::Submitted => summary.submitted += 1,
+            MindspaceSessionStatus::Closed => summary.closed += 1,
+        }
+    }
+    summary
+}
+
 fn summarize_reviews(reviews: &[MindspaceReviewRecord]) -> MindspaceReviewSummary {
     let mut summary = MindspaceReviewSummary {
         pending: 0,
@@ -3118,6 +3328,15 @@ fn summarize_reviews(reviews: &[MindspaceReviewRecord]) -> MindspaceReviewSummar
         }
     }
     summary
+}
+
+fn review_sort_rank(status: MindspaceReviewStatus) -> u8 {
+    match status {
+        MindspaceReviewStatus::Pending => 0,
+        MindspaceReviewStatus::Stale => 1,
+        MindspaceReviewStatus::Rejected => 2,
+        MindspaceReviewStatus::Approved => 3,
+    }
 }
 
 fn now_millis() -> u128 {

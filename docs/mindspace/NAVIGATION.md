@@ -137,6 +137,18 @@ Good browse groups:
 This lets users orient in a mindspace without competing with dedicated file
 managers or Obsidian's vault tree.
 
+Current slice:
+
+- `mdmind --preview .` prints a read-only workspace landing with manifest
+  health, role counts, review summary, session summary, recent sessions, open
+  reviews, and maps.
+- `mdmind .` opens a searchable workspace switcher in an interactive terminal.
+- Switcher entries include reviews, recent sessions, maps, and role-aware files.
+- Enter opens the selected target through the existing single-file map editor
+  or read-only Markdown view.
+- Forced single-file modes remain strict: `mdmind --as map .` and
+  `mdmind --as markdown .` do not become hidden Mindspace shortcuts.
+
 ### 6. Working Set
 
 Users need a small remembered set more than they need a full file browser:

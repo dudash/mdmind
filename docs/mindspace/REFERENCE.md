@@ -203,7 +203,8 @@ behavior instead of creating hidden alternatives.
 | `mdm mindspace context <target>` | Current | Export bounded context with provenance and budget controls. |
 | `mdm mindspace template list` | Current | List built-in job templates. Trusted local templates are future. |
 | `mdm mindspace template show <id>` | Current | Print one built-in template as JSON, human text, or an agent prompt. |
-| `mdmind .` | MVP | Open the human workspace surface while preserving one-active-map editing. |
+| `mdmind --preview .` | Current | Print a read-only workspace landing with scan, session, and review summaries. |
+| `mdmind .` | Current | Open the human workspace switcher, then open one selected map or Markdown file. |
 | `mdm mindspace session ...` | Current | Create and manage durable session records; current apply is preview-only. |
 | `mdm mindspace review ...` | Current | List, approve, reject, or stale-mark durable review records without mutating maps. |
 
@@ -384,6 +385,26 @@ The `mindspace_review.v1` payload includes:
 | `proposal` | Optional proposal text; current commands store it but do not apply it. |
 | `decision_reason` | Approval, rejection, or stale-digest decision note. |
 
+### Current Workspace Landing
+
+`mdmind --preview .` is the non-interactive, agent-safe way to inspect the
+human workspace landing. It scans the folder and reads durable session/review
+sidecars without writing files.
+
+`mdmind .` is the human workspace entry in an interactive terminal. The current
+surface is a searchable switcher over:
+
+- open, stale, approved, and rejected review records
+- recent session records
+- native maps
+- role-aware pages, sources, inbox items, indexes, logs, instructions, and
+  reports
+
+Selecting an entry opens the underlying target through the existing single-file
+map editor or read-only Markdown view. This intentionally preserves one active
+file at a time; deeper cross-file peek, back/forward stacks, pinned maps, and
+template-aware ranking remain future navigation refinements.
+
 ### Current Template Output
 
 `mdm mindspace template list --json` exposes the built-in persona/job template
@@ -441,10 +462,9 @@ The MVP makes a folder understandable and navigable:
 - path-qualified branch refs
 - deterministic `lint`
 - bounded `context` bundles with provenance
-- TUI workspace entry, switcher, peek/open navigation, recents, pinned maps, and
-  cross-map navigation
-- an `mdmind .` landing that can show the active template, agent-touched files,
-  and review path
+- current `mdmind --preview .` landing and `mdmind .` switcher
+- future peek/open navigation, recents, pinned maps, and cross-map navigation
+- future template-aware ranking for agent-touched files and review paths
 
 ### v1: Reviewable Agent Teaming
 

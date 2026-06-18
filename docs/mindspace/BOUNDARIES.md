@@ -93,14 +93,16 @@ journey.
 
 ## TUI Boundary
 
-`mdmind .` is where humans inspect, edit, navigate, and review Mindspace work.
-`mdmind file.md` should still feel like the core editor.
+`mdmind --preview .` is the safe static workspace landing. `mdmind .` is where
+humans inspect, edit, navigate, and review Mindspace work. `mdmind file.md`
+should still feel like the core editor.
 
 Mindspace TUI work should add:
 
-- workspace landing
-- active template and latest session summary
-- map and id switching
+- current workspace landing and searchable switcher
+- current session/review/map/role-aware file discovery
+- future active template and latest session ranking
+- future branch id switching
 - recent map stack
 - pinned working set
 - cross-map backlinks when scan data exists

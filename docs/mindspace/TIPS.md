@@ -103,15 +103,15 @@ a broad `mdm agent` namespace.
 
 ## Protect The Core Editor
 
-Mindspace may enrich `mdmind .`, but it should not make `mdmind file.md`
-busier.
+Mindspace enriches folder targets through `mdmind --preview .` and `mdmind .`,
+but it should not make `mdmind file.md` busier.
 
 Prefer palette entries, status messages, workspace landing states, and optional
 review surfaces over permanent chrome.
 
-For multiple files, prefer a workspace switcher, peek/open flow, back/forward
-stack, recents, and pinned maps over a permanent file tree. See
-[NAVIGATION.md](NAVIGATION.md).
+For multiple files, start from the current workspace switcher. Future work can
+add peek/open flow, back/forward stack, recents, and pinned maps without adding
+a permanent file tree. See [NAVIGATION.md](NAVIGATION.md).
 
 ## Make Agent Work Visible
 

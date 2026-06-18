@@ -195,14 +195,12 @@ mdm mindspace review reject <review-id> --reason <text> --json
 mdm mindspace template list --json
 mdm mindspace template show <template-id> --json
 mdm mindspace template show <template-id> --prompt
+mdmind --preview .
 mdm commands --json
 ```
 
-Planned helpers:
-
-```bash
-mdmind .
-```
+`mdmind .` is also current, but it is an interactive human surface rather than
+an agent helper.
 
 The skill should work before every helper exists. Missing helpers should degrade
 to reading bundled references and using current scan/lint output, not to
@@ -210,17 +208,22 @@ inventing private conventions.
 
 ## TUI Support The Skill Should Expect
 
-The skill should assume that `mdmind .` eventually becomes the human review
-surface for template-shaped work.
+The skill can use `mdmind --preview .` as a non-interactive handoff check. It
+prints the current workspace landing with role health, session summaries, review
+summaries, recent sessions, open reviews, and maps.
 
-Needed TUI concepts:
+The skill should treat `mdmind .` as the human review surface for
+template-shaped work. It is interactive: agents should tell the user what to
+open there, not launch it themselves.
 
-- workspace landing with detected roles and health
-- template/session summary
-- files touched by the latest agent work
-- map and branch switcher
-- role-aware page/source/report previews
-- review queue grouped by template outcome
+Current and needed TUI concepts:
+
+- current workspace landing with detected roles and health
+- current searchable switcher for reviews, sessions, maps, and role-aware files
+- current one-active-file handoff into the existing map or Markdown view
+- future template/session ranking for files touched by the latest agent work
+- future cross-file branch peek and back/forward navigation
+- future review queue grouped by template outcome
 - status language that explains "what the agent did" without requiring the
   user to read the chat
 

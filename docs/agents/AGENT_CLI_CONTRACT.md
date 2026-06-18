@@ -276,8 +276,8 @@ listed as interactive in `mdm commands --json`.
 | `mdm open <target>` | map | session/location sidecars in interactive mode | no | yes by default | Agents should use `--preview` or `--json`; avoid bare `open`. |
 | `mdm check-keys` | terminal input | no | no | yes | Humans only; agents should not run it. |
 | `mdm version` | no | no | only with `--check` | no | Prints `mdm <version>`; `--check --json` checks GitHub Releases for a newer build. |
-| `mdmind <target>` | map or Markdown | map sidecars only when a native map opens; ordinary Markdown can write and open `<stem>-mind.md` when the human presses `i` | no | yes by default | Humans only unless `--preview` is used; ordinary Markdown opens read-only. |
-| `mdmind --preview <target>` | map or Markdown | no | no | no | Static preview equivalent to a readable tree view for maps or rendered Markdown for ordinary Markdown. |
+| `mdmind <target>` | map, Markdown, or Mindspace folder | map/session/view sidecars in interactive map mode; ordinary Markdown can write and open `<stem>-mind.md` when the human presses `i` | no | yes by default | Humans only unless `--preview` is used; folders open the Mindspace switcher. |
+| `mdmind --preview <target>` | map, Markdown, or Mindspace folder | no | no | no | Static preview equivalent to a readable tree view for maps, rendered Markdown for ordinary Markdown, or a read-only Mindspace workspace landing for folders. |
 | `mdmind --as markdown <target>` | Markdown | no | no | no with `--preview`, yes otherwise | Forces read-only Markdown routing for ambiguous or broken files. |
 | `mdmind --as map <target>` | map | map sidecars only in interactive mode | no | no with `--preview`, yes otherwise | Forces strict native map parsing and reports parser errors for ordinary Markdown. |
 | `mdmind --check-keys` | terminal input | no | no | yes | Humans only; agents should not run it. |
@@ -305,7 +305,8 @@ adoption profiles.
 | `mdm mindspace template show <id>` | one built-in template ref | no | no | no | Current: print a job template as JSON, human text, plain text, or an agent prompt. |
 | `mdm mindspace session ...` | session records, maps, context bundles | `.mdmind/sessions/`, `.mdmind/reviews/` | no | no | Current: manage scoped agent collaboration records with target digests; apply is preview-only. |
 | `mdm mindspace review ...` | review records, target files | `.mdmind/reviews/` | no | no | Current: inspect, approve, reject, or stale-mark review items; approval does not mutate maps yet. |
-| `mdmind .` | folder, manifest, inventory, maps | map/session/view sidecars in interactive mode | no | yes | Human workspace entry; agents should not launch the interactive TUI. |
+| `mdmind --preview .` | folder, manifest, inventory, session/review sidecars | no | no | no | Current: agent-safe static workspace landing for summaries and handoff checks. |
+| `mdmind .` | folder, manifest, inventory, maps, Markdown, session/review sidecars | map/session/view sidecars after a human selects and opens a file | no | yes | Current: human workspace switcher; agents should not launch the interactive TUI. |
 
 Reserved JSON formats:
 

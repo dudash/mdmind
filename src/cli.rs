@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 #[cfg(test)]
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, ExitCode};
 
 #[cfg(test)]
@@ -53,8 +53,8 @@ use crate::mindspace::{
     render_mindspace_session_report, render_mindspace_session_report_plain, render_mindspace_setup,
     render_mindspace_setup_plain, render_mindspace_template, render_mindspace_template_catalog,
     render_mindspace_template_catalog_plain, render_mindspace_template_plain,
-    render_mindspace_template_prompt, scan_mindspace, setup_mindspace, start_mindspace_session,
-    submit_mindspace_session,
+    render_mindspace_template_prompt, render_mindspace_workspace_landing, scan_mindspace,
+    setup_mindspace, start_mindspace_session, submit_mindspace_session, workspace_mindspace,
 };
 use crate::model::{Document, ExternalRefKind, Node, Severity, TaskState};
 use crate::query::{
@@ -68,7 +68,7 @@ use crate::render::{
     render_validate_plain,
 };
 use crate::serializer::serialize_document;
-use crate::startup::choose_startup_target;
+use crate::startup::{choose_mindspace_target, choose_startup_target};
 use crate::templates::TemplateKind;
 use crate::updates::{UpdateCheck, check_for_updates};
 use crate::validate::validate_document;
@@ -600,11 +600,11 @@ enum MindspaceTemplateCommands {
     name = "mdmind",
     version,
     about = "Navigate and edit a map in a focused interactive terminal flow.",
-    after_help = "Examples:\n  mdmind\n  mdmind roadmap.md\n  mdmind roadmap.md#product/mvp\n  mdmind --preview roadmap.md\n  mdmind --as markdown README.md\n  mdmind --autosave TODO.md"
+    after_help = "Examples:\n  mdmind\n  mdmind .\n  mdmind roadmap.md\n  mdmind roadmap.md#product/mvp\n  mdmind --preview .\n  mdmind --preview roadmap.md\n  mdmind --as markdown README.md\n  mdmind --autosave TODO.md"
 )]
 struct TuiPreviewCli {
     #[arg(
-        help = "Map, deep link, or Markdown file to open. Omit it to choose or create a map interactively."
+        help = "Map, deep link, Markdown file, or Mindspace folder to open. Omit it to choose or create a map interactively."
     )]
     target: Option<String>,
     #[arg(
@@ -3276,7 +3276,25 @@ fn dispatch_tui_preview(cli: TuiPreviewCli) -> Result<(), CliError> {
     };
 
     let open_mode = OpenTargetMode::from(cli.open_as);
-    if cli.preview {
+    if open_mode == OpenTargetMode::Auto
+        && let Some(root) = directory_target_path(&target)
+    {
+        if cli.preview {
+            render_mdmind_workspace_preview(&root)
+        } else {
+            let Some(chosen_target) = choose_mindspace_target(&root).map_err(CliError::from_app)?
+            else {
+                return Err(CliError::silent(0));
+            };
+            run_interactive_with_mode_and_features(
+                &chosen_target,
+                cli.autosave,
+                OpenTargetMode::Auto,
+                feature_flags,
+            )
+            .map_err(CliError::from_app)
+        }
+    } else if cli.preview {
         render_mdmind_preview(&target, open_mode, cli.max_depth)
     } else {
         run_interactive_with_mode_and_features(&target, cli.autosave, open_mode, feature_flags)
@@ -3329,6 +3347,21 @@ fn render_mdmind_preview(
             score,
         ))),
     }
+}
+
+fn render_mdmind_workspace_preview(root: &Path) -> Result<(), CliError> {
+    let landing = workspace_mindspace(root).map_err(CliError::from_app)?;
+    println!("{}", render_mindspace_workspace_landing(&landing));
+    Ok(())
+}
+
+fn directory_target_path(target: &str) -> Option<PathBuf> {
+    let path = target
+        .split_once('#')
+        .map(|(path, _)| path)
+        .unwrap_or(target);
+    let path = PathBuf::from(path);
+    path.is_dir().then_some(path)
 }
 
 fn render_view_like(

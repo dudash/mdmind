@@ -55,15 +55,17 @@ mdm mindspace session submit <session-id> --rationale <text> --json
 mdm mindspace review list --json
 mdm mindspace review approve <review-id> --json
 mdm mindspace review reject <review-id> --reason <text> --json
+mdmind --preview .
 ```
 
 Use `mdm commands --json` when you need to confirm current command availability,
 output modes, reads, writes, and examples.
 
-## Planned Commands
+## Human TUI Handoff
 
-The following commands may be referenced in product docs but might not exist in
-the current installed version:
+`mdmind --preview .` is safe to run when you need a static workspace landing for
+handoff. `mdmind .` is interactive and should be launched by the human when they
+are ready to inspect, edit, or review.
 
 ```bash
 mdmind .
